@@ -1,0 +1,57 @@
+Userspace block driver(ubd)
+
+1 Introduction
+
+This is the userspace daemon part(ubdsrv) of the ubd framework, the other
+part is ubd blk-mq block driver[1] which only support single queue so far,
+but not hard to move towards multiple queue.
+
+The two parts communicate by io_uring's IORING_OP_URING_CMD[2] with one
+shared cmd buffer for storing io command, and the buffer is read only for
+ubdsrv, each io command can be indexed by io request tag directly, and
+the command is written by ubd driver, and read by ubdsrv after getting
+notification from ubd driver.
+
+For example, when one READ io request is submitted to ubd block driver, ubd
+driver stores the io command into cmd buffer first, then completes one
+IORING_OP_URING_CMD for notifying ubdsrv, and the URING_CMD is issued to
+ubd driver beforehand by ubdsrv for getting notification of any new io
+request, and each URING_CMD is associated with one io request by tag,
+so depth for URING_CMD is same with queue depth of ubd block device.
+
+After ubdsrv gets the io command, it translates and handles the ubd io
+request, such as, for the ubd-loop target, ubdsrv translates the request
+into same request on another file or disk, like the kernel loop block
+driver. In ubdsrv's implementation, the io is still handled by io_uring,
+and share same ring with IORING_OP_URING_CMD command. When the target io
+request is done, the same IORING_OP_URING_CMD is issued to ubd driver for
+both committing io request result and getting future notification of new
+io request.
+
+So far, the ubd driver needs to copy io request pages into userspace buffer
+(pages) first for write before notifying the request to ubdsrv, and copy
+userspace buffer(pages) to the io request pages after ubdsrv handles
+READ. Also looks linux-mm can't support zero copy for this case yet[3].
+
+2 Quick start
+
+1) how to build ubdsrv:
+- cd ubdsrv
+- make
+
+2) add one ubd-null disk
+- ./ubd add -n 0 -t null  #this will create /dev/ubdb0 block device
+
+3) add one ubd-loop disk
+- ./ubd add -n 0 -t loop -f /dev/vdb
+or
+- ./ubd add -n 0 -t loop -f 1.img
+
+4) remove one ubd disk
+- ./ubd del -n 0	#remove /dev/ubdb0
+
+
+
+[1] https://lore.kernel.org/linux-block/20220308152105.309618-1-joshi.k@samsung.com/#r
+[2] https://github.com/ming1/linux/tree/v5.17-ubd-dev
+[3] https://lore.kernel.org/linux-block/a1255a40-b112-918b-6fd7-fffbe56994b9@gmail.com/T/#t
