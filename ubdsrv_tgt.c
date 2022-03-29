@@ -24,7 +24,7 @@ static int null_handle_io(struct ubdsrv_dev *dev, int qid, int tag)
 	return 0;
 }
 
-struct ubdsrv_tgt_ops  null_ops = {
+struct ubdsrv_tgt_type  null_tgt_type = {
 	.name	=  "null",
 	.init_tgt = null_init_tgt,
 	.handle_io = null_handle_io,
@@ -182,16 +182,16 @@ static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 	return 0;
 }
 
-struct ubdsrv_tgt_ops  loop_ops = {
+struct ubdsrv_tgt_type  loop_tgt_type = {
 	.name	=  "loop",
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
 	.prepare_io	=  loop_prepare_io,
 };
 
-const static struct ubdsrv_tgt_ops *tgt_list[] = {
-	[UBDSRV_TGT_TYPE_NULL]	=	&null_ops,
-	[UBDSRV_TGT_TYPE_LOOP]	=	&loop_ops,
+const static struct ubdsrv_tgt_type *tgt_list[] = {
+	[UBDSRV_TGT_TYPE_NULL]	=	&null_tgt_type,
+	[UBDSRV_TGT_TYPE_LOOP]	=	&loop_tgt_type,
 };
 
 int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, int argc, char
@@ -203,7 +203,7 @@ int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, int argc, char
 		return -1;
 
 	for (i = 0; i < UBDSRV_TGT_TYPE_MAX; i++) {
-		const struct ubdsrv_tgt_ops  *ops = tgt_list[i];
+		const struct ubdsrv_tgt_type  *ops = tgt_list[i];
 
 		if (strcmp(ops->name, type))
 			continue;

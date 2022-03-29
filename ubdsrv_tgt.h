@@ -58,7 +58,7 @@ struct ubdsrv_tgt_info_null {
 	int data;
 };
 
-struct ubdsrv_tgt_ops {
+struct ubdsrv_tgt_type {
 	char *name;
 	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, int argc,
 			char *argv[]);
@@ -77,7 +77,7 @@ struct ubdsrv_tgt_info {
 		struct ubdsrv_tgt_info_loop loop;
 		struct ubdsrv_tgt_info_null null;
 	};
-	const struct ubdsrv_tgt_ops *ops;
+	const struct ubdsrv_tgt_type *ops;
 };
 
 static inline unsigned ubdsrv_convert_cmd_op(struct ubdsrv_io_desc *iod)
