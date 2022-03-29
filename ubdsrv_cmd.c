@@ -241,18 +241,16 @@ int cmd_dev_add(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
 		{ "type",		1,	NULL, 't' },
-		{ "file",		1,	NULL, 'f' },
 		{ "number",		1,	NULL, 'n' },
 		{ "zero_copy",		1,	NULL, 'z' },
 		{ NULL }
 	};
 	struct ubdsrv_ctrl_dev *dev;
-	char *backing_file = NULL;
 	int number = -1;
 	char *type = NULL;
 	int opt, ret, zcopy = 0;
 
-	while ((opt = getopt_long(argc, argv, "t:f:n:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -260,9 +258,6 @@ int cmd_dev_add(int argc, char *argv[])
 			break;
 		case 't':
 			type = optarg;
-			break;
-		case 'f':
-			backing_file = strdup(optarg);
 			break;
 		case 'z':
 			zcopy = 1;
@@ -273,7 +268,8 @@ int cmd_dev_add(int argc, char *argv[])
 
 	dev = ubdsrv_dev_init(number, zcopy);
 
-	if (ubdsrv_tgt_init(&dev->tgt, type, backing_file))
+	optind = 0;	/* so that tgt code can parse their arguments */
+	if (ubdsrv_tgt_init(&dev->tgt, type, argc, argv))
 		die("usbsrv: target init failed\n");
 
 	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_ADD_DEV, NULL, 0);

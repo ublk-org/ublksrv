@@ -60,7 +60,8 @@ struct ubdsrv_tgt_info_null {
 
 struct ubdsrv_tgt_ops {
 	char *name;
-	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, void *data);
+	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, int argc,
+			char *argv[]);
 	int (*handle_io)(struct ubdsrv_dev *, int qid, int tag);
 	int (*handle_io_async)(struct ubdsrv_dev *, int qid, int tag);
 	int (*prepare_io)(struct ubdsrv_tgt_info *);
@@ -99,7 +100,8 @@ static inline unsigned ubdsrv_convert_cmd_op(struct ubdsrv_io_desc *iod)
 	}
 }
 
-int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, void *data);
+int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type,
+		int argc, char *argv[]);
 
 static inline void ubdsrv_tgt_exit(struct ubdsrv_tgt_info *tgt)
 {

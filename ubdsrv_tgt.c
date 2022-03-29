@@ -1,7 +1,8 @@
 #include "ubdsrv.h"
 #include "utils.h"
 
-static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, void *data)
+static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc,
+		char *argv[])
 {
 	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
 			struct ubdsrv_ctrl_dev, tgt);
@@ -29,16 +30,33 @@ struct ubdsrv_tgt_ops  null_ops = {
 	.handle_io = null_handle_io,
 };
 
-static int loop_init_tgt(struct ubdsrv_tgt_info *tgt, int type, void *data)
+static int loop_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc, char
+		*argv[])
 {
+	static const struct option lo_longopts[] = {
+		{ "file",		1,	NULL, 'f' },
+		{ NULL }
+	};
 	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
 			struct ubdsrv_ctrl_dev, tgt);
 	unsigned long long bytes;
 	struct stat st;
-	int fd;
-	char *file = (char *)data;
+	int fd, opt;
+	char *file = NULL;
 
 	if (type != UBDSRV_TGT_TYPE_LOOP)
+		return -1;
+
+	while ((opt = getopt_long(argc, argv, "-:f:",
+				  lo_longopts, NULL)) != -1) {
+		switch (opt) {
+		case 'f':
+			file = strdup(optarg);
+			break;
+		}
+	}
+
+	if (!file)
 		return -1;
 
 	fd = open(file, O_RDWR);
@@ -176,7 +194,8 @@ const static struct ubdsrv_tgt_ops *tgt_list[] = {
 	[UBDSRV_TGT_TYPE_LOOP]	=	&loop_ops,
 };
 
-int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, void *data)
+int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, int argc, char
+		*argv[])
 {
 	int i;
 
@@ -189,7 +208,7 @@ int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, void *data)
 		if (strcmp(ops->name, type))
 			continue;
 
-		if (!ops->init_tgt(tgt, i, data)) {
+		if (!ops->init_tgt(tgt, i, argc, argv)) {
 			tgt->ops = ops;
 			return 0;
 		}
