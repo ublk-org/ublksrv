@@ -32,6 +32,8 @@
 #include "ubdsrv_tgt.h"
 #include "ubdsrv_uring.h"
 
+#define MAX_NR_UBD_DEVS	128
+
 #define	CTRL_DEV	"/dev/ubd-control"
 #define	MAX_NR_HW_QUEUES 1
 #define	MAX_QD		128

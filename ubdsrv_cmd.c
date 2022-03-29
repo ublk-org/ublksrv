@@ -346,16 +346,35 @@ fail:
 	return ret;
 }
 
-int cmd_get_dev_info(int argc, char *argv[])
+static int list_one_dev(int number, bool log)
+{
+	struct ubdsrv_ctrl_dev *dev = ubdsrv_dev_init(number, false);
+	int ret;
+
+	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO,
+			(char *)&dev->dev_info,
+			sizeof(dev->dev_info));
+
+	if (ret <= 0) {
+		if (log)
+			fprintf(stderr, "can't get dev info from %d\n", number);
+	} else
+		ubdsrv_dump(dev);
+
+	ubdsrv_dev_deinit(dev);
+
+	return ret;
+}
+
+int cmd_list_dev_info(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
-		{ "number",		1,	NULL, 'n' },
+		{ "number",		0,	NULL, 'n' },
 		{ NULL }
 	};
 	struct ubdsrv_ctrl_dev *dev;
 	int number = -1;
-	int opt, ret;
-	struct ubdsrv_ctrl_dev_info info;
+	int opt, ret, i;
 
 	while ((opt = getopt_long(argc, argv, "n:",
 				  longopts, NULL)) != -1) {
@@ -368,17 +387,11 @@ int cmd_get_dev_info(int argc, char *argv[])
 
 	setup_ctrl_dev();
 
-	dev = ubdsrv_dev_init(number, false);
+	if (number >= 0)
+		return list_one_dev(number, true);
 
-	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO,
-			(char *)&dev->dev_info,
-			sizeof(info));
-	if (ret <= 0)
-		fprintf(stderr, "can't get dev info from %d\n", number);
-	else
-		ubdsrv_dump(dev);
-
-	ubdsrv_dev_deinit(dev);
+	for (i = 0; i < MAX_NR_UBD_DEVS; i++)
+		list_one_dev(i, false);
 
 	return ret;
 }
@@ -398,8 +411,8 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_add(argc, argv);
 	if (!strcmp(cmd, "del"))
 		ret = cmd_dev_del(argc, argv);
-	if (!strcmp(cmd, "get"))
-		ret = cmd_get_dev_info(argc, argv);
+	if (!strcmp(cmd, "list"))
+		ret = cmd_list_dev_info(argc, argv);
 
 	INFO(printf("cmd %s: result %d\n", cmd, ret));
 
