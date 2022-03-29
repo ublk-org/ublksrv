@@ -32,6 +32,7 @@
 //#include "../arch/arch.h"
 //#include "../os/linux/io_uring.h"
 #include "io_uring.h"
+#include "utils.h"
 
 struct ubdsrv_ctrl_dev;
 struct ubdsrv_dev;
@@ -59,6 +60,7 @@ struct ubdsrv_tgt_info_null {
 };
 
 struct ubdsrv_tgt_type {
+	int  type;
 	char *name;
 	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, int argc,
 			char *argv[]);
@@ -69,7 +71,6 @@ struct ubdsrv_tgt_type {
 
 struct ubdsrv_tgt_info {
 	unsigned long long dev_size;
-	unsigned int type;
 	unsigned int tgt_ring_depth;	/* at most in-flight ios */
 	unsigned int nr_fds;
 	int fds[UBDSRV_TGT_MAX_FDS];
@@ -102,6 +103,7 @@ static inline unsigned ubdsrv_convert_cmd_op(struct ubdsrv_io_desc *iod)
 
 int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type,
 		int argc, char *argv[]);
+int ubdsrv_register_tgt_type(struct ubdsrv_tgt_type *type);
 
 static inline void ubdsrv_tgt_exit(struct ubdsrv_tgt_info *tgt)
 {

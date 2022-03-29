@@ -4,7 +4,7 @@ CFLAGS = -g -D_GNU_SOURCE -MMD
 %.o : %.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 
-UBDSRV_OBJS = ubdsrv_cmd.o ubdsrv.o ubdsrv_uring.o utils.o ubdsrv_tgt.o
+UBDSRV_OBJS = ubdsrv_cmd.o ubdsrv.o ubdsrv_uring.o utils.o ubdsrv_tgt.o tgt_null.o tgt_loop.o
 UBDSRV_PROGS = ubd
 
 all:$(UBDSRV_PROGS)
