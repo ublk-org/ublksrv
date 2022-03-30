@@ -229,12 +229,22 @@ static int ubdsrv_stop_dev(struct ubdsrv_ctrl_dev *dev)
 static void ubdsrv_dump(struct ubdsrv_ctrl_dev *dev)
 {
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
+	int fd;
+	char buf[64];
+	char *addr;
 
 	printf("dev id %d: nr_hw_queues %d queue_depth %d block size %d dev_capacity %lld\n",
 			info->dev_id,
                         info->nr_hw_queues, info->queue_depth,
                         info->block_size, info->dev_blocks);
 	printf("\t daemon pid: %d flags %x\n", info->ubdsrv_pid, info->flags);
+
+	snprintf(buf, 64, "%s_%d", UBDSRV_SHM_DIR, info->ubdsrv_pid);
+	fd = shm_open(buf, O_RDONLY, 0);
+	if (fd <= 0)
+		return;
+	addr = mmap(NULL, UBDSRV_SHM_SIZE, PROT_READ, MAP_SHARED, fd, 0);
+	printf("\t %s\n", addr);
 }
 
 int cmd_dev_add(int argc, char *argv[])

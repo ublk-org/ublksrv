@@ -67,6 +67,12 @@ struct ubdsrv_tgt_type {
 	int (*handle_io)(struct ubdsrv_dev *, int qid, int tag);
 	int (*handle_io_async)(struct ubdsrv_dev *, int qid, int tag);
 	int (*prepare_io)(struct ubdsrv_tgt_info *);
+
+	/*
+	 * this callback has to be implemented if tgt info needs to be
+	 * shown by list command
+	 */
+	int (*list_tgt)(struct ubdsrv_tgt_info *);
 };
 
 struct ubdsrv_tgt_info {
@@ -104,6 +110,7 @@ static inline unsigned ubdsrv_convert_cmd_op(struct ubdsrv_io_desc *iod)
 int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type,
 		int argc, char *argv[]);
 int ubdsrv_register_tgt_type(struct ubdsrv_tgt_type *type);
+int ubdsrv_prepare_io(struct ubdsrv_tgt_info *tgt);
 
 static inline void ubdsrv_tgt_exit(struct ubdsrv_tgt_info *tgt)
 {
@@ -113,9 +120,4 @@ static inline void ubdsrv_tgt_exit(struct ubdsrv_tgt_info *tgt)
 		close(tgt->fds[i]);
 }
 
-static int ubdsrv_prepare_io(struct ubdsrv_tgt_info *tgt)
-{
-	if (tgt->ops->prepare_io)
-		return tgt->ops->prepare_io(tgt);
-}
 #endif

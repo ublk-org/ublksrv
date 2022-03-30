@@ -356,6 +356,29 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 	}
 }
 
+static void ubdsrv_setup_tgt_shm(struct ubdsrv_dev *dev)
+{
+	int fd;
+	char buf[64];
+	unsigned pid = getpid();
+
+	//if (dev->ctrl_dev->dev_info.ubdsrv_pid <= 0)
+	//	return;
+
+	mkdir(UBDSRV_SHM_DIR, S_IRUSR | S_IRUSR);
+	snprintf(buf, 64, "%s_%d", UBDSRV_SHM_DIR, pid);
+
+	fd = shm_open(buf, O_CREAT|O_RDWR, S_IRUSR | S_IWUSR);
+
+	ftruncate(fd, UBDSRV_SHM_SIZE);
+
+	dev->ctrl_dev->shm_addr = mmap(NULL, UBDSRV_SHM_SIZE,
+		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	dev->ctrl_dev->shm_fd = fd;
+	INFO(syslog(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
+				buf, fd, dev->ctrl_dev->shm_addr));
+}
+
 static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 {
 	int nr_queues = ctrl_dev->dev_info.nr_hw_queues;
@@ -365,6 +388,8 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 	char buf[64];
 	int ret = -1;
 	int i;
+
+	ubdsrv_setup_tgt_shm(dev);
 
 	dev->ctrl_dev = ctrl_dev;
 	dev->queues = NULL;

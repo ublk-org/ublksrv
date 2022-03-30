@@ -1,5 +1,6 @@
 CC = gcc
 CFLAGS = -g -D_GNU_SOURCE -MMD
+LIBS = -lrt
 
 %.o : %.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@

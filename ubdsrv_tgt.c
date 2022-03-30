@@ -37,3 +37,17 @@ int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, int argc, char
 	return -1;
 }
 
+int ubdsrv_prepare_io(struct ubdsrv_tgt_info *tgt)
+{
+	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
+			struct ubdsrv_ctrl_dev, tgt);
+
+	if (tgt->ops->list_tgt)
+		tgt->ops->list_tgt(tgt);
+	else
+		snprintf(cdev->shm_addr, UBDSRV_SHM_SIZE, "target type %s",
+				tgt->ops->name);
+
+	if (tgt->ops->prepare_io)
+		return tgt->ops->prepare_io(tgt);
+}

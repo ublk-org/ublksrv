@@ -151,12 +151,23 @@ static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 	return 0;
 }
 
+static int loop_list(struct ubdsrv_tgt_info *tgt)
+{
+	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
+			struct ubdsrv_ctrl_dev, tgt);
+
+	return snprintf(cdev->shm_addr, UBDSRV_SHM_SIZE,
+			"target type %s: backing file %s",
+			tgt->ops->name, tgt->loop.backing_file);
+}
+
 struct ubdsrv_tgt_type  loop_tgt_type = {
 	.type	= UBDSRV_TGT_TYPE_LOOP,
 	.name	=  "loop",
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
 	.prepare_io	=  loop_prepare_io,
+	.list_tgt	=  loop_list,
 };
 
 static void tgt_loop_init() __attribute__((constructor));

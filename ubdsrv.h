@@ -20,7 +20,6 @@
 #include <sys/mman.h>
 #include <sys/uio.h>
 #include <linux/fs.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
@@ -28,9 +27,14 @@
 #include <syslog.h>
 #include <signal.h>
 
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
 #include "ubd_cmd.h"
 #include "ubdsrv_tgt.h"
 #include "ubdsrv_uring.h"
+#include "utils.h"
 
 #define MAX_NR_UBD_DEVS	128
 
@@ -43,7 +47,11 @@
 
 #define UBDC_DEV	"/dev/ubdc"
 
+#define UBDSRV_SHM_DIR	"ubdsrv"
+
 #define INFO(s)
+
+#define UBDSRV_SHM_SIZE  512
 
 struct ubdsrv_ctrl_dev {
 	struct ubdsrv_uring ring;
@@ -52,8 +60,10 @@ struct ubdsrv_ctrl_dev {
 	struct ubdsrv_ctrl_dev_info  dev_info;
 
 	struct ubdsrv_tgt_info tgt;
-};
 
+	int shm_fd;
+	char *shm_addr;
+};
 
 struct ubd_io {
 	char *buf_addr;
