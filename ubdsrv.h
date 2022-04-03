@@ -146,6 +146,11 @@ static inline void ubdsrv_mark_io_handling(struct ubd_io *io)
 	io->flags |= UBDSRV_IO_HANDLING;
 }
 
+static inline bool ubd_need_get_data(struct ubdsrv_ctrl_dev *dev)
+{
+	return dev->dev_info.flags & (1ULL << UBD_F_NEED_GET_DATA);
+}
+
 int ubdsrv_start_io_daemon(struct ubdsrv_ctrl_dev *dev);
 int ubdsrv_stop_io_daemon(struct ubdsrv_ctrl_dev *dev);
 int ubdsrv_get_io_daemon_pid(struct ubdsrv_ctrl_dev *ctrl_dev);

@@ -501,9 +501,11 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	if ((cqe->res != UBD_IO_RES_ABORT) && (last_cmd_op != UBD_IO_COMMIT_REQ)
 			&& cqe->res == UBD_IO_RES_OK) {
 
-		if (last_cmd_op != UBD_IO_GET_DATA &&
-				ubdsrv_need_get_data(ctrl_dev, q, tag))
-			return;
+		if (ubd_need_get_data(ctrl_dev)) {
+			if (last_cmd_op != UBD_IO_GET_DATA &&
+			    ubdsrv_need_get_data(ctrl_dev, q, tag))
+				return;
+		}
 
 		if (tgt->ops->handle_io) {
 			io->result = tgt->ops->handle_io(dev, qid, tag);
