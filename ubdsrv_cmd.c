@@ -112,7 +112,8 @@ static void ubdsrv_dev_deinit(struct ubdsrv_ctrl_dev *dev)
 	free(dev);
 }
 
-static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
+static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy, bool
+		task_work)
 {
 	struct ubdsrv_ctrl_dev *dev = malloc(sizeof(*dev));
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
@@ -125,6 +126,11 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 		dev->dev_info.flags |= (1ULL << UBD_F_SUPPORT_ZERO_COPY);
 	else
 		dev->dev_info.flags &= ~(1ULL << UBD_F_SUPPORT_ZERO_COPY);
+
+	if (task_work)
+		dev->dev_info.flags &= ~(1ULL << UBD_F_NEED_GET_DATA);
+	else
+		dev->dev_info.flags |= (1ULL << UBD_F_NEED_GET_DATA);
 
 	/* -1 means we ask ubd driver to allocate one free to us */
 	info->dev_id = dev_id;
@@ -253,14 +259,16 @@ int cmd_dev_add(int argc, char *argv[])
 		{ "type",		1,	NULL, 't' },
 		{ "number",		1,	NULL, 'n' },
 		{ "zero_copy",		1,	NULL, 'z' },
+		{ "task_work",		1,	NULL, 'w' },
 		{ NULL }
 	};
 	struct ubdsrv_ctrl_dev *dev;
 	int number = -1;
 	char *type = NULL;
 	int opt, ret, zcopy = 0;
+	int task_work = 0;
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:zw",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -271,12 +279,14 @@ int cmd_dev_add(int argc, char *argv[])
 			break;
 		case 'z':
 			zcopy = 1;
+		case 'w':
+			task_work = 1;
 		}
 	}
 
 	setup_ctrl_dev();
 
-	dev = ubdsrv_dev_init(number, zcopy);
+	dev = ubdsrv_dev_init(number, zcopy, task_work);
 
 	optind = 0;	/* so that tgt code can parse their arguments */
 	if (ubdsrv_tgt_init(&dev->tgt, type, argc, argv))
@@ -330,7 +340,7 @@ int cmd_dev_del(int argc, char *argv[])
 
 	setup_ctrl_dev();
 
-	dev = ubdsrv_dev_init(number, false);
+	dev = ubdsrv_dev_init(number, false, false);
 
 	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO, (char *)&dev->dev_info,
 			sizeof(info));
@@ -358,7 +368,7 @@ fail:
 
 static int list_one_dev(int number, bool log)
 {
-	struct ubdsrv_ctrl_dev *dev = ubdsrv_dev_init(number, false);
+	struct ubdsrv_ctrl_dev *dev = ubdsrv_dev_init(number, false, false);
 	int ret;
 
 	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO,
