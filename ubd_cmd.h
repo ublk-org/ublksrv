@@ -49,6 +49,7 @@
 #define UBD_IO_RES_BUSY			0x5c
 #define UBD_IO_RES_DUP_FETCH		0x5b
 #define UBD_IO_RES_UNEXPECTED_CMD	0x5a
+#define UBD_IO_RES_DATA_BAD		0x59
 
 /* only ABORT means that no re-fetch */
 #define UBD_IO_RES_ABORT		0x59
@@ -64,6 +65,7 @@
  * request into ubdsrv's vm space
  */
 #define UBD_F_SUPPORT_ZERO_COPY	0
+#define UBD_F_NEED_GET_DATA	1
 
 struct ubdsrv_ctrl_dev_info {
 	__u16	nr_hw_queues;
