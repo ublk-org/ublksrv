@@ -126,6 +126,9 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 	else
 		dev->dev_info.flags &= ~(1ULL << UBD_F_SUPPORT_ZERO_COPY);
 
+	/* always bypass GET_DATA */
+	dev->dev_info.flags &= ~(1ULL << UBD_F_NEED_GET_DATA);
+
 	/* -1 means we ask ubd driver to allocate one free to us */
 	info->dev_id = dev_id;
 	info->nr_hw_queues = MAX_NR_HW_QUEUES;
