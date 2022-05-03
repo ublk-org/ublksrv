@@ -40,7 +40,6 @@
 #define	UBD_IO_FETCH_REQ		0x20
 #define	UBD_IO_COMMIT_AND_FETCH_REQ	0x21
 #define	UBD_IO_COMMIT_REQ		0x22
-#define	UBD_IO_GET_DATA			0x23
 
 #define UBD_IO_RES_OK			0x01
 #define UBD_IO_RES_INVALID_SQE		0x5f
@@ -65,7 +64,6 @@
  * request into ubdsrv's vm space
  */
 #define UBD_F_SUPPORT_ZERO_COPY	0
-#define UBD_F_NEED_GET_DATA	1
 
 struct ubdsrv_ctrl_dev_info {
 	__u16	nr_hw_queues;

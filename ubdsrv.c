@@ -45,9 +45,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		return -1;
 	}
 
-	if (io->flags & UBDSRV_NEED_GET_DATA) {
-		cmd_op = UBD_IO_GET_DATA;
-	} else if (io->flags & UBDSRV_NEED_FETCH_RQ) {
+	if (io->flags & UBDSRV_NEED_FETCH_RQ) {
 		if (io->flags & UBDSRV_NEED_COMMIT_RQ_COMP)
 			cmd_op = UBD_IO_COMMIT_AND_FETCH_REQ;
 		else
@@ -78,7 +76,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	__WRITE_ONCE(cmd->q_id, q->q_id);
 
 	io->flags &= ~(UBDSRV_IO_FREE
-			|UBDSRV_NEED_COMMIT_RQ_COMP|UBDSRV_NEED_GET_DATA);
+			|UBDSRV_NEED_COMMIT_RQ_COMP);
 	return 0;
 }
 
@@ -139,8 +137,7 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 
 		/* we issue because we need either fetching or committing */
 		if (!(io->flags &
-			(UBDSRV_NEED_FETCH_RQ | UBDSRV_NEED_COMMIT_RQ_COMP |
-			 UBDSRV_NEED_GET_DATA)))
+			(UBDSRV_NEED_FETCH_RQ | UBDSRV_NEED_COMMIT_RQ_COMP)))
 			continue;
 		ret = queue_io_cmd(q, tail + cnt, i);
 		if (ret)
@@ -442,24 +439,6 @@ static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
 	io->flags &= ~UBDSRV_IO_HANDLING;
 }
 
-static inline int ubdsrv_need_get_data(struct ubdsrv_ctrl_dev *ctrl_dev,
-		struct ubdsrv_queue *q, unsigned tag)
-{
-	struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
-	struct ubd_io *io = &q->ios[tag];
-
-	if ((ctrl_dev->dev_info.flags & (1 << UBD_F_SUPPORT_ZERO_COPY)))
-		return 0;
-
-	/* need to copy write data first */
-	if (ubdsrv_get_op(iod) != UBD_IO_OP_WRITE)
-		return 0;
-
-	io->flags |= UBDSRV_NEED_GET_DATA | UBDSRV_IO_FREE;
-
-	return 1;
-}
-
 static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 		struct io_uring_cqe *cqe, void *data)
 {
@@ -500,12 +479,6 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	 */
 	if ((cqe->res != UBD_IO_RES_ABORT) && (last_cmd_op != UBD_IO_COMMIT_REQ)
 			&& cqe->res == UBD_IO_RES_OK) {
-
-		if (ubd_need_get_data(ctrl_dev)) {
-			if (last_cmd_op != UBD_IO_GET_DATA &&
-			    ubdsrv_need_get_data(ctrl_dev, q, tag))
-				return;
-		}
 
 		if (tgt->ops->handle_io) {
 			io->result = tgt->ops->handle_io(dev, qid, tag);

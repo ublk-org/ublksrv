@@ -72,7 +72,6 @@ struct ubd_io {
 #define UBDSRV_NEED_COMMIT_RQ_COMP	(1UL << 1)
 #define UBDSRV_IO_FREE			(1UL << 2)
 #define UBDSRV_IO_HANDLING		(1UL << 3)
-#define UBDSRV_NEED_GET_DATA		(1UL << 4)
 	unsigned int flags;
 	unsigned int result;
 };
@@ -144,11 +143,6 @@ static inline void ubdsrv_mark_io_handling(struct ubd_io *io)
 	 * count us for submission
 	 */
 	io->flags |= UBDSRV_IO_HANDLING;
-}
-
-static inline bool ubd_need_get_data(struct ubdsrv_ctrl_dev *dev)
-{
-	return dev->dev_info.flags & (1ULL << UBD_F_NEED_GET_DATA);
 }
 
 int ubdsrv_start_io_daemon(struct ubdsrv_ctrl_dev *dev);
