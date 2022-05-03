@@ -51,3 +51,21 @@ int ubdsrv_prepare_io(struct ubdsrv_tgt_info *tgt)
 	if (tgt->ops->prepare_io)
 		return tgt->ops->prepare_io(tgt);
 }
+
+void ubdsrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
+			const struct ubdsrv_tgt_type *type, void *data),
+		void *data)
+{
+	int i;
+
+	for (i = 0; i < UBDSRV_TGT_TYPE_MAX; i++) {
+		int len;
+
+                const struct ubdsrv_tgt_type  *type = tgt_list[i];
+
+		if (!type)
+			continue;
+		handle_tgt_type(i, type, data);
+	}
+}
+

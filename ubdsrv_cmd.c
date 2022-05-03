@@ -308,6 +308,44 @@ int cmd_dev_add(int argc, char *argv[])
 	return ret;
 }
 
+struct tgt_types_name {
+	char names[4096];
+	unsigned pos;
+};
+
+static void collect_tgt_types(unsigned int idx,
+		const struct ubdsrv_tgt_type *type, void *pdata)
+{
+	struct tgt_types_name *data = pdata;
+
+	if (idx > 0)
+		data->pos += snprintf(data->names + data->pos,
+				4096 - data->pos, "|");
+	data->pos += snprintf(data->names + data->pos, 4096 - data->pos,
+			"%s", type->name);
+}
+
+static void show_tgt_add_usage(unsigned int idx,
+		const struct ubdsrv_tgt_type *type, void *data)
+{
+	if (type->usage_for_add)
+		type->usage_for_add();
+}
+
+static void cmd_dev_add_usage(char *cmd)
+{
+	struct tgt_types_name data = {
+		.pos = 0,
+	};
+
+	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "{");
+	ubdsrv_for_each_tgt_type(collect_tgt_types, &data);
+	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "}");
+
+	printf("%s add -t %s -n DEV_ID\n", cmd, data.names);
+	ubdsrv_for_each_tgt_type(show_tgt_add_usage, NULL);
+}
+
 int cmd_dev_del(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
@@ -354,6 +392,11 @@ int cmd_dev_del(int argc, char *argv[])
 fail:
 	ubdsrv_dev_deinit(dev);
 	return ret;
+}
+
+static void cmd_dev_del_usage(char *cmd)
+{
+	printf("%s del -n DEV_ID\n", cmd);
 }
 
 static int list_one_dev(int number, bool log)
@@ -406,12 +449,19 @@ int cmd_list_dev_info(int argc, char *argv[])
 	return ret;
 }
 
+static void cmd_dev_list_usage(char *cmd)
+{
+	printf("%s list [-n DEV_ID]\n", cmd);
+}
+
 int main(int argc, char *argv[])
 {
 	char *cmd;
 	int ret;
+	char exe[256];
 
 	full_cmd = argv[0];
+	strncpy(exe, full_cmd, 256);
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
@@ -423,6 +473,12 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_del(argc, argv);
 	if (!strcmp(cmd, "list"))
 		ret = cmd_list_dev_info(argc, argv);
+
+	if (!strcmp(cmd, "help")) {
+		cmd_dev_add_usage(exe);
+		cmd_dev_del_usage(exe);
+		cmd_dev_list_usage(exe);
+	}
 
 	INFO(printf("cmd %s: result %d\n", cmd, ret));
 

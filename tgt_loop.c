@@ -58,6 +58,11 @@ static int loop_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc, char
 	return 0;
 }
 
+static void loop_usage_for_add(void)
+{
+	printf("           loop: -f backing_file\n");
+}
+
 static int loop_prepare_io(struct ubdsrv_tgt_info *tgt)
 {
 	const char *file = tgt->loop.backing_file;
@@ -168,6 +173,7 @@ struct ubdsrv_tgt_type  loop_tgt_type = {
 	.handle_io_async = loop_handle_io_async,
 	.prepare_io	=  loop_prepare_io,
 	.list_tgt	=  loop_list,
+	.usage_for_add	=  loop_usage_for_add,
 };
 
 static void tgt_loop_init() __attribute__((constructor));

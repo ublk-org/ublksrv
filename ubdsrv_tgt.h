@@ -67,6 +67,7 @@ struct ubdsrv_tgt_type {
 	int (*handle_io)(struct ubdsrv_dev *, int qid, int tag);
 	int (*handle_io_async)(struct ubdsrv_dev *, int qid, int tag);
 	int (*prepare_io)(struct ubdsrv_tgt_info *);
+	void (*usage_for_add)(void);
 
 	/*
 	 * this callback has to be implemented if tgt info needs to be
@@ -111,6 +112,9 @@ int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type,
 		int argc, char *argv[]);
 int ubdsrv_register_tgt_type(struct ubdsrv_tgt_type *type);
 int ubdsrv_prepare_io(struct ubdsrv_tgt_info *tgt);
+void ubdsrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
+			const struct ubdsrv_tgt_type *type, void *data),
+		void *data);
 
 static inline void ubdsrv_tgt_exit(struct ubdsrv_tgt_info *tgt)
 {
