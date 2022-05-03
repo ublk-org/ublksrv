@@ -346,32 +346,15 @@ static void cmd_dev_add_usage(char *cmd)
 	ubdsrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
 
-int cmd_dev_del(int argc, char *argv[])
+static int __cmd_dev_del(int number)
 {
-	static const struct option longopts[] = {
-		{ "number",		1,	NULL, 'n' },
-		{ NULL }
-	};
 	struct ubdsrv_ctrl_dev *dev;
-	int number = -1;
-	int opt, ret;
-	struct ubdsrv_ctrl_dev_info info;
-
-	while ((opt = getopt_long(argc, argv, "n:",
-				  longopts, NULL)) != -1) {
-		switch (opt) {
-		case 'n':
-			number = strtol(optarg, NULL, 10);
-			break;
-		}
-	}
-
-	setup_ctrl_dev();
+	int ret;
 
 	dev = ubdsrv_dev_init(number, false);
 
 	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO, (char *)&dev->dev_info,
-			sizeof(info));
+			sizeof(struct ubdsrv_ctrl_dev_info));
 	if (ret < 0) {
 		fprintf(stderr, "can't get dev info from %d\n", number);
 		goto fail;
@@ -394,9 +377,42 @@ fail:
 	return ret;
 }
 
+int cmd_dev_del(int argc, char *argv[])
+{
+	static const struct option longopts[] = {
+		{ "number",		1,	NULL, 'n' },
+		{ "all",		0,	NULL, 'a' },
+		{ NULL }
+	};
+	struct ubdsrv_ctrl_dev *dev;
+	int number = -1;
+	int opt, ret, i;
+
+	while ((opt = getopt_long(argc, argv, "n:a",
+				  longopts, NULL)) != -1) {
+		switch (opt) {
+		case 'a':
+			break;
+
+		case 'n':
+			number = strtol(optarg, NULL, 10);
+			break;
+		}
+	}
+
+	setup_ctrl_dev();
+	if (number >= 0)
+		return __cmd_dev_del(number);
+
+	for (i = 0; i < MAX_NR_UBD_DEVS; i++)
+		ret = __cmd_dev_del(i);
+
+	return ret;
+}
+
 static void cmd_dev_del_usage(char *cmd)
 {
-	printf("%s del -n DEV_ID\n", cmd);
+	printf("%s del -n DEV_ID [-a | --all]\n", cmd);
 }
 
 static int list_one_dev(int number, bool log)
