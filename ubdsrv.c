@@ -36,7 +36,6 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	struct ubdsrv_io_cmd *cmd = (struct ubdsrv_io_cmd *)&sqe->cmd;
 	struct ubd_io *io = &q->ios[tag];
 	unsigned long cmd_op;
-	int cmd_len = sizeof(*cmd);
 	__u64 buf_addr;
 	__u64 user_data;
 
@@ -68,7 +67,6 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	/* These fields should be written once, never change */
 	__WRITE_ONCE(sqe->user_data, user_data);
 	__WRITE_ONCE(sqe->cmd_op, cmd_op);
-	//__WRITE_ONCE(sqe->cmd_len, cmd_len);
 	__WRITE_ONCE(sqe->fd, /*dev->cdev_fd*/0);
 	__WRITE_ONCE(sqe->opcode, IORING_OP_URING_CMD);
 	__WRITE_ONCE(cmd->tag, tag);
@@ -77,7 +75,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 
 	io->flags &= ~(UBDSRV_IO_FREE
 			|UBDSRV_NEED_COMMIT_RQ_COMP);
-	return 0;
+	return 1;
 }
 
 /*
@@ -91,6 +89,7 @@ static int queue_io_cmd(struct ubdsrv_queue *q, unsigned tail, unsigned tag)
 	struct io_sq_ring *ring = &r->sq_ring;
 	unsigned index, next_tail = tail + 1;
 	struct io_uring_sqe *sqe;
+	int ret;
 
 	if (next_tail == atomic_load_acquire(ring->head)) {
 		syslog(LOG_INFO, "ring is full, tail %u head %u\n", next_tail,
@@ -102,12 +101,11 @@ static int queue_io_cmd(struct ubdsrv_queue *q, unsigned tail, unsigned tag)
 	/* IORING_SETUP_SQE128 */
 	sqe = ubdsrv_uring_get_sqe(r, index, true);
 
-	if (prep_io_cmd(q, sqe, tag))
-		return -2;
+	ret = prep_io_cmd(q, sqe, tag);
+	if (ret > 0)
+		ring->array[index] = index;
 
-	ring->array[index] = index;
-
-	return 0;
+	return ret;
 }
 
 /*
@@ -140,12 +138,12 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 			(UBDSRV_NEED_FETCH_RQ | UBDSRV_NEED_COMMIT_RQ_COMP)))
 			continue;
 		ret = queue_io_cmd(q, tail + cnt, i);
-		if (ret)
+		if (ret < 0)
 			break;
-		cnt++;
+		cnt += ret;
 	}
 
-	if (cnt) {
+	if (cnt > 0) {
 		commit_queue_io_cmd(q, tail + cnt);
 		q->inflight += cnt;
 	}
