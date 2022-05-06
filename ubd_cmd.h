@@ -1,5 +1,5 @@
-#ifndef FIO_UBDSRV_INC_H
-#define FIO_UBDSRV_INC_H
+#ifndef USER_BLK_DRV_CMD_INC_H
+#define USER_BLK_DRV_CMD_INC_H
 
 /* ubd server command definition */
 
@@ -33,13 +33,13 @@
  * COMMIT_REQ: issued via sqe(URING_CMD) after ubdserver handled this IO
  *      request, request's handling result is committed to ubd driver.
  *
- * GET_DATA: issued via sqe(URING_CMD) after ubdserver gets one WRITE IO
- *      cmd, for reading data from io request in ubdsrv context, this way
- *      is not only more reliable but also efficient
+ * ABORT_QUEUE: issued via sqe(URING_CMD) and abort all active commands,
+ * 	meantime ubdserver can't issue any FETCH_REQ commands
  */
 #define	UBD_IO_FETCH_REQ		0x20
 #define	UBD_IO_COMMIT_AND_FETCH_REQ	0x21
 #define	UBD_IO_COMMIT_REQ		0x22
+#define	UBD_IO_ABORT_QUEUE		0x23
 
 #define UBD_IO_RES_OK			0x01
 #define UBD_IO_RES_INVALID_SQE		0x5f
@@ -79,7 +79,7 @@ struct ubdsrv_ctrl_dev_info {
 
 	/*
 	 * Only valid for READ kind of ctrl command, and driver can
-	 * get the userspace buffer adddress here, then write data
+	 * get the userspace buffer address here, then write data
 	 * into this buffer.
 	 *
 	 * And the buffer has to be inside one single page.

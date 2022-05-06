@@ -34,7 +34,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		unsigned tag)
 {
 	struct ubdsrv_io_cmd *cmd = (struct ubdsrv_io_cmd *)&sqe->cmd;
-	struct ubd_io *io = &q->ios[tag];
+	struct ubd_io *io;
 	unsigned long cmd_op;
 	__u64 buf_addr;
 	__u64 user_data;
@@ -44,6 +44,14 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		return -1;
 	}
 
+	if (q->aborting && tag == -1) {
+		cmd_op = UBD_IO_ABORT_QUEUE;
+		buf_addr = 0;
+		tag = 0;
+		goto build_cmd;
+	}
+
+	io = &q->ios[tag];
 	if (io->flags & UBDSRV_NEED_FETCH_RQ) {
 		if (io->flags & UBDSRV_NEED_COMMIT_RQ_COMP)
 			cmd_op = UBD_IO_COMMIT_AND_FETCH_REQ;
@@ -62,6 +70,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		__WRITE_ONCE(cmd->result, io->result);
 
 	buf_addr = (__u64)io->buf_addr;
+build_cmd:
 	user_data = tag | (q->q_id << 16) | (cmd_op << 32);
 
 	/* These fields should be written once, never change */
@@ -73,8 +82,11 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	__WRITE_ONCE(cmd->addr, buf_addr);
 	__WRITE_ONCE(cmd->q_id, q->q_id);
 
-	io->flags &= ~(UBDSRV_IO_FREE
-			|UBDSRV_NEED_COMMIT_RQ_COMP);
+	if (cmd_op != UBD_IO_ABORT_QUEUE)
+		io->flags &= ~(UBDSRV_IO_FREE
+			 | UBDSRV_NEED_COMMIT_RQ_COMP);
+	else
+		q->aborting = 0;
 	return 1;
 }
 
@@ -141,6 +153,12 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 		if (ret < 0)
 			break;
 		cnt += ret;
+	}
+
+	if (q->aborting) {
+		ret = queue_io_cmd(q, tail + cnt, -1);
+		if (ret >= 0)
+			cnt += ret;
 	}
 
 	if (cnt > 0) {
@@ -475,7 +493,8 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	 * todo: support async tgt io handling via io_uring, and the ubdsrv
 	 * daemon can poll on both two rings.
 	 */
-	if ((cqe->res == UBD_IO_RES_OK) && (last_cmd_op != UBD_IO_COMMIT_REQ)) {
+	if (cqe->res == UBD_IO_RES_OK && last_cmd_op != UBD_IO_COMMIT_REQ &&
+			last_cmd_op != UBD_IO_ABORT_QUEUE) {
 
 		if (tgt->ops->handle_io) {
 			io->result = tgt->ops->handle_io(dev, qid, tag);
@@ -498,12 +517,12 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	}
 }
 
-static sig_atomic_t volatile ubdsrv_running = 1;
+static sig_atomic_t volatile ubdsrv_stop = 0;
 static void sig_handler(int sig)
 {
 	if (sig == SIGTERM) {
 		syslog(LOG_INFO, "got TERM signal");
-		ubdsrv_running = 0;
+		ubdsrv_stop = 1;
 	}
 }
 
@@ -516,6 +535,7 @@ static void ubdsrv_io_handler(void *data)
 	int ret, pid_fd;
 	char buf[32];
 	char pid_file[64];
+	int aborted = 0;
 
 	snprintf(buf, 32, "%s-%d", "ubdsrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
@@ -550,6 +570,12 @@ static void ubdsrv_io_handler(void *data)
 		struct ubdsrv_queue *q = &dev.queues[0];
 		int to_submit, submitted, reapped;
 
+		/* we need to abort queue */
+		if (ubdsrv_stop && !aborted) {
+			aborted = 1;
+			q->aborting = 1;
+		}
+
 		to_submit = ubdsrv_submit_fetch_commands(q);
 		INFO(syslog(LOG_INFO, "to_submit %d\n", to_submit));
 
@@ -561,13 +587,13 @@ static void ubdsrv_io_handler(void *data)
 				ubdsrv_handle_cqe, &dev);
 		INFO(syslog(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
 				to_submit, submitted, reapped));
-	} while (ubdsrv_running);
+	} while (1);
 
 	ubdsrv_deinit(&dev);
 
  out:
 	unlink(pid_file);
-	syslog(LOG_INFO, "end ubdsrv io daemon, running %d", ubdsrv_running);
+	syslog(LOG_INFO, "end ubdsrv io daemon, running %d", ubdsrv_stop);
 	closelog();
 }
 
