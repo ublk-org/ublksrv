@@ -386,11 +386,11 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 	int ret = -1;
 	int i;
 
-	ubdsrv_setup_tgt_shm(dev);
-
 	dev->ctrl_dev = ctrl_dev;
 	dev->queues = NULL;
 	dev->cdev_fd = -1;
+
+	ubdsrv_setup_tgt_shm(dev);
 
 	snprintf(buf, 64, "%s%d", UBDC_DEV, dev_id);
 	dev->cdev_fd = open(buf, O_RDWR);
