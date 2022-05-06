@@ -156,7 +156,7 @@ static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev, unsigned cmd_op,
 	ret = io_uring_enter(&dev->ring, 1, 1, flags);
 	ret = reap_events_uring(dev);
 
-	return ret;
+	return ret - 1;
 }
 
 /*
@@ -282,17 +282,11 @@ int cmd_dev_add(int argc, char *argv[])
 	if (ubdsrv_tgt_init(&dev->tgt, type, argc, argv))
 		die("usbsrv: target init failed\n");
 
-	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_ADD_DEV, NULL, 0);
-	if (ret < 0) {
-		fprintf(stderr, "can't get dev info from %d\n", number);
-		goto fail;
-	}
-
-	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO,
+	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_ADD_DEV,
 			(char *)&dev->dev_info,
 			sizeof(struct ubdsrv_ctrl_dev_info));
 	if (ret < 0) {
-		fprintf(stderr, "UBD_CMD_GET_DEV_INFO failed %d\n", number);
+		fprintf(stderr, "can't add dev %d\n", number);
 		goto fail;
 	}
 
@@ -346,7 +340,7 @@ static void cmd_dev_add_usage(char *cmd)
 	ubdsrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
 
-static int __cmd_dev_del(int number)
+static int __cmd_dev_del(int number, bool log)
 {
 	struct ubdsrv_ctrl_dev *dev;
 	int ret;
@@ -356,7 +350,8 @@ static int __cmd_dev_del(int number)
 	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO, (char *)&dev->dev_info,
 			sizeof(struct ubdsrv_ctrl_dev_info));
 	if (ret < 0) {
-		fprintf(stderr, "can't get dev info from %d\n", number);
+		if (log)
+			fprintf(stderr, "can't get dev info from %d\n", number);
 		goto fail;
 	}
 
@@ -402,10 +397,10 @@ int cmd_dev_del(int argc, char *argv[])
 
 	setup_ctrl_dev();
 	if (number >= 0)
-		return __cmd_dev_del(number);
+		return __cmd_dev_del(number, true);
 
 	for (i = 0; i < MAX_NR_UBD_DEVS; i++)
-		ret = __cmd_dev_del(i);
+		ret = __cmd_dev_del(i, false);
 
 	return ret;
 }
@@ -423,8 +418,7 @@ static int list_one_dev(int number, bool log)
 	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO,
 			(char *)&dev->dev_info,
 			sizeof(dev->dev_info));
-
-	if (ret <= 0) {
+	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
 	} else
