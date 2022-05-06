@@ -477,8 +477,7 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	 * todo: support async tgt io handling via io_uring, and the ubdsrv
 	 * daemon can poll on both two rings.
 	 */
-	if ((cqe->res != UBD_IO_RES_ABORT) && (last_cmd_op != UBD_IO_COMMIT_REQ)
-			&& cqe->res == UBD_IO_RES_OK) {
+	if ((cqe->res == UBD_IO_RES_OK) && (last_cmd_op != UBD_IO_COMMIT_REQ)) {
 
 		if (tgt->ops->handle_io) {
 			io->result = tgt->ops->handle_io(dev, qid, tag);
