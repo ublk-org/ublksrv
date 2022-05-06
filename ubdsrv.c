@@ -501,8 +501,8 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 static sig_atomic_t volatile ubdsrv_running = 1;
 static void sig_handler(int sig)
 {
-	if (sig == SIGINT || sig == SIGQUIT) {
-		syslog(LOG_INFO, "got int or quit signal");
+	if (sig == SIGTERM) {
+		syslog(LOG_INFO, "got TERM signal");
 		ubdsrv_running = 0;
 	}
 }
@@ -535,9 +535,7 @@ static void ubdsrv_io_handler(void *data)
 	}
 	close(pid_fd);
 
-	if (signal(SIGINT, sig_handler) == SIG_ERR)
-		goto out;
-	if (signal(SIGQUIT, sig_handler) == SIG_ERR)
+	if (signal(SIGTERM, sig_handler) == SIG_ERR)
 		goto out;
 
 	ret = ubdsrv_init(ctrl_dev, &dev);
