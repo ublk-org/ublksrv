@@ -68,7 +68,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	/* These fields should be written once, never change */
 	__WRITE_ONCE(sqe->user_data, user_data);
 	__WRITE_ONCE(sqe->cmd_op, cmd_op);
-	__WRITE_ONCE(sqe->cmd_len, cmd_len);
+	//__WRITE_ONCE(sqe->cmd_len, cmd_len);
 	__WRITE_ONCE(sqe->fd, /*dev->cdev_fd*/0);
 	__WRITE_ONCE(sqe->opcode, IORING_OP_URING_CMD);
 	__WRITE_ONCE(cmd->tag, tag);

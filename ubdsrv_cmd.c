@@ -42,7 +42,7 @@ static inline void init_cmd(struct ubdsrv_ctrl_dev *dev, struct io_uring_sqe *sq
 	memcpy((void *)&sqe->cmd, &dev->dev_info,
 			sizeof(struct ubdsrv_ctrl_dev_info));
 	sqe->cmd_op = cmd_op;
-	sqe->cmd_len = sizeof(struct ubdsrv_ctrl_dev_info);
+	//sqe->cmd_len = sizeof(struct ubdsrv_ctrl_dev_info);
 }
 
 static int queue_cmd(struct ubdsrv_ctrl_dev *dev, unsigned int cmd_op,
