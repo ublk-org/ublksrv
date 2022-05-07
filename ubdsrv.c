@@ -41,11 +41,6 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	__u64 buf_addr;
 	__u64 user_data;
 
-	if (!(io->flags & UBDSRV_IO_FREE)) {
-		syslog(LOG_ERR, "io isn't free qid %d, tag %d\n", q->q_id, tag);
-		return -1;
-	}
-
 	if (q->aborting && tag == -1) {
 		cmd_op = UBD_IO_ABORT_QUEUE;
 		buf_addr = 0;
@@ -54,6 +49,11 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	}
 
 	io = &q->ios[tag];
+	if (!(io->flags & UBDSRV_IO_FREE)) {
+		syslog(LOG_ERR, "io isn't free qid %d, tag %d\n", q->q_id, tag);
+		return -1;
+	}
+
 	if (io->flags & UBDSRV_NEED_FETCH_RQ) {
 		if (io->flags & UBDSRV_NEED_COMMIT_RQ_COMP)
 			cmd_op = UBD_IO_COMMIT_AND_FETCH_REQ;
