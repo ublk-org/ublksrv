@@ -413,6 +413,11 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 	for (i = 0; i < dev->ctrl_dev->dev_info.nr_hw_queues; i++)
 		ubdsrv_queue_deinit(ubdsrv_get_queue(dev, i));
 
+	if (dev->ctrl_dev->shm_fd >= 0) {
+		munmap(dev->ctrl_dev->shm_addr, UBDSRV_SHM_SIZE);
+		close(dev->ctrl_dev->shm_fd);
+	}
+
 	ubdsrv_tgt_exit(&dev->ctrl_dev->tgt);
 
 	if (dev->cdev_fd >= 0) {
