@@ -178,11 +178,16 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
  */
 static void ubdsrv_drain_fetch_commands(struct ubdsrv_dev *dev)
 {
-	/* So far, only support SQ */
+	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
 	struct ubdsrv_queue *q = &dev->queues[0];
+	int i;
 
-	while (q->inflight)
-		usleep(100000);
+	for (i = 0; i < nr_queues; i++) {
+		struct ubdsrv_queue *q = &dev->queues[i];
+
+		while (q->inflight)
+			usleep(100000);
+	}
 }
 
 /* used for allocating zero copy vma space */
@@ -302,6 +307,7 @@ static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 	unsigned long off;
 	int ring_depth = depth + ctrl_dev->tgt.tgt_ring_depth;
 
+	q->dev = dev;
 	q->stopping = 0;
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
@@ -458,10 +464,10 @@ static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
 static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 		struct io_uring_cqe *cqe, void *data)
 {
-	struct ubdsrv_dev *dev = data;
+	struct ubdsrv_queue *q = container_of(r, struct ubdsrv_queue, ring);
+	struct ubdsrv_dev *dev = q->dev;
 	struct ubdsrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	struct ubdsrv_tgt_info *tgt = &ctrl_dev->tgt;
-	struct ubdsrv_queue *q = container_of(r, struct ubdsrv_queue, ring);
 	int tag = cqe->user_data & 0xffff;
 	int qid = (cqe->user_data >> 16) & 0xffff;
 	unsigned last_cmd_op = cqe->user_data >> 32 & 0x7fffffff;
@@ -526,6 +532,36 @@ static void sig_handler(int sig)
 	}
 }
 
+static void *ubdsrv_io_handler_fn(void *data)
+{
+	struct ubdsrv_queue *q = data;
+	int aborted = 0;
+
+	setpriority(PRIO_PROCESS, getpid(), -20);
+
+	do {
+		int to_submit, submitted, reapped;
+
+		/* we need to abort queue */
+		if (ubdsrv_stop && !aborted) {
+			aborted = 1;
+			q->aborting = 1;
+		}
+
+		to_submit = ubdsrv_submit_fetch_commands(q);
+		INFO(syslog(LOG_INFO, "to_submit %d\n", to_submit));
+
+		if (!q->inflight && q->stopping)
+			break;
+		submitted = io_uring_enter(&q->ring, to_submit, 1,
+				IORING_ENTER_GETEVENTS);
+		reapped = ubdsrv_reap_events_uring(&q->ring,
+				ubdsrv_handle_cqe, NULL);
+		INFO(syslog(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
+				to_submit, submitted, reapped));
+	} while (1);
+}
+
 static void ubdsrv_io_handler(void *data)
 {
 	struct ubdsrv_ctrl_dev *ctrl_dev = data;
@@ -535,7 +571,6 @@ static void ubdsrv_io_handler(void *data)
 	int ret, pid_fd;
 	char buf[32];
 	char pid_file[64];
-	int aborted = 0;
 
 	snprintf(buf, 32, "%s-%d", "ubdsrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
@@ -564,30 +599,7 @@ static void ubdsrv_io_handler(void *data)
 		goto out;
 	}
 
-	setpriority(PRIO_PROCESS, getpid(), -20);
-
-	do {
-		struct ubdsrv_queue *q = &dev.queues[0];
-		int to_submit, submitted, reapped;
-
-		/* we need to abort queue */
-		if (ubdsrv_stop && !aborted) {
-			aborted = 1;
-			q->aborting = 1;
-		}
-
-		to_submit = ubdsrv_submit_fetch_commands(q);
-		INFO(syslog(LOG_INFO, "to_submit %d\n", to_submit));
-
-		if (!q->inflight && q->stopping)
-			break;
-		submitted = io_uring_enter(&q->ring, to_submit, 1,
-				IORING_ENTER_GETEVENTS);
-		reapped = ubdsrv_reap_events_uring(&q->ring,
-				ubdsrv_handle_cqe, &dev);
-		INFO(syslog(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
-				to_submit, submitted, reapped));
-	} while (1);
+	ubdsrv_io_handler_fn(&dev.queues[0]);
 
 	ubdsrv_deinit(&dev);
 
