@@ -104,6 +104,7 @@ struct ubdsrv_queue {
 	 */
 	struct ubdsrv_uring ring;
 
+	pthread_t thread;
 	struct ubdsrv_dev *dev;
 
 	struct ubd_io ios[0];

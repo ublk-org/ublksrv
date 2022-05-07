@@ -30,6 +30,8 @@
  * all sqes have been free, exit itself. Then STOP_DEV returns.
  */
 
+static void *ubdsrv_io_handler_fn(void *data);
+
 static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		unsigned tag)
 {
@@ -184,9 +186,11 @@ static void ubdsrv_drain_fetch_commands(struct ubdsrv_dev *dev)
 
 	for (i = 0; i < nr_queues; i++) {
 		struct ubdsrv_queue *q = &dev->queues[i];
+		void *ret;
 
-		while (q->inflight)
-			usleep(100000);
+		///while (q->inflight)
+		///	usleep(100000);
+		pthread_join(q->thread, &ret);
 	}
 }
 
@@ -346,6 +350,8 @@ static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 
 	ubdsrv_init_io_cmds(dev, q);
 
+	pthread_create(&q->thread, NULL, ubdsrv_io_handler_fn, q);
+
 	return 0;
  fail:
 	ubdsrv_queue_deinit(q);
@@ -430,14 +436,14 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 	dev->queues = calloc(nr_queues, queue_size);
 	if (!dev->queues)
 		goto fail;
+	ret = ubdsrv_init_io_bufs(dev);
+	if (ret)
+		goto fail;
+
 	for (i = 0; i < nr_queues; i++) {
 		if (ubdsrv_queue_init(dev, i))
 			goto fail;
 	}
-
-	ret = ubdsrv_init_io_bufs(dev);
-	if (ret)
-		goto fail;
 
 	return 0;
 fail:
@@ -599,7 +605,7 @@ static void ubdsrv_io_handler(void *data)
 		goto out;
 	}
 
-	ubdsrv_io_handler_fn(&dev.queues[0]);
+	//ubdsrv_io_handler_fn(&dev.queues[0]);
 
 	ubdsrv_deinit(&dev);
 
