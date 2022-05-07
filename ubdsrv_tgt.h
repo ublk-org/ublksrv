@@ -88,7 +88,7 @@ struct ubdsrv_tgt_info {
 	const struct ubdsrv_tgt_type *ops;
 };
 
-static inline unsigned ubdsrv_convert_cmd_op(struct ubdsrv_io_desc *iod)
+static inline unsigned ubdsrv_convert_cmd_op(const struct ubdsrv_io_desc *iod)
 {
 	unsigned ubd_op = ubdsrv_get_op(iod);
 

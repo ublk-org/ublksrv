@@ -81,7 +81,7 @@ static int loop_prepare_io(struct ubdsrv_tgt_info *tgt)
 }
 
 static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
-		struct ubdsrv_io_desc *iod)
+		const struct ubdsrv_io_desc *iod)
 {
 	__u16 ubd_op = ubdsrv_get_op(iod);
 	__u32 flags = ubdsrv_get_flags(iod);
@@ -106,7 +106,7 @@ static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
 static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 {
 	struct ubdsrv_queue *q = ubdsrv_get_queue(dev, qid);
-	struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
+	const struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
 	struct ubd_io *io = &q->ios[tag];
 
 	struct ubdsrv_uring *r = &q->ring;

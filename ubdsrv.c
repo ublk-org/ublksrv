@@ -497,7 +497,6 @@ static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
 {
 	int tag = cqe->user_data & 0xffff;
 	struct ubd_io *io = &q->ios[tag];
-	struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
 
 	io->result = cqe->res;
 
