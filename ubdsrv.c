@@ -181,11 +181,10 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 static void ubdsrv_drain_fetch_commands(struct ubdsrv_dev *dev)
 {
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
-	struct ubdsrv_queue *q = &dev->queues[0];
 	int i;
 
 	for (i = 0; i < nr_queues; i++) {
-		struct ubdsrv_queue *q = &dev->queues[i];
+		struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
 		void *ret;
 
 		///while (q->inflight)
@@ -248,7 +247,7 @@ static int ubdsrv_init_io_bufs(struct ubdsrv_dev *dev)
 	dev->io_buf_start = addr;
 
 	for (i = 0; i < nr_queues; i++) {
-		struct ubdsrv_queue *q = &dev->queues[i];
+		struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
 
 		q->io_buf = dev->io_buf_start + i * ubd_queue_io_buf_size(dev);
 	}
@@ -303,7 +302,7 @@ static void ubdsrv_queue_deinit(struct ubdsrv_queue *q)
 
 static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 {
-	struct ubdsrv_queue *q = &dev->queues[q_id];
+	struct ubdsrv_queue *q = ubdsrv_get_queue(dev, q_id);
 	struct ubdsrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	int depth = ctrl_dev->dev_info.queue_depth;
 	int i, ret = -1;
@@ -355,6 +354,8 @@ static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 	return 0;
  fail:
 	ubdsrv_queue_deinit(q);
+	syslog(LOG_INFO, "ubd dev %d queue %d failed",
+			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 	return ret;
 }
 
@@ -367,7 +368,7 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 	ubdsrv_deinit_io_bufs(dev);
 
 	for (i = 0; i < dev->ctrl_dev->dev_info.nr_hw_queues; i++)
-		ubdsrv_queue_deinit(&dev->queues[i]);
+		ubdsrv_queue_deinit(ubdsrv_get_queue(dev, i));
 
 	ubdsrv_tgt_exit(&dev->ctrl_dev->tgt);
 
@@ -375,9 +376,9 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 		close(dev->cdev_fd);
 		dev->cdev_fd = -1;
 	}
-	if (dev->queues) {
-		free(dev->queues);
-		dev->queues = NULL;
+	if (dev->__queues) {
+		free(dev->__queues);
+		dev->__queues = NULL;
 	}
 }
 
@@ -415,7 +416,7 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 	int i;
 
 	dev->ctrl_dev = ctrl_dev;
-	dev->queues = NULL;
+	dev->__queues = NULL;
 	dev->cdev_fd = -1;
 
 	ubdsrv_setup_tgt_shm(dev);
@@ -431,18 +432,21 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 		goto fail;
 
 	/* we pre-allocate IO buffer for each request */
-	queue_size = sizeof(struct ubdsrv_queue) + sizeof(struct ubd_io) *
+	dev->queue_size = sizeof(struct ubdsrv_queue) + sizeof(struct ubd_io) *
 		ctrl_dev->dev_info.queue_depth;
-	dev->queues = calloc(nr_queues, queue_size);
-	if (!dev->queues)
+	dev->__queues = calloc(nr_queues, dev->queue_size);
+	if (!dev->__queues)
 		goto fail;
 	ret = ubdsrv_init_io_bufs(dev);
 	if (ret)
 		goto fail;
 
 	for (i = 0; i < nr_queues; i++) {
-		if (ubdsrv_queue_init(dev, i))
+		if (ubdsrv_queue_init(dev, i)) {
+			syslog(LOG_INFO, "ubd dev %d queue %d init queue failed",
+				dev->ctrl_dev->dev_info.dev_id, i);
 			goto fail;
+		}
 	}
 
 	return 0;
@@ -543,6 +547,8 @@ static void *ubdsrv_io_handler_fn(void *data)
 	struct ubdsrv_queue *q = data;
 	int aborted = 0;
 
+	INFO(syslog(LOG_INFO, "ubd dev %d queue %d started",
+				q->dev->ctrl_dev->dev_info.dev_id, q->q_id));
 	setpriority(PRIO_PROCESS, getpid(), -20);
 
 	do {
