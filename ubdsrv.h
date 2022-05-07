@@ -118,8 +118,7 @@ struct ubdsrv_dev {
 	struct ubdsrv_ctrl_dev	*ctrl_dev;
 	int cdev_fd;
 
-	unsigned queue_size;
-	char	*__queues;
+	struct ubdsrv_queue *__queues[MAX_NR_HW_QUEUES];
 	void	*io_buf_start;
 };
 
@@ -157,7 +156,7 @@ static inline void ubdsrv_mark_io_handling(struct ubd_io *io)
 static inline struct ubdsrv_queue *ubdsrv_get_queue(struct ubdsrv_dev *dev,
 		int q_id)
 {
-	return (struct ubdsrv_queue *)&(dev->__queues[q_id * dev->queue_size]);
+	return dev->__queues[q_id];
 }
 
 int ubdsrv_start_io_daemon(struct ubdsrv_ctrl_dev *dev);
