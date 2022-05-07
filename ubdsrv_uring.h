@@ -54,25 +54,12 @@ static inline struct io_uring_sqe *ubdsrv_uring_get_sqe(struct ubdsrv_uring *r,
 	return  &r->sqes[idx];
 }
 
-struct __kernel_timespec {
-    int64_t     tv_sec;
-    long long   tv_nsec;
-};
-
 /********* part of following code is stolen from t/io_uring.c *****/
 static inline int io_uring_enter(struct ubdsrv_uring *r, unsigned int to_submit,
 			  unsigned int min_complete, unsigned int flags)
 {
-	struct __kernel_timespec ts = {
-		.tv_sec = 3,
-	};
-        struct io_uring_getevents_arg arg = {
-                .ts             = (unsigned long) &ts,
-        };
-
-	flags |= IORING_ENTER_EXT_ARG;
 	return syscall(__NR_io_uring_enter, r->ring_fd, to_submit,
-			min_complete, flags, &arg, sizeof(arg));
+			min_complete, flags, NULL, 0);
 }
 
 static inline int io_uring_setup(unsigned entries, struct io_uring_params *p)
