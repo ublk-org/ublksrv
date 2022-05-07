@@ -128,11 +128,11 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 
 	/* -1 means we ask ubd driver to allocate one free to us */
 	info->dev_id = dev_id;
-	info->nr_hw_queues = MAX_NR_HW_QUEUES;
-	info->queue_depth = MAX_QD;
+	info->nr_hw_queues = DEF_NR_HW_QUEUES;
+	info->queue_depth = DEF_QD;
 	info->block_size = zcopy ? 4096 : 512;
 	dev->bs_shift = ilog2(info->block_size);
-	info->rq_max_blocks = MAX_BUF_SIZE / info->block_size;
+	info->rq_max_blocks = DEF_BUF_SIZE / info->block_size;
 
 	/* 32 is enough to send ctrl commands */
 	if (ubdsrv_setup_ring(&dev->ring, IORING_SETUP_SQE128, 32, NULL, 0))
@@ -237,7 +237,9 @@ static void ubdsrv_dump(struct ubdsrv_ctrl_dev *dev)
 			info->dev_id,
                         info->nr_hw_queues, info->queue_depth,
                         info->block_size, info->dev_blocks);
-	printf("\t daemon pid: %d flags %x\n", info->ubdsrv_pid, info->flags);
+	printf("\t max rq size: %d daemon pid: %d flags %x\n",
+                        info->block_size * info->rq_max_blocks,
+			info->ubdsrv_pid, info->flags);
 
 	snprintf(buf, 64, "%s_%d", UBDSRV_SHM_DIR, info->ubdsrv_pid);
 	fd = shm_open(buf, O_RDONLY, 0);
@@ -252,15 +254,19 @@ int cmd_dev_add(int argc, char *argv[])
 	static const struct option longopts[] = {
 		{ "type",		1,	NULL, 't' },
 		{ "number",		1,	NULL, 'n' },
+		{ "queues",		1,	NULL, 'q' },
+		{ "depth",		1,	NULL, 'd' },
 		{ "zero_copy",		1,	NULL, 'z' },
 		{ NULL }
 	};
 	struct ubdsrv_ctrl_dev *dev;
 	int number = -1;
 	char *type = NULL;
+	unsigned int queues = 0;
+	unsigned int depth = 0;
 	int opt, ret, zcopy = 0;
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -271,12 +277,23 @@ int cmd_dev_add(int argc, char *argv[])
 			break;
 		case 'z':
 			zcopy = 1;
+			break;
+		case 'q':
+			queues = strtol(optarg, NULL, 10);
+			break;
+		case 'd':
+			depth = strtol(optarg, NULL, 10);
+			break;
 		}
 	}
 
 	setup_ctrl_dev();
 
 	dev = ubdsrv_dev_init(number, zcopy);
+	if (queues && queues <= MAX_NR_HW_QUEUES)
+		dev->dev_info.nr_hw_queues = queues;
+	if (depth && depth <= MAX_QD)
+		dev->dev_info.queue_depth = depth;
 
 	optind = 0;	/* so that tgt code can parse their arguments */
 	if (ubdsrv_tgt_init(&dev->tgt, type, argc, argv))
@@ -336,7 +353,7 @@ static void cmd_dev_add_usage(char *cmd)
 	ubdsrv_for_each_tgt_type(collect_tgt_types, &data);
 	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "}");
 
-	printf("%s add -t %s -n DEV_ID\n", cmd, data.names);
+	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n", cmd, data.names);
 	ubdsrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
 

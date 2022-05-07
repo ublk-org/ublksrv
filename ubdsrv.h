@@ -39,9 +39,13 @@
 #define MAX_NR_UBD_DEVS	128
 
 #define	CTRL_DEV	"/dev/ubd-control"
-#define	MAX_NR_HW_QUEUES 1
-#define	MAX_QD		128
-#define	MAX_BUF_SIZE	(256 << 10)
+#define	MAX_NR_HW_QUEUES 32
+#define	MAX_QD		1024
+#define	MAX_BUF_SIZE	(1024 << 10)
+
+#define	DEF_NR_HW_QUEUES 1
+#define	DEF_QD		256
+#define	DEF_BUF_SIZE	(512 << 10)
 
 #define UBDSRV_PID_FILE  "/var/run/ubdsrvd"
 
