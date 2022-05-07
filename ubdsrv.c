@@ -30,6 +30,9 @@
  * all sqes have been free, exit itself. Then STOP_DEV returns.
  */
 
+struct ubdsrv_dev this_dev;
+static sig_atomic_t volatile ubdsrv_stop = 0;
+
 static void *ubdsrv_io_handler_fn(void *data);
 
 static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
@@ -174,6 +177,22 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 	return cnt + to_handle;
 }
 
+static int ubdsrv_queue_is_done(struct ubdsrv_queue *q)
+{
+	return q->stopping && q->inflight == 0;
+}
+
+static int ubdsrv_dev_is_done(struct ubdsrv_dev *dev)
+{
+	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
+	int i, ret = 0;
+
+	for (i = 0; i < nr_queues; i++)
+		ret += ubdsrv_queue_is_done(ubdsrv_get_queue(dev, i));
+
+	return ret == nr_queues;
+}
+
 /*
  * Now STOP DEV ctrl command has been sent to /dev/ubd-control,
  * and wait until all pending fetch commands are canceled
@@ -182,13 +201,28 @@ static void ubdsrv_drain_fetch_commands(struct ubdsrv_dev *dev)
 {
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
 	int i;
+	void *ret;
+
+	while (1) {
+		if (ubdsrv_dev_is_done(dev))
+			break;
+		if (!ubdsrv_stop)
+			sleep(3);
+		else
+			usleep(10000);
+
+		if (!ubdsrv_stop)
+			continue;
+
+		for (i = 0; i < nr_queues; i++) {
+			struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
+
+			pthread_kill(q->thread, SIGTERM);
+		}
+	}
 
 	for (i = 0; i < nr_queues; i++) {
 		struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
-		void *ret;
-
-		///while (q->inflight)
-		///	usleep(100000);
 		pthread_join(q->thread, &ret);
 	}
 }
@@ -324,6 +358,7 @@ static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 	q->q_depth = depth;
 	q->io_cmd_buf = NULL;
 	q->inflight = 0;
+	q->aborting = 0;
 
 	cmd_buf_size = ubdsrv_queue_cmd_buf_sz(q);
 	off = UBDSRV_CMD_BUF_OFFSET +
@@ -530,7 +565,6 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	}
 }
 
-static sig_atomic_t volatile ubdsrv_stop = 0;
 static void sig_handler(int sig)
 {
 	if (sig == SIGTERM) {
@@ -548,6 +582,7 @@ static void *ubdsrv_io_handler_fn(void *data)
 	INFO(syslog(LOG_INFO, "ubd dev %d queue %d started",
 				dev_id, q->q_id));
 	setpriority(PRIO_PROCESS, getpid(), -20);
+
 
 	do {
 		int to_submit, submitted, reapped;
@@ -574,12 +609,12 @@ static void *ubdsrv_io_handler_fn(void *data)
 	} while (1);
 }
 
+static sigset_t   signal_mask;
 static void ubdsrv_io_handler(void *data)
 {
 	struct ubdsrv_ctrl_dev *ctrl_dev = data;
 	struct ubdsrv_tgt_info *tgt = &ctrl_dev->tgt;
 	int dev_id = ctrl_dev->dev_info.dev_id;
-	struct ubdsrv_dev dev;
 	int ret, pid_fd;
 	char buf[32];
 	char pid_file[64];
@@ -605,15 +640,19 @@ static void ubdsrv_io_handler(void *data)
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
 		goto out;
 
-	ret = ubdsrv_init(ctrl_dev, &dev);
+	/* make sure SIGTERM won't be blocked */
+	sigemptyset(&signal_mask);
+	sigaddset(&signal_mask, SIGINT);
+	sigaddset(&signal_mask, SIGTERM);
+	pthread_sigmask(SIG_UNBLOCK, &signal_mask, NULL);
+
+	ret = ubdsrv_init(ctrl_dev, &this_dev);
 	if (ret) {
 		syslog(LOG_ERR, "start ubsrv failed %d", ret);
 		goto out;
 	}
 
-	//ubdsrv_io_handler_fn(&dev.queues[0]);
-
-	ubdsrv_deinit(&dev);
+	ubdsrv_deinit(&this_dev);
 
  out:
 	unlink(pid_file);
