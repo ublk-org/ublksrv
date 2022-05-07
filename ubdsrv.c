@@ -323,6 +323,7 @@ static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
 	q->io_cmd_buf = NULL;
+	q->inflight = 0;
 
 	cmd_buf_size = ubdsrv_queue_cmd_buf_sz(q);
 	off = UBDSRV_CMD_BUF_OFFSET +
@@ -489,6 +490,8 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 		return;
 	}
 
+	q->inflight--;
+
 	if (cqe->res <= 0)
 		return;
 
@@ -496,8 +499,6 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 		q->stopping = 1;
 		io->flags &= ~UBDSRV_NEED_FETCH_RQ;
 	}
-
-	q->inflight--;
 
 	/*
 	 * So far, only sync tgt's io handling is implemented.
@@ -542,9 +543,10 @@ static void *ubdsrv_io_handler_fn(void *data)
 {
 	struct ubdsrv_queue *q = data;
 	int aborted = 0;
+	unsigned dev_id = q->dev->ctrl_dev->dev_info.dev_id;
 
 	INFO(syslog(LOG_INFO, "ubd dev %d queue %d started",
-				q->dev->ctrl_dev->dev_info.dev_id, q->q_id));
+				dev_id, q->q_id));
 	setpriority(PRIO_PROCESS, getpid(), -20);
 
 	do {
@@ -557,7 +559,9 @@ static void *ubdsrv_io_handler_fn(void *data)
 		}
 
 		to_submit = ubdsrv_submit_fetch_commands(q);
-		INFO(syslog(LOG_INFO, "to_submit %d\n", to_submit));
+		INFO(syslog(LOG_INFO, "dev%d-q%d: to_submit %d inflight %d stopping %d\n",
+					dev_id, q->q_id, to_submit, q->inflight,
+					q->stopping));
 
 		if (!q->inflight && q->stopping)
 			break;
