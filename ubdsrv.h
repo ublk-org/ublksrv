@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <dirent.h>
 
 #include "ubd_cmd.h"
 #include "ubdsrv_tgt.h"
@@ -109,6 +110,8 @@ struct ubdsrv_queue {
 	struct ubdsrv_uring ring;
 
 	pthread_t thread;
+	cpu_set_t cpuset;
+	unsigned  tid;
 	struct ubdsrv_dev *dev;
 
 	struct ubd_io ios[0];
