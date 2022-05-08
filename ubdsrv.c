@@ -406,8 +406,6 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 {
 	int i;
 
-	ubdsrv_drain_fetch_commands(dev);
-
 	ubdsrv_deinit_io_bufs(dev);
 
 	for (i = 0; i < dev->ctrl_dev->dev_info.nr_hw_queues; i++)
@@ -655,6 +653,9 @@ static void ubdsrv_io_handler(void *data)
 		syslog(LOG_ERR, "start ubsrv failed %d", ret);
 		goto out;
 	}
+
+	/* wait until we are terminated */
+	ubdsrv_drain_fetch_commands(&this_dev);
 
 	ubdsrv_deinit(&this_dev);
 
