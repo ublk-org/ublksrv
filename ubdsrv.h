@@ -56,7 +56,7 @@
 
 #define INFO(s)
 
-#define UBDSRV_SHM_SIZE  512
+#define UBDSRV_SHM_SIZE  1024
 
 struct ubdsrv_ctrl_dev {
 	struct ubdsrv_uring ring;
@@ -68,6 +68,8 @@ struct ubdsrv_ctrl_dev {
 
 	int shm_fd;
 	char *shm_addr;
+	unsigned int shm_offset;
+	pthread_mutex_t lock;
 };
 
 struct ubd_io {

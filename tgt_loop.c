@@ -161,9 +161,11 @@ static int loop_list(struct ubdsrv_tgt_info *tgt)
 	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
 			struct ubdsrv_ctrl_dev, tgt);
 
-	return snprintf(cdev->shm_addr, UBDSRV_SHM_SIZE,
-			"target type %s: backing file %s",
+	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
+			UBDSRV_SHM_SIZE - cdev->shm_offset,
+			"target type: %s backing file: %s\n",
 			tgt->ops->name, tgt->loop.backing_file);
+	return 0;
 }
 
 struct ubdsrv_tgt_type  loop_tgt_type = {

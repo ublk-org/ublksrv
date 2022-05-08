@@ -138,6 +138,8 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 	if (ubdsrv_setup_ring(&dev->ring, IORING_SETUP_SQE128, 32, NULL, 0))
 		exit(-1);
 
+	pthread_mutex_init(&dev->lock, NULL);
+
 	return dev;
 }
 

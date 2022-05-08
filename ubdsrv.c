@@ -442,6 +442,7 @@ static void ubdsrv_setup_tgt_shm(struct ubdsrv_dev *dev)
 
 	dev->ctrl_dev->shm_addr = mmap(NULL, UBDSRV_SHM_SIZE,
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	dev->ctrl_dev->shm_offset = 0;
 	dev->ctrl_dev->shm_fd = fd;
 	INFO(syslog(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
 				buf, fd, dev->ctrl_dev->shm_addr));
@@ -575,15 +576,28 @@ static void sig_handler(int sig)
 	}
 }
 
+static void ubdsrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
+{
+	int nr_cores = sysconf(_SC_NPROCESSORS_ONLN);
+	int i, offset = 0;
+
+	for (i = 0; i < nr_cores; i++) {
+		if (!CPU_ISSET(i, cpuset))
+			continue;
+		offset += snprintf(&buf[offset], len - offset, "%d ", i);
+	}
+}
+
 static int ubdsrv_set_sched_affinity(struct ubdsrv_queue *q)
 {
 	unsigned dev_id = q->dev->ctrl_dev->dev_info.dev_id;
+	struct ubdsrv_ctrl_dev *cdev = q->dev->ctrl_dev;
 	pthread_t thread = pthread_self();
 	struct dirent * ptr;
-	cpu_set_t cpuset;
 	DIR *dir;
 	char path[256];
-	int ret;
+	int ret, cnt = 0;
+	char cpus[512];
 
 	snprintf(path, 256, "/sys/block/ubdb%d/mq/%d", dev_id, q->q_id);
 	dir = opendir(path);
@@ -597,15 +611,30 @@ static int ubdsrv_set_sched_affinity(struct ubdsrv_queue *q)
 				int cpu = atoi(&ptr->d_name[3]);
 
 				CPU_SET(cpu, &q->cpuset);
+				cnt += 1;
 			}
 		}
 	}
+	closedir(dir);
 
-	ret = pthread_setaffinity_np(thread, sizeof(cpuset), &q->cpuset);
+	if (!cnt)
+		return -1;
+
+	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &q->cpuset);
 	if (ret)
 		syslog(LOG_INFO, "ubd dev %d queue %d set affinity failed",
 				dev_id, q->q_id);
 	q->tid = gettid();
+
+	ubdsrv_build_cpu_str(cpus, 512, &q->cpuset);
+
+	pthread_mutex_lock(&cdev->lock);
+	/* add queue info into shm buffer, be careful to add it just once */
+	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
+			UBDSRV_SHM_SIZE - cdev->shm_offset,
+			"\tqueue %d: tid %d affinity(%s)\n",
+			q->q_id, q->tid, cpus);
+	pthread_mutex_unlock(&cdev->lock);
 	return 0;
 }
 
@@ -636,7 +665,8 @@ static void *ubdsrv_io_handler_fn(void *data)
 
 		if (!q->inflight && q->stopping)
 			break;
-		submitted = io_uring_enter(&q->ring, to_submit, 1,
+		submitted = io_uring_enter(&q->ring, to_submit,
+				set_affinity == 0 ? 1 : 0,
 				IORING_ENTER_GETEVENTS);
 		reapped = ubdsrv_reap_events_uring(&q->ring,
 				ubdsrv_handle_cqe, NULL);
