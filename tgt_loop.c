@@ -93,7 +93,7 @@ static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
 	if (ubd_op == UBD_IO_OP_DISCARD) {
 		mode |= FALLOC_FL_PUNCH_HOLE;
 	} else if (ubd_op == UBD_IO_OP_WRITE_ZEROES) {
-		if (flags & (1U << UBD_IO_F_NOUNMAP))
+		if (flags & UBD_IO_F_NOUNMAP)
 			mode |= FALLOC_FL_ZERO_RANGE;
 		else
 			mode |= FALLOC_FL_PUNCH_HOLE;

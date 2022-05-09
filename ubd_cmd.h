@@ -97,25 +97,15 @@ struct ubdsrv_ctrl_dev_info {
 #define		UBD_IO_OP_WRITE_SAME	4
 #define		UBD_IO_OP_WRITE_ZEROES	5
 
-#define		UBD_IO_F_FAILFAST_DEV		8
-#define		UBD_IO_F_FAILFAST_TRANS		9
-#define		UBD_IO_F_FAILFAST_DRV		10
-#define		UBD_IO_F_SYC			11
-#define		UBD_IO_F_META			12
-#define		UBD_IO_F_PRIO			13
-#define		UBD_IO_F_NOMERGE		14
-#define		UBD_IO_F_IDLE			15
-#define		UBD_IO_F_INTEGRITY		16
-#define		UBD_IO_F_FUA			17
-#define		UBD_IO_F_PREFLUSH		18
-#define		UBD_IO_F_RAHEAD			19
-#define		UBD_IO_F_BACKGROUND		20
-#define		UBD_IO_F_NOWAIT			21
-#define		UBD_IO_F_CG_PUNT		22
-#define		UBD_IO_F_NOUNMAP		23
-#define		UBD_IO_F_POLLED			24
-#define		UBD_IO_F_DRV			25
-#define		UBD_IO_F_SWAP			26
+#define		UBD_IO_F_FAILFAST_DEV		(1U << 8)
+#define		UBD_IO_F_FAILFAST_TRANSPORT	(1U << 9)
+#define		UBD_IO_F_FAILFAST_DRIVER	(1U << 10)
+#define		UBD_IO_F_META			(1U << 11)
+#define		UBD_IO_F_INTEGRITY		(1U << 12)
+#define		UBD_IO_F_FUA			(1U << 13)
+#define		UBD_IO_F_PREFLUSH		(1U << 14)
+#define		UBD_IO_F_NOUNMAP		(1U << 15)
+#define		UBD_IO_F_SWAP			(1U << 16)
 
 /*
  * io cmd is described by this structure, and stored in share memory, indexed
