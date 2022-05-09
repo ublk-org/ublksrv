@@ -3,14 +3,13 @@ Userspace block driver(ubd)
 1 Introduction
 
 This is the userspace daemon part(ubdsrv) of the ubd framework, the other
-part is ubd blk-mq block driver[1] which only support single queue so far,
-but not hard to move towards multiple queue.
+part is ubd blk-mq block driver[1] which supports multiple queue.
 
-The two parts communicate by io_uring's IORING_OP_URING_CMD[2] with one
-shared cmd buffer for storing io command, and the buffer is read only for
-ubdsrv, each io command can be indexed by io request tag directly, and
-the command is written by ubd driver, and read by ubdsrv after getting
-notification from ubd driver.
+The two parts communicate by io_uring's IORING_OP_URING_CMD with one
+per-queue shared cmd buffer for storing io command, and the buffer is
+read only for ubdsrv, each io command can be indexed by io request tag
+directly, and the command is written by ubd driver, and read by ubdsrv
+after getting notification from ubd driver.
 
 For example, when one READ io request is submitted to ubd block driver, ubd
 driver stores the io command into cmd buffer first, then completes one
@@ -33,25 +32,61 @@ So far, the ubd driver needs to copy io request pages into userspace buffer
 userspace buffer(pages) to the io request pages after ubdsrv handles
 READ. Also looks linux-mm can't support zero copy for this case yet[3].
 
+More ubd targets will be added with this framework in future even though only
+ubd-loop and ubd-null are implemented now.
+
 2 Quick start
 
 1) how to build ubdsrv:
 - cd ubdsrv
 - make
 
-2) add one ubd-null disk
-- ./ubd add -n 0 -t null  #this will create /dev/ubdb0 block device
+2) help
+- ubd help
 
-3) add one ubd-loop disk
-- ./ubd add -n 0 -t loop -f /dev/vdb
+3) add one ubd-null disk
+- ubd add -t null
+
+4) add one ubd-loop disk
+- ubd add -t loop -f /dev/vdb
 or
-- ./ubd add -n 0 -t loop -f 1.img
+- ubd add -t loop -f 1.img
 
-4) remove one ubd disk
-- ./ubd del -n 0	#remove /dev/ubdb0
+5) remove one ubd disk
+- ubd del -n 0		#remove /dev/ubdb0
+- ubd del -a		#remove all ubd devices
 
+6) list ubd devices
+- ubd list
 
+3 remove ubd devices before shutdown
 
-[1] https://lore.kernel.org/linux-block/20220308152105.309618-1-joshi.k@samsung.com/#r
-[2] https://github.com/ming1/linux/tree/v5.17-ubd-dev
-[3] https://lore.kernel.org/linux-block/a1255a40-b112-918b-6fd7-fffbe56994b9@gmail.com/T/#t
+During shutdown or reboot, the distribution may call reboot syscall after
+killing application tasks. When ubdsrv daemon is killed(by SIGKILL maybe),
+both ubdsrv and ubd driver can't get notified, then the daemon may hang
+when canceling io_uring requests in do_exit().
+
+So far, one approach is to delete ubd device before shutdown is started, such
+as in case of systemd, the following approach can avoid the issue:
+
+1) write one systemd service script:
+cat /etc/systemd/system/delete-ubd-before-shutdown.service
+
+	[Unit]
+	Description=Remove ubd device at shutdown
+	DefaultDependencies=no
+	Before=shutdown.target
+
+	[Service]
+	Type=oneshot
+	ExecStart=ubd del -a
+	TimeoutStartSec=0
+
+	[Install]
+	WantedBy=shutdown.target
+
+2) start/enable the service of delete-ubd-before-shutdown:
+
+systemctl daemon-reload
+systemctl enable delete-ubd-before-shutdown.service
+
