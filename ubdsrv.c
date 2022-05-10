@@ -530,9 +530,6 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 
 	q->inflight--;
 
-	if (cqe->res <= 0)
-		return;
-
 	if (!fetch) {
 		q->stopping = 1;
 		io->flags &= ~UBDSRV_NEED_FETCH_RQ;

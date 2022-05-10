@@ -5,10 +5,6 @@
 
 /* ubd server command definition */
 
-/* CMD result code */
-#define UBD_CTRL_CMD_RES_OK		0
-#define UBD_CTRL_CMD_RES_FAILED		-1
-
 /*
  * Admin commands, issued by ubd server, and handled by ubd driver.
  */
@@ -43,17 +39,9 @@
 #define	UBD_IO_COMMIT_REQ		0x22
 #define	UBD_IO_ABORT_QUEUE		0x23
 
-#define UBD_IO_RES_OK			0x01
-#define UBD_IO_RES_INVALID_SQE		0x5f
-#define UBD_IO_RES_INVALID_TAG		0x5e
-#define UBD_IO_RES_INVALID_QUEUE	0x5d
-#define UBD_IO_RES_BUSY			0x5c
-#define UBD_IO_RES_DUP_FETCH		0x5b
-#define UBD_IO_RES_UNEXPECTED_CMD	0x5a
-#define UBD_IO_RES_DATA_BAD		0x59
-
 /* only ABORT means that no re-fetch */
-#define UBD_IO_RES_ABORT		0x59
+#define UBD_IO_RES_OK			0
+#define UBD_IO_RES_ABORT		(-ENODEV)
 
 #define UBDSRV_CMD_BUF_OFFSET	0
 #define UBDSRV_IO_BUF_OFFSET	0x80000000

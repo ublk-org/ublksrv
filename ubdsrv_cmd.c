@@ -101,7 +101,7 @@ static void ubdsrv_ctrl_handle_cqe(struct ubdsrv_uring *r,
 			dev->dev_info.dev_id, cqe->res, cqe->user_data));
 	int *cnt = data;
 
-	if (cqe->res == 0 && cnt)
+	if (cqe->res >= 0 && cnt)
 		(*cnt)++;
 }
 
