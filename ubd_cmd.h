@@ -1,6 +1,8 @@
 #ifndef USER_BLK_DRV_CMD_INC_H
 #define USER_BLK_DRV_CMD_INC_H
 
+#include <linux/types.h>
+
 /* ubd server command definition */
 
 /* CMD result code */
@@ -65,6 +67,23 @@
  */
 #define UBD_F_SUPPORT_ZERO_COPY	0
 
+/* shipped via sqe->cmd of io_uring command */
+struct ubdsrv_ctrl_cmd {
+	/* sent to which device, must be valid */
+	__u32	dev_id;
+
+	/* sent to which queue, must be -1 if the cmd isn't for queue */
+	__u16	queue_id;
+	/*
+	 * cmd specific buffer, can be IN or OUT.
+	 */
+	__u16	len;
+	__u64	addr;
+
+	/* inline data */
+	__u64	data[2];
+};
+
 struct ubdsrv_ctrl_dev_info {
 	__u16	nr_hw_queues;
 	__u16	queue_depth;
@@ -75,19 +94,12 @@ struct ubdsrv_ctrl_dev_info {
 	__u32	dev_id;
 
 	__u64   dev_blocks;
-	__u64	flags;
 
-	/*
-	 * Only valid for READ kind of ctrl command, and driver can
-	 * get the userspace buffer address here, then write data
-	 * into this buffer.
-	 *
-	 * And the buffer has to be inside one single page.
-	 */
-	__u64	addr;
-	__u32	len;
 	__s32	ubdsrv_pid;
-	__u64	reserved0[2];
+	__s32	reserved0;
+	__u64	flags[2];
+
+	__u64	reserved1[10];
 };
 
 #define		UBD_IO_OP_READ		0

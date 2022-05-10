@@ -1,6 +1,18 @@
 #include "utils.h"
 #include "ubdsrv.h"
 
+#define CTRL_CMD_HAS_DATA	1
+#define CTRL_CMD_HAS_BUF	2
+
+struct ubdsrv_ctrl_cmd_data {
+	unsigned short cmd_op;
+	unsigned short flags;
+
+	__u64 data;
+	__u64 addr;
+	__u32 len;
+};
+
 static int ctrl_fd = -1;
 
 /********************cmd handling************************/
@@ -23,10 +35,12 @@ static char *pop_cmd(int *argc, char *argv[])
 
 
 /*******************ctrl dev operation ********************************/
-static inline void init_cmd(struct ubdsrv_ctrl_dev *dev, struct io_uring_sqe *sqe,
-		unsigned cmd_op, char *buf, int len)
+static inline void init_cmd(struct ubdsrv_ctrl_dev *dev,
+		struct io_uring_sqe *sqe,
+		struct ubdsrv_ctrl_cmd_data *data)
 {
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
+	struct ubdsrv_ctrl_cmd *cmd = (struct ubdsrv_ctrl_cmd *)&sqe->cmd;
 
 	sqe->fd = ctrl_fd;
 	sqe->opcode = IORING_OP_URING_CMD;
@@ -34,19 +48,23 @@ static inline void init_cmd(struct ubdsrv_ctrl_dev *dev, struct io_uring_sqe *sq
 	sqe->ioprio = 0;
 	sqe->off = 0;
 
-	if (buf) {
-		info->addr = (__u64)buf;
-		info->len = len;
+	if (data->flags & CTRL_CMD_HAS_BUF) {
+		cmd->addr = data->addr;
+		cmd->len = data->len;
 	}
 
-	memcpy((void *)&sqe->cmd, &dev->dev_info,
-			sizeof(struct ubdsrv_ctrl_dev_info));
-	sqe->cmd_op = cmd_op;
-	//sqe->cmd_len = sizeof(struct ubdsrv_ctrl_dev_info);
+	if (data->flags & CTRL_CMD_HAS_DATA) {
+		cmd->data[0] = data->data;
+	}
+
+	cmd->dev_id = info->dev_id;
+	cmd->queue_id = -1;
+
+	sqe->cmd_op = data->cmd_op;
 }
 
-static int queue_cmd(struct ubdsrv_ctrl_dev *dev, unsigned int cmd_op,
-		char *buf, int len)
+static int queue_cmd(struct ubdsrv_ctrl_dev *dev,
+		struct ubdsrv_ctrl_cmd_data *data)
 {
 	struct ubdsrv_uring *r = &dev->ring;
 	struct io_sq_ring *ring = &r->sq_ring;
@@ -63,7 +81,7 @@ static int queue_cmd(struct ubdsrv_ctrl_dev *dev, unsigned int cmd_op,
 	/* IORING_SETUP_SQE128 */
 	sqe = ubdsrv_uring_get_sqe(r, index, true);
 
-	init_cmd(dev, sqe, cmd_op, buf, len);
+	init_cmd(dev, sqe, data);
 
 	ring->array[index] = index;
 	tail = next_tail;
@@ -122,9 +140,9 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 
 	memset(dev, 0, sizeof(*dev));
 	if (zcopy)
-		dev->dev_info.flags |= (1ULL << UBD_F_SUPPORT_ZERO_COPY);
+		dev->dev_info.flags[0] |= (1ULL << UBD_F_SUPPORT_ZERO_COPY);
 	else
-		dev->dev_info.flags &= ~(1ULL << UBD_F_SUPPORT_ZERO_COPY);
+		dev->dev_info.flags[0] &= ~(1ULL << UBD_F_SUPPORT_ZERO_COPY);
 
 	/* -1 means we ask ubd driver to allocate one free to us */
 	info->dev_id = dev_id;
@@ -143,15 +161,15 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 	return dev;
 }
 
-static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev, unsigned cmd_op,
-		char *buf, int len)
+static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
+		struct ubdsrv_ctrl_cmd_data *data)
 {
 	unsigned flags = IORING_ENTER_GETEVENTS;
 	int ret;
 
-	ret = queue_cmd(dev, cmd_op, buf, len);
+	ret = queue_cmd(dev, data);
 	if (ret) {
-		fprintf(stderr, "can't queue cmd %x\n", cmd_op);
+		fprintf(stderr, "can't queue cmd %x\n", data->cmd_op);
 		return -1;
 	}
 
@@ -179,6 +197,10 @@ static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev, unsigned cmd_op,
  */
 static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
 {
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op	= UBD_CMD_START_DEV,
+		.flags	= CTRL_CMD_HAS_DATA,
+	};
 	int cnt = 0, daemon_pid;
 
 	switch (fork()) {
@@ -201,8 +223,8 @@ static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
 	if (daemon_pid < 0)
 		return -1;
 
-	ctrl_dev->dev_info.ubdsrv_pid = daemon_pid;
-	return __ubdsrv_ctrl_cmd(ctrl_dev, UBD_CMD_START_DEV, NULL, 0);
+	ctrl_dev->dev_info.ubdsrv_pid = data.data = daemon_pid;
+	return __ubdsrv_ctrl_cmd(ctrl_dev, &data);
 }
 
 /*
@@ -219,9 +241,12 @@ static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
  */
 static int ubdsrv_stop_dev(struct ubdsrv_ctrl_dev *dev)
 {
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op	= UBD_CMD_STOP_DEV,
+	};
 	int ret;
 
-	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_STOP_DEV, NULL, 0);
+	ret = __ubdsrv_ctrl_cmd(dev, &data);
 	if (ret)
 		return ret;
 
@@ -267,6 +292,10 @@ int cmd_dev_add(int argc, char *argv[])
 	unsigned int queues = 0;
 	unsigned int depth = 0;
 	int opt, ret, zcopy = 0;
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op	= UBD_CMD_ADD_DEV,
+		.flags	= CTRL_CMD_HAS_BUF,
+	};
 
 	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:z",
 				  longopts, NULL)) != -1) {
@@ -301,9 +330,9 @@ int cmd_dev_add(int argc, char *argv[])
 	if (ubdsrv_tgt_init(&dev->tgt, type, argc, argv))
 		die("usbsrv: target init failed\n");
 
-	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_ADD_DEV,
-			(char *)&dev->dev_info,
-			sizeof(struct ubdsrv_ctrl_dev_info));
+	data.addr = (__u64)&dev->dev_info;
+	data.len = sizeof(struct ubdsrv_ctrl_dev_info);
+	ret = __ubdsrv_ctrl_cmd(dev, &data);
 	if (ret < 0) {
 		fprintf(stderr, "can't add dev %d\n", number);
 		goto fail;
@@ -361,13 +390,18 @@ static void cmd_dev_add_usage(char *cmd)
 
 static int __cmd_dev_del(int number, bool log)
 {
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op	= UBD_CMD_GET_DEV_INFO,
+		.flags	= CTRL_CMD_HAS_BUF,
+	};
 	struct ubdsrv_ctrl_dev *dev;
 	int ret;
 
 	dev = ubdsrv_dev_init(number, false);
 
-	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO, (char *)&dev->dev_info,
-			sizeof(struct ubdsrv_ctrl_dev_info));
+	data.addr = (__u64)&dev->dev_info;
+	data.len = sizeof(struct ubdsrv_ctrl_dev_info);
+	ret = __ubdsrv_ctrl_cmd(dev, &data);
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
@@ -380,7 +414,9 @@ static int __cmd_dev_del(int number, bool log)
 		goto fail;
 	}
 
-	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_DEL_DEV, NULL, 0);
+	data.cmd_op = UBD_CMD_DEL_DEV;
+	data.flags = 0;
+	ret = __ubdsrv_ctrl_cmd(dev, &data);
 	if (ret < 0) {
 		fprintf(stderr, "delete dev %d failed\n", number);
 		goto fail;
@@ -432,11 +468,15 @@ static void cmd_dev_del_usage(char *cmd)
 static int list_one_dev(int number, bool log)
 {
 	struct ubdsrv_ctrl_dev *dev = ubdsrv_dev_init(number, false);
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op	= UBD_CMD_GET_DEV_INFO,
+		.flags	= CTRL_CMD_HAS_BUF,
+		.addr = (__u64)&dev->dev_info,
+		.len = sizeof(struct ubdsrv_ctrl_dev_info),
+	};
 	int ret;
 
-	ret = __ubdsrv_ctrl_cmd(dev, UBD_CMD_GET_DEV_INFO,
-			(char *)&dev->dev_info,
-			sizeof(dev->dev_info));
+	ret = __ubdsrv_ctrl_cmd(dev, &data);
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
