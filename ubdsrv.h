@@ -70,6 +70,8 @@ struct ubdsrv_ctrl_dev {
 	char *shm_addr;
 	unsigned int shm_offset;
 	pthread_mutex_t lock;
+
+	cpu_set_t *queues_cpuset;
 };
 
 struct ubd_io {
@@ -111,8 +113,8 @@ struct ubdsrv_queue {
 	 */
 	struct ubdsrv_uring ring;
 
-	pthread_t thread;
 	cpu_set_t cpuset;
+	pthread_t thread;
 	unsigned  tid;
 	struct ubdsrv_dev *dev;
 

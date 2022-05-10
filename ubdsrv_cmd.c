@@ -179,6 +179,34 @@ static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
 	return ret - 1;
 }
 
+/* queues_cpuset is only used for setting up queue pthread daemon */
+static int ubdsrv_get_affinity(struct ubdsrv_ctrl_dev *ctrl_dev)
+{
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op	= UBD_CMD_GET_QUEUE_AFFINITY,
+		.flags	= CTRL_CMD_HAS_DATA | CTRL_CMD_HAS_BUF,
+	};
+	cpu_set_t *sets;
+	int i;
+
+	sets = calloc(sizeof(cpu_set_t), ctrl_dev->dev_info.nr_hw_queues);
+	if (!sets)
+		return -1;
+
+	for (i = 0; i < ctrl_dev->dev_info.nr_hw_queues; i++) {
+		data.data = i;
+		data.addr = (__u64)&sets[i];
+		data.len = sizeof(cpu_set_t);
+
+		if (__ubdsrv_ctrl_cmd(ctrl_dev, &data) < 0) {
+			free(sets);
+			return -1;
+		}
+	}
+	ctrl_dev->queues_cpuset = sets;
+	return 0;
+}
+
 /*
  * Start the ubdsrv device:
  *
@@ -202,6 +230,10 @@ static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
 		.flags	= CTRL_CMD_HAS_DATA,
 	};
 	int cnt = 0, daemon_pid;
+	int ret;
+
+	if (ubdsrv_get_affinity(ctrl_dev) < 0)
+		return -1;
 
 	switch (fork()) {
 	case -1:
@@ -224,7 +256,12 @@ static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
 		return -1;
 
 	ctrl_dev->dev_info.ubdsrv_pid = data.data = daemon_pid;
-	return __ubdsrv_ctrl_cmd(ctrl_dev, &data);
+	ret = __ubdsrv_ctrl_cmd(ctrl_dev, &data);
+
+	/* disk is added now, so queue cpusets can be freed */
+	free(ctrl_dev->queues_cpuset);
+	ctrl_dev->queues_cpuset = NULL;
+	return ret;
 }
 
 /*

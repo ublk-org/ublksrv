@@ -588,37 +588,15 @@ static void ubdsrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
 	}
 }
 
-static int ubdsrv_set_sched_affinity(struct ubdsrv_queue *q)
+static void ubdsrv_set_sched_affinity(struct ubdsrv_queue *q)
 {
 	unsigned dev_id = q->dev->ctrl_dev->dev_info.dev_id;
 	struct ubdsrv_ctrl_dev *cdev = q->dev->ctrl_dev;
 	pthread_t thread = pthread_self();
-	struct dirent * ptr;
-	DIR *dir;
-	char path[256];
 	int ret, cnt = 0;
 	char cpus[512];
 
-	snprintf(path, 256, "/sys/block/ubdb%d/mq/%d", dev_id, q->q_id);
-	dir = opendir(path);
-	if (!dir)
-		return -1;
-
-	CPU_ZERO(&q->cpuset);
-	while((ptr = readdir(dir)) != NULL) {
-		if (ptr->d_type == DT_DIR) {
-			if (!strncmp(ptr->d_name, "cpu", 3)) {
-				int cpu = atoi(&ptr->d_name[3]);
-
-				CPU_SET(cpu, &q->cpuset);
-				cnt += 1;
-			}
-		}
-	}
-	closedir(dir);
-
-	if (!cnt)
-		return -1;
+	memcpy(&q->cpuset, &cdev->queues_cpuset[q->q_id], sizeof(q->cpuset));
 
 	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &q->cpuset);
 	if (ret)
@@ -628,14 +606,13 @@ static int ubdsrv_set_sched_affinity(struct ubdsrv_queue *q)
 
 	ubdsrv_build_cpu_str(cpus, 512, &q->cpuset);
 
-	pthread_mutex_lock(&cdev->lock);
 	/* add queue info into shm buffer, be careful to add it just once */
+	pthread_mutex_lock(&cdev->lock);
 	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
 			UBDSRV_SHM_SIZE - cdev->shm_offset,
 			"\tqueue %d: tid %d affinity(%s)\n",
 			q->q_id, q->tid, cpus);
 	pthread_mutex_unlock(&cdev->lock);
-	return 0;
 }
 
 static void *ubdsrv_io_handler_fn(void *data)
@@ -643,10 +620,11 @@ static void *ubdsrv_io_handler_fn(void *data)
 	struct ubdsrv_queue *q = data;
 	int aborted = 0;
 	unsigned dev_id = q->dev->ctrl_dev->dev_info.dev_id;
-	int set_affinity = -1;
 
 	INFO(syslog(LOG_INFO, "ubd dev %d queue %d started",
 				dev_id, q->q_id));
+
+	ubdsrv_set_sched_affinity(q);
 	setpriority(PRIO_PROCESS, getpid(), -20);
 
 	do {
@@ -665,20 +643,12 @@ static void *ubdsrv_io_handler_fn(void *data)
 
 		if (!q->inflight && q->stopping)
 			break;
-		submitted = io_uring_enter(&q->ring, to_submit,
-				set_affinity == 0 ? 1 : 0,
+		submitted = io_uring_enter(&q->ring, to_submit, 1,
 				IORING_ENTER_GETEVENTS);
 		reapped = ubdsrv_reap_events_uring(&q->ring,
 				ubdsrv_handle_cqe, NULL);
 		INFO(syslog(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
 				to_submit, submitted, reapped));
-		/*
-		 * ubd disk is added after all FETCH_RQ commands are submitted
-		 * to ubd driver successfully, so we have to try to set sched
-		 * affinity until disk is added
-		 */
-		if (set_affinity)
-			set_affinity = ubdsrv_set_sched_affinity(q);
 	} while (1);
 }
 
