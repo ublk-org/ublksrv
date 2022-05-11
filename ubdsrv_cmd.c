@@ -301,9 +301,9 @@ static void ubdsrv_dump(struct ubdsrv_ctrl_dev *dev)
 			info->dev_id,
                         info->nr_hw_queues, info->queue_depth,
                         info->block_size, info->dev_blocks);
-	printf("\t max rq size: %d daemon pid: %d flags %x\n",
+	printf("\t max rq size: %d daemon pid: %d flags %lx\n",
                         info->block_size * info->rq_max_blocks,
-			info->ubdsrv_pid, info->flags);
+			info->ubdsrv_pid, info->flags[0]);
 
 	snprintf(buf, 64, "%s_%d", UBDSRV_SHM_DIR, info->ubdsrv_pid);
 	fd = shm_open(buf, O_RDONLY, 0);
