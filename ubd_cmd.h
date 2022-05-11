@@ -30,14 +30,10 @@
  *
  * COMMIT_REQ: issued via sqe(URING_CMD) after ubdserver handled this IO
  *      request, request's handling result is committed to ubd driver.
- *
- * ABORT_QUEUE: issued via sqe(URING_CMD) and abort all active commands,
- * 	meantime ubdserver can't issue any FETCH_REQ commands
  */
 #define	UBD_IO_FETCH_REQ		0x20
 #define	UBD_IO_COMMIT_AND_FETCH_REQ	0x21
 #define	UBD_IO_COMMIT_REQ		0x22
-#define	UBD_IO_ABORT_QUEUE		0x23
 
 /* only ABORT means that no re-fetch */
 #define UBD_IO_RES_OK			0
