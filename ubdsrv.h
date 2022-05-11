@@ -72,6 +72,7 @@ struct ubdsrv_ctrl_dev {
 	pthread_mutex_t lock;
 
 	cpu_set_t *queues_cpuset;
+	unsigned short *q_id;
 };
 
 struct ubd_io {
@@ -113,7 +114,6 @@ struct ubdsrv_queue {
 	struct ubdsrv_uring ring;
 
 	cpu_set_t cpuset;
-	pthread_t thread;
 	unsigned  tid;
 	struct ubdsrv_dev *dev;
 
@@ -126,6 +126,7 @@ struct ubdsrv_dev {
 
 	struct ubdsrv_queue *__queues[MAX_NR_HW_QUEUES];
 	void	*io_buf_start;
+	pthread_t *thread;
 };
 
 static inline struct ubdsrv_io_desc *ubdsrv_get_iod(struct ubdsrv_queue *q, int tag)

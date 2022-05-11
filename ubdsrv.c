@@ -185,11 +185,8 @@ static void ubdsrv_drain_fetch_commands(struct ubdsrv_dev *dev)
 	int i;
 	void *ret;
 
-	for (i = 0; i < nr_queues; i++) {
-		struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
-
-		pthread_join(q->thread, &ret);
-	}
+	for (i = 0; i < nr_queues; i++)
+		pthread_join(dev->thread[i], &ret);
 }
 
 /* used for allocating zero copy vma space */
@@ -302,7 +299,8 @@ static void ubdsrv_queue_deinit(struct ubdsrv_queue *q)
 
 }
 
-static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
+static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
+		unsigned short q_id)
 {
 	struct ubdsrv_queue *q;
 	struct ubdsrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
@@ -323,6 +321,9 @@ static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 	q->q_depth = depth;
 	q->io_cmd_buf = NULL;
 	q->inflight = 0;
+	q->tid = gettid();
+	memcpy(&q->cpuset, &ctrl_dev->queues_cpuset[q->q_id],
+			sizeof(q->cpuset));
 
 	cmd_buf_size = ubdsrv_queue_cmd_buf_sz(q);
 	off = UBDSRV_CMD_BUF_OFFSET +
@@ -356,14 +357,13 @@ static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 
 	ubdsrv_init_io_cmds(dev, q);
 
-	pthread_create(&q->thread, NULL, ubdsrv_io_handler_fn, q);
 
-	return 0;
+	return q;
  fail:
 	ubdsrv_queue_deinit(q);
 	syslog(LOG_INFO, "ubd dev %d queue %d failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
-	return ret;
+	return NULL;
 }
 
 static void ubdsrv_deinit(struct ubdsrv_dev *dev)
@@ -381,6 +381,7 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 	}
 
 	ubdsrv_tgt_exit(&dev->ctrl_dev->tgt);
+	free(dev->thread);
 
 	if (dev->cdev_fd >= 0) {
 		close(dev->cdev_fd);
@@ -441,13 +442,14 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 	if (ret)
 		goto fail;
 
-	for (i = 0; i < nr_queues; i++) {
-		if (ubdsrv_queue_init(dev, i)) {
-			syslog(LOG_INFO, "ubd dev %d queue %d init queue failed",
-				dev->ctrl_dev->dev_info.dev_id, i);
-			goto fail;
-		}
-	}
+	dev->thread = calloc(sizeof(pthread_t),
+			ctrl_dev->dev_info.nr_hw_queues);
+	if (!dev->thread)
+		goto fail;
+
+	for (i = 0; i < nr_queues; i++)
+		pthread_create(&dev->thread[i], NULL, ubdsrv_io_handler_fn,
+				&dev->ctrl_dev->q_id[i]);
 
 	return 0;
 fail:
@@ -545,45 +547,50 @@ static void ubdsrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
 	}
 }
 
-static void ubdsrv_set_sched_affinity(struct ubdsrv_queue *q)
+static void ubdsrv_set_sched_affinity(struct ubdsrv_dev *dev,
+		unsigned short q_id)
 {
-	unsigned dev_id = q->dev->ctrl_dev->dev_info.dev_id;
-	struct ubdsrv_ctrl_dev *cdev = q->dev->ctrl_dev;
+	struct ubdsrv_ctrl_dev *cdev = dev->ctrl_dev;
+	unsigned dev_id = cdev->dev_info.dev_id;
+	cpu_set_t *cpuset = &cdev->queues_cpuset[q_id];
 	pthread_t thread = pthread_self();
 	int ret, cnt = 0;
 	char cpus[512];
 
-	memcpy(&q->cpuset, &cdev->queues_cpuset[q->q_id], sizeof(q->cpuset));
-
-	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &q->cpuset);
+	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), cpuset);
 	if (ret)
-		syslog(LOG_INFO, "ubd dev %d queue %d set affinity failed",
-				dev_id, q->q_id);
-	q->tid = gettid();
+		syslog(LOG_INFO, "ubd dev %u queue %u set affinity failed",
+				dev_id, q_id);
 
-	ubdsrv_build_cpu_str(cpus, 512, &q->cpuset);
+	ubdsrv_build_cpu_str(cpus, 512, cpuset);
 
 	/* add queue info into shm buffer, be careful to add it just once */
 	pthread_mutex_lock(&cdev->lock);
 	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
 			UBDSRV_SHM_SIZE - cdev->shm_offset,
-			"\tqueue %d: tid %d affinity(%s)\n",
-			q->q_id, q->tid, cpus);
+			"\tqueue %u: tid %d affinity(%s)\n",
+			q_id, gettid(), cpus);
 	pthread_mutex_unlock(&cdev->lock);
 }
 
 static void *ubdsrv_io_handler_fn(void *data)
 {
-	struct ubdsrv_queue *q = data;
-	int aborted = 0;
-	unsigned dev_id = q->dev->ctrl_dev->dev_info.dev_id;
+	unsigned dev_id = this_dev.ctrl_dev->dev_info.dev_id;
+	unsigned short q_id = *(unsigned short *)data;
+	struct ubdsrv_queue *q;
+
+	ubdsrv_set_sched_affinity(&this_dev, q_id);
+	setpriority(PRIO_PROCESS, getpid(), -20);
+
+	q = ubdsrv_queue_init(&this_dev, q_id);
+	if (!q) {
+		syslog(LOG_INFO, "ubd dev %d queue %d init queue failed",
+				this_dev.ctrl_dev->dev_info.dev_id, q_id);
+		return NULL;
+	}
 
 	INFO(syslog(LOG_INFO, "ubd dev %d queue %d started",
 				dev_id, q->q_id));
-
-	ubdsrv_set_sched_affinity(q);
-	setpriority(PRIO_PROCESS, getpid(), -20);
-
 	do {
 		int to_submit, submitted, reapped;
 
@@ -602,6 +609,7 @@ static void *ubdsrv_io_handler_fn(void *data)
 		INFO(syslog(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
 				to_submit, submitted, reapped));
 	} while (1);
+	return NULL;
 }
 
 static sigset_t   signal_mask;

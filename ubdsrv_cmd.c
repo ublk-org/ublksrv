@@ -204,6 +204,15 @@ static int ubdsrv_get_affinity(struct ubdsrv_ctrl_dev *ctrl_dev)
 		}
 	}
 	ctrl_dev->queues_cpuset = sets;
+	ctrl_dev->q_id = calloc(sizeof(unsigned short),
+			ctrl_dev->dev_info.nr_hw_queues);
+	if (!ctrl_dev->q_id)
+		return -1;
+
+	/* for creating queue inside ->ubq_daemon context */
+	for (i = 0; i < ctrl_dev->dev_info.nr_hw_queues; i++)
+		ctrl_dev->q_id[i] = i;
+
 	return 0;
 }
 
@@ -260,7 +269,9 @@ static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
 
 	/* disk is added now, so queue cpusets can be freed */
 	free(ctrl_dev->queues_cpuset);
+	free(ctrl_dev->q_id);
 	ctrl_dev->queues_cpuset = NULL;
+	ctrl_dev->q_id = NULL;
 	return ret;
 }
 
