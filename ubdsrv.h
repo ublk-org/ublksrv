@@ -103,7 +103,6 @@ struct ubdsrv_queue {
 
 	unsigned inflight;
 	unsigned short stopping;
-	unsigned short aborting;
 
 	/*
 	 * ring for submit io command to ubd driver, can only be issued

@@ -44,13 +44,6 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	__u64 buf_addr;
 	__u64 user_data;
 
-	if (q->aborting && tag == -1) {
-		cmd_op = UBD_IO_ABORT_QUEUE;
-		buf_addr = 0;
-		tag = 0;
-		goto build_cmd;
-	}
-
 	io = &q->ios[tag];
 	if (!(io->flags & UBDSRV_IO_FREE)) {
 		syslog(LOG_ERR, "io isn't free qid %d, tag %d\n", q->q_id, tag);
@@ -75,7 +68,6 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		__WRITE_ONCE(cmd->result, io->result);
 
 	buf_addr = (__u64)io->buf_addr;
-build_cmd:
 	user_data = tag | (q->q_id << 16) | (cmd_op << 32);
 
 	/* These fields should be written once, never change */
@@ -87,11 +79,7 @@ build_cmd:
 	__WRITE_ONCE(cmd->addr, buf_addr);
 	__WRITE_ONCE(cmd->q_id, q->q_id);
 
-	if (cmd_op != UBD_IO_ABORT_QUEUE)
-		io->flags &= ~(UBDSRV_IO_FREE
-			 | UBDSRV_NEED_COMMIT_RQ_COMP);
-	else
-		q->aborting = 0;
+	io->flags &= ~(UBDSRV_IO_FREE | UBDSRV_NEED_COMMIT_RQ_COMP);
 	return 1;
 }
 
@@ -160,12 +148,6 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 		cnt += ret;
 	}
 
-	if (q->aborting) {
-		ret = queue_io_cmd(q, tail + cnt, -1);
-		if (ret >= 0)
-			cnt += ret;
-	}
-
 	if (cnt > 0) {
 		commit_queue_io_cmd(q, tail + cnt);
 		q->inflight += cnt;
@@ -203,26 +185,9 @@ static void ubdsrv_drain_fetch_commands(struct ubdsrv_dev *dev)
 	int i;
 	void *ret;
 
-	while (1) {
-		if (ubdsrv_dev_is_done(dev))
-			break;
-		if (!ubdsrv_stop)
-			sleep(3);
-		else
-			usleep(10000);
-
-		if (!ubdsrv_stop)
-			continue;
-
-		for (i = 0; i < nr_queues; i++) {
-			struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
-
-			pthread_kill(q->thread, SIGTERM);
-		}
-	}
-
 	for (i = 0; i < nr_queues; i++) {
 		struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
+
 		pthread_join(q->thread, &ret);
 	}
 }
@@ -358,7 +323,6 @@ static int ubdsrv_queue_init(struct ubdsrv_dev *dev, int q_id)
 	q->q_depth = depth;
 	q->io_cmd_buf = NULL;
 	q->inflight = 0;
-	q->aborting = 0;
 
 	cmd_buf_size = ubdsrv_queue_cmd_buf_sz(q);
 	off = UBDSRV_CMD_BUF_OFFSET +
@@ -567,10 +531,8 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 
 static void sig_handler(int sig)
 {
-	if (sig == SIGTERM) {
+	if (sig == SIGTERM)
 		syslog(LOG_INFO, "got TERM signal");
-		ubdsrv_stop = 1;
-	}
 }
 
 static void ubdsrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
@@ -627,19 +589,14 @@ static void *ubdsrv_io_handler_fn(void *data)
 	do {
 		int to_submit, submitted, reapped;
 
-		/* we need to abort queue */
-		if (ubdsrv_stop && !aborted) {
-			aborted = 1;
-			q->aborting = 1;
-		}
-
 		to_submit = ubdsrv_submit_fetch_commands(q);
 		INFO(syslog(LOG_INFO, "dev%d-q%d: to_submit %d inflight %d stopping %d\n",
 					dev_id, q->q_id, to_submit, q->inflight,
 					q->stopping));
 
-		if (!q->inflight && q->stopping)
+		if (ubdsrv_queue_is_done(q))
 			break;
+
 		submitted = io_uring_enter(&q->ring, to_submit, 1,
 				IORING_ENTER_GETEVENTS);
 		reapped = ubdsrv_reap_events_uring(&q->ring,
@@ -684,7 +641,7 @@ static void ubdsrv_io_handler(void *data)
 	sigemptyset(&signal_mask);
 	sigaddset(&signal_mask, SIGINT);
 	sigaddset(&signal_mask, SIGTERM);
-	pthread_sigmask(SIG_UNBLOCK, &signal_mask, NULL);
+	pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
 
 	ret = ubdsrv_init(ctrl_dev, &this_dev);
 	if (ret) {
