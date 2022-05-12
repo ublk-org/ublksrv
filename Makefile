@@ -19,3 +19,4 @@ $(UBDSRV_PROGS): $(UBDSRV_OBJS)
 clean:
 	rm -f  $(UBDSRV_PROGS) $(UBDSRV_OBJS)
 	rm -f *~ *.d
+	rm -f ./test/*~
