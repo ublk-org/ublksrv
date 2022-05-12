@@ -389,6 +389,9 @@ int cmd_dev_add(int argc, char *argv[])
 	ret = ubdsrv_start_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "start dev failed %d\n", number);
+		data.cmd_op = UBD_CMD_DEL_DEV;
+		data.flags = 0;
+		__ubdsrv_ctrl_cmd(dev, &data);
 		goto fail;
 	}
 	ubdsrv_dump(dev);

@@ -372,9 +372,6 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 
 	ubdsrv_deinit_io_bufs(dev);
 
-	for (i = 0; i < dev->ctrl_dev->dev_info.nr_hw_queues; i++)
-		ubdsrv_queue_deinit(ubdsrv_get_queue(dev, i));
-
 	if (dev->ctrl_dev->shm_fd >= 0) {
 		munmap(dev->ctrl_dev->shm_addr, UBDSRV_SHM_SIZE);
 		close(dev->ctrl_dev->shm_fd);
@@ -435,11 +432,12 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 
 	tgt->fds[0] = dev->cdev_fd;
 
-	if (ubdsrv_prepare_io(&dev->ctrl_dev->tgt) < 0)
-		goto fail;
-
 	ret = ubdsrv_init_io_bufs(dev);
 	if (ret)
+		goto fail;
+
+	ret = -1;
+	if (ubdsrv_prepare_io(&dev->ctrl_dev->tgt) < 0)
 		goto fail;
 
 	dev->thread = calloc(sizeof(pthread_t),
@@ -609,6 +607,8 @@ static void *ubdsrv_io_handler_fn(void *data)
 		INFO(syslog(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
 				to_submit, submitted, reapped));
 	} while (1);
+
+	ubdsrv_queue_deinit(q);
 	return NULL;
 }
 

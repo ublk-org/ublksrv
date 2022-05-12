@@ -31,7 +31,8 @@ static int loop_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc, char
 
 	fd = open(file, O_RDWR);
 	if (fd < 0) {
-		fprintf(stderr, "backing file %s can't be opened\n", file);
+		fprintf(stderr, "__func__, backing file %s can't be opened\n",
+				__func__, file);
 		return -2;
 	}
 
@@ -70,7 +71,8 @@ static int loop_prepare_io(struct ubdsrv_tgt_info *tgt)
 
 	fd = open(file, O_RDWR | O_DIRECT);
 	if (fd < 0) {
-		syslog(LOG_ERR, "%s backing file %s can't be opened\n", file);
+		syslog(LOG_ERR, "%s: %s backing file %s can't be opened\n",
+				__func__, file);
 		return -1;
 	}
 
