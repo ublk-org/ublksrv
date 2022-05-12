@@ -1,0 +1,40 @@
+#!/bin/bash
+
+run_fio()
+{
+DEVS=$1
+BS=$2
+RW=$3
+JOBS=$4
+RTIME=$5
+
+QD=128
+BATCH=16
+FIO=fio
+
+$FIO --bs=$BS --ioengine=libaio  \
+        --iodepth=$QD \
+        --iodepth_batch_submit=$BATCH \
+        --iodepth_batch_complete_min=$BATCH \
+        --filename=$DEVS \
+        --direct=1 --runtime=$RTIME --numjobs=$JOBS --rw=$RW \
+        --name=test --group_reporting
+}
+
+TEST_DIR=$(cd "$(dirname "$0")";pwd)
+UBD=$TEST_DIR/../ubd
+
+#simple sanity test on ubd-null
+$UBD del -a
+$UBD add -t null
+
+run_fio /dev/ubdb0 4k randread 1 20
+run_fio /dev/ubdb0 4k randwrite 1 20
+run_fio /dev/ubdb0 4k rw 1 20
+run_fio /dev/ubdb0 4k rw 2 20
+
+$UBD del -a
+$UBD add -t null -q 4
+run_fio /dev/ubdb0 4k rw 4 20
+
+ubd del -a
