@@ -1,5 +1,9 @@
 #!/bin/bash
 
+export TEST_DIR=$(cd "$(dirname "$0")";pwd)
+
+. $TEST_DIR/fio_common
+
 run_fio()
 {
 DEVS=$1
@@ -12,29 +16,69 @@ QD=128
 BATCH=16
 FIO=fio
 
-$FIO --bs=$BS --ioengine=libaio  \
+$FIO --output=$TEST_DIR/fio_perf --output-format=terse --terse-version=4 --group_reporting=1 \
+		--bs=$BS --ioengine=libaio \
         --iodepth=$QD \
         --iodepth_batch_submit=$BATCH \
         --iodepth_batch_complete_min=$BATCH \
         --filename=$DEVS \
         --direct=1 --runtime=$RTIME --numjobs=$JOBS --rw=$RW \
-        --name=test --group_reporting
+        --name=test > /dev/null 2>&1
 }
 
-TEST_DIR=$(cd "$(dirname "$0")";pwd)
 UBD=$TEST_DIR/../ubd
 
 #simple sanity test on ubd-null
 $UBD del -a
-$UBD add -t null
 
-run_fio /dev/ubdb0 4k randread 1 20
-run_fio /dev/ubdb0 4k randwrite 1 20
-run_fio /dev/ubdb0 4k rw 1 20
-run_fio /dev/ubdb0 4k rw 2 20
+RT=10
+JOBS=1
+QUEUES=1
+
+$UBD add -t null -q $QUEUES
+
+RW="randwrite"
+FIO_PERF_FIELDS=("write iops")
+run_fio /dev/ubdb0 4k $RW $JOBS $RT
+_fio_perf_report
+echo "$RW: jobs $JOBS, iops ${TEST_RUN["write iops"]}"
+
+RW="randread"
+FIO_PERF_FIELDS=("read iops")
+run_fio /dev/ubdb0 4k $RW $JOBS $RT
+_fio_perf_report
+echo "$RW: jobs $JOBS, iops ${TEST_RUN["read iops"]}"
+
+RW="rw"
+FIO_PERF_FIELDS=("read iops" "write iops")
+run_fio /dev/ubdb0 4k $RW  $JOBS $RT
+_fio_perf_report
+echo "$RW: jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
 
 $UBD del -a
-$UBD add -t null -q 4
-run_fio /dev/ubdb0 4k rw 4 20
+echo ""
+
+JOBS=2
+QUEUES=2
+$UBD add -t null -q $QUEUES
+
+RW="randwrite"
+FIO_PERF_FIELDS=("write iops")
+run_fio /dev/ubdb0 4k $RW $JOBS $RT
+_fio_perf_report
+echo "$RW: queues $QUEUES, jobs $JOBS, iops ${TEST_RUN["write iops"]}"
+
+RW="randread"
+FIO_PERF_FIELDS=("read iops")
+run_fio /dev/ubdb0 4k $RW $JOBS $RT
+_fio_perf_report
+echo "$RW: queues $QUEUES, jobs $JOBS, iops ${TEST_RUN["read iops"]}"
+
+RW="rw"
+FIO_PERF_FIELDS=("read iops" "write iops")
+run_fio /dev/ubdb0 4k $RW  $JOBS $RT
+_fio_perf_report
+echo "$RW: queues $QUEUES, jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+echo ""
 
 ubd del -a
