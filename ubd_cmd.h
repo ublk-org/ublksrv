@@ -151,7 +151,7 @@ struct ubdsrv_io_cmd {
 	__u16	tag;
 
 	/* io result, it is valid for COMMIT* command only */
-	__u32	result;
+	__s32	result;
 
 	/*
 	 * userspace buffer address in ubdsrv daemon process, valid for
