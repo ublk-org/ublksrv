@@ -114,15 +114,10 @@ struct ubdsrv_io_desc {
 	/* op: bit 0-7, flags: bit 8-31 */
 	__u32		op_flags;
 
-	/*
-	 * tag: bit 0 - 11, max: 4096
-	 *
-	 * blocks: bit 12 ~ 31, max: 1M blocks
-	 */
-	__u32		tag_blocks;
+	__u32		nr_sectors;
 
-	/* start block for this io */
-	__u64		start_block;
+	/* start sector for this io */
+	__u64		start_sector;
 
 	/* buffer address in ubdsrv daemon vm space, from ubd driver */
 	__u64		addr;
@@ -136,11 +131,6 @@ static inline __u8 ubdsrv_get_op(const struct ubdsrv_io_desc *iod)
 static inline __u32 ubdsrv_get_flags(const struct ubdsrv_io_desc *iod)
 {
 	return iod->op_flags >> 8;
-}
-
-static inline __u32 ubdsrv_get_blocks(const struct ubdsrv_io_desc *iod)
-{
-	return iod->tag_blocks >> 12;
 }
 
 /* issued to ubd driver via /dev/ubdcN */

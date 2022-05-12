@@ -87,7 +87,7 @@ static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
 	__u32 flags = ubdsrv_get_flags(iod);
 	__u32 mode = FALLOC_FL_KEEP_SIZE;
 
-	sqe->addr = ubdsrv_get_blocks(iod) << 9;
+	sqe->addr = iod->nr_sectors << 9;
 
 	/* follow logic of linux kernel loop */
 	if (ubd_op == UBD_IO_OP_DISCARD) {
@@ -137,20 +137,20 @@ static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 		break;
 	case IORING_OP_FSYNC:
 		sqe->fsync_flags = IORING_FSYNC_DATASYNC;
-		sqe->len = ubdsrv_get_blocks(iod) << 9;
+		sqe->len = iod->nr_sectors << 9;
 		break;
 	default:
 		sqe->addr = iod->addr;
-		sqe->len = ubdsrv_get_blocks(iod) << 9;
+		sqe->len = iod->nr_sectors << 9;
 	}
-	sqe->off = iod->start_block << 9;
+	sqe->off = iod->start_sector << 9;
 
 	ring->array[index] = index;
 
 	commit_queue_io_cmd(q, tail + 1);
 
-	INFO(syslog(LOG_INFO, "%s: ubd io %x %x %llx\n", __func__,
-			iod->op_flags, iod->tag_blocks, iod->start_block));
+	INFO(syslog(LOG_INFO, "%s: ubd io %x %llx %u\n", __func__,
+			iod->op_flags, iod->start_sector, iod->nr_sectors));
 	INFO(syslog(LOG_INFO, "%s: queue io op %d(%llu %llx %llx) user_data %lx iof %x\n",
 			__func__, io_op, sqe->off, sqe->len, sqe->addr,
 			sqe->user_data, io->flags));
