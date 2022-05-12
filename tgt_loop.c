@@ -128,7 +128,7 @@ static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 
 	/* bit63 marks us as tgt io */
 	//sqe->flags = IOSQE_FIXED_FILE;
-	sqe->user_data = tag | (q->q_id << 16) | (1ULL << 63);
+	sqe->user_data = tag | (q->q_id << 16) | (1ULL << 63) | ((__u64)io_op << 32);
 	sqe->fd = 1;
 	sqe->opcode = io_op;
 	switch (io_op) {
@@ -149,9 +149,11 @@ static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 
 	commit_queue_io_cmd(q, tail + 1);
 
-	INFO(syslog(LOG_INFO, "%s: queue io op %d(%llu %llu) user_data %lx iof %x\n",
-			__func__, io_op, sqe->off, sqe->len, sqe->user_data,
-			io->flags));
+	INFO(syslog(LOG_INFO, "%s: ubd io %x %x %llx\n", __func__,
+			iod->op_flags, iod->tag_blocks, iod->start_block));
+	INFO(syslog(LOG_INFO, "%s: queue io op %d(%llu %llx %llx) user_data %lx iof %x\n",
+			__func__, io_op, sqe->off, sqe->len, sqe->addr,
+			sqe->user_data, io->flags));
 
 	return 0;
 }
