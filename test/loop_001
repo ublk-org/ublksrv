@@ -1,0 +1,90 @@
+#!/bin/bash
+
+export TEST_DIR=$(cd "$(dirname "$0")";pwd)
+
+. $TEST_DIR/fio_common
+
+run_fio()
+{
+DEVS=$1
+BS=$2
+RW=$3
+JOBS=$4
+RTIME=$5
+
+QD=128
+BATCH=16
+FIO=fio
+
+$FIO --output=$TEST_DIR/fio_perf --output-format=terse --terse-version=4 --group_reporting=1 \
+		--bs=$BS --ioengine=libaio \
+        --iodepth=$QD \
+        --iodepth_batch_submit=$BATCH \
+        --iodepth_batch_complete_min=$BATCH \
+        --filename=$DEVS \
+        --direct=1 --runtime=$RTIME --numjobs=$JOBS --rw=$RW \
+        --name=test > /dev/null 2>&1
+}
+
+UBD=$TEST_DIR/../ubd
+
+FN="$TEST_DIR/loop_001.img"
+
+#simple sanity test on ubd-null
+$UBD del -a
+
+truncate -s 2G  $FN
+
+RT=10
+JOBS=1
+QUEUES=1
+
+$UBD add -t loop -q $QUEUES -f $FN
+
+RW="randwrite"
+FIO_PERF_FIELDS=("write iops")
+run_fio /dev/ubdb0 4k $RW $JOBS $RT
+_fio_perf_report
+echo "$RW: jobs $JOBS, iops ${TEST_RUN["write iops"]}"
+
+RW="randread"
+FIO_PERF_FIELDS=("read iops")
+run_fio /dev/ubdb0 4k $RW $JOBS $RT
+_fio_perf_report
+echo "$RW: jobs $JOBS, iops ${TEST_RUN["read iops"]}"
+
+RW="rw"
+FIO_PERF_FIELDS=("read iops" "write iops")
+run_fio /dev/ubdb0 4k $RW  $JOBS $RT
+_fio_perf_report
+echo "$RW: jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+
+$UBD del -a
+echo ""
+
+JOBS=2
+QUEUES=2
+$UBD add -t loop -q $QUEUES -f $FN
+
+RW="randwrite"
+FIO_PERF_FIELDS=("write iops")
+run_fio /dev/ubdb0 4k $RW $JOBS $RT
+_fio_perf_report
+echo "$RW: queues $QUEUES, jobs $JOBS, iops ${TEST_RUN["write iops"]}"
+
+RW="randread"
+FIO_PERF_FIELDS=("read iops")
+run_fio /dev/ubdb0 4k $RW $JOBS $RT
+_fio_perf_report
+echo "$RW: queues $QUEUES, jobs $JOBS, iops ${TEST_RUN["read iops"]}"
+
+RW="rw"
+FIO_PERF_FIELDS=("read iops" "write iops")
+run_fio /dev/ubdb0 4k $RW  $JOBS $RT
+_fio_perf_report
+echo "$RW: queues $QUEUES, jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+echo ""
+
+ubd del -a
+
+rm -f $FN
