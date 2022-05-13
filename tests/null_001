@@ -1,0 +1,36 @@
+#!/bin/bash
+
+export TEST_DIR=$(cd "$(dirname "$0")";pwd)
+
+. $TEST_DIR/fio_common
+
+UBD=$TEST_DIR/../ubd
+
+#simple sanity test on ubd-null
+$UBD del -a
+
+JOBS=$1
+QUEUES=$2
+RT=10
+
+$UBD add -t null -q $QUEUES
+
+echo -e "\trunning fio (/dev/ubdb0, libaio, bs 4k, dio)..."
+
+RW="randwrite"
+FIO_PERF_FIELDS=("write iops")
+__run_fio_libaio /dev/ubdb0 4k $RW $JOBS $RT
+echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["write iops"]}"
+
+RW="randread"
+FIO_PERF_FIELDS=("read iops")
+__run_fio_libaio /dev/ubdb0 4k $RW $JOBS $RT
+echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["read iops"]}"
+
+RW="rw"
+FIO_PERF_FIELDS=("read iops" "write iops")
+__run_fio_libaio /dev/ubdb0 4k $RW $JOBS $RT
+echo -e "\t$RW: jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+
+$UBD del -a
+echo ""

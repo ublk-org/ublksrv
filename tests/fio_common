@@ -138,3 +138,24 @@ _fio_perf_report() {
 	done
 }
 
+__run_fio_libaio() {
+	DEVS=$1
+	BS=$2
+	RW=$3
+	JOBS=$4
+	RTIME=$5
+
+	QD=128
+	BATCH=16
+	FIO=fio
+
+	$FIO --output=$TEST_DIR/fio_perf --output-format=terse --terse-version=4 --group_reporting=1 \
+		--bs=$BS --ioengine=libaio \
+        --iodepth=$QD \
+        --iodepth_batch_submit=$BATCH \
+        --iodepth_batch_complete_min=$BATCH \
+        --filename=$DEVS \
+        --direct=1 --runtime=$RTIME --numjobs=$JOBS --rw=$RW \
+        --name=test > /dev/null 2>&1
+	_fio_perf_report
+}
