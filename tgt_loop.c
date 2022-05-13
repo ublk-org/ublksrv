@@ -160,6 +160,15 @@ static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 	return 0;
 }
 
+int loop_complete_tgt_io(struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
+{
+	struct ubd_io *io = &q->ios[user_data_to_tag(cqe->user_data)];
+
+	ubdsrv_mark_io_done(io, cqe->res);
+
+	return 0;
+}
+
 static int loop_list(struct ubdsrv_tgt_info *tgt)
 {
 	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
@@ -177,6 +186,7 @@ struct ubdsrv_tgt_type  loop_tgt_type = {
 	.name	=  "loop",
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
+	.complete_tgt_io = loop_complete_tgt_io,
 	.prepare_io	=  loop_prepare_io,
 	.list_tgt	=  loop_list,
 	.usage_for_add	=  loop_usage_for_add,

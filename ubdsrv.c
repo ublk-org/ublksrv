@@ -456,21 +456,17 @@ fail:
 	return ret;
 }
 
-static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
+static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
 	struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
 {
-	struct ubd_io *io = &q->ios[user_data_to_tag(cqe->user_data)];
-
 	q->tgt_io_inflight -= 1;
 	if (cqe->res < 0) {
-		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %u tag %u, cmd_op %u iof %x\n",
-			__func__, cqe->res,
-			q->q_id,
+		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %u tag %u, cmd_op %u\n",
+			__func__, cqe->res, q->q_id,
 			user_data_to_tag(cqe->user_data),
-			user_data_to_op(cqe->user_data),
-			io->flags);
+			user_data_to_op(cqe->user_data));
 	}
-	ubdsrv_mark_io_done(io, cqe->res);
+	tgt->ops->complete_tgt_io(q, cqe);
 }
 
 static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
@@ -490,7 +486,7 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 			cmd_op, io->flags));
 
 	if (is_target_io(cqe->user_data)) {
-		ubdsrv_handle_tgt_cqe(dev, q, cqe);
+		ubdsrv_handle_tgt_cqe(tgt, q, cqe);
 		return;
 	}
 
