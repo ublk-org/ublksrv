@@ -64,7 +64,6 @@ struct ubdsrv_tgt_type {
 	char *name;
 	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, int argc,
 			char *argv[]);
-	int (*handle_io)(struct ubdsrv_dev *, int qid, int tag);
 	int (*handle_io_async)(struct ubdsrv_dev *, int qid, int tag);
 	int (*prepare_io)(struct ubdsrv_tgt_info *);
 	void (*usage_for_add)(void);

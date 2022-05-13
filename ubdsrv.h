@@ -160,6 +160,18 @@ static inline void ubdsrv_mark_io_handling(struct ubd_io *io)
 	io->flags |= UBDSRV_IO_HANDLING;
 }
 
+static inline void ubdsrv_mark_io_done(struct ubd_io *io, int res)
+{
+	/*
+	 * mark io done by target, so that ->ubq_daemon can commit its
+	 * result and fetch new request via io_uring command.
+	 */
+	io->flags |= (UBDSRV_NEED_COMMIT_RQ_COMP | UBDSRV_IO_FREE);
+	io->flags &= ~UBDSRV_IO_HANDLING;
+
+	io->result = res;
+}
+
 static inline struct ubdsrv_queue *ubdsrv_get_queue(struct ubdsrv_dev *dev,
 		int q_id)
 {

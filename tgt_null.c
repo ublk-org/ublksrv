@@ -17,8 +17,13 @@ static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc,
 	return 0;
 }
 
-static int null_handle_io(struct ubdsrv_dev *dev, int qid, int tag)
+static int null_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 {
+	struct ubdsrv_queue *q = ubdsrv_get_queue(dev, qid);
+	struct ubd_io *io = &q->ios[tag];
+
+	ubdsrv_mark_io_done(io, 0);
+
 	return 0;
 }
 
@@ -26,7 +31,7 @@ struct ubdsrv_tgt_type  null_tgt_type = {
 	.type	= UBDSRV_TGT_TYPE_NULL,
 	.name	=  "null",
 	.init_tgt = null_init_tgt,
-	.handle_io = null_handle_io,
+	.handle_io_async = null_handle_io_async,
 };
 
 static void tgt_null_init() __attribute__((constructor));

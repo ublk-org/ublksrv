@@ -462,7 +462,7 @@ static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
 	int tag = cqe->user_data & 0xffff;
 	struct ubd_io *io = &q->ios[tag];
 
-	io->result = cqe->res;
+	q->tgt_io_inflight -= 1;
 	if (cqe->res < 0) {
 		unsigned tag = cqe->user_data & 0xffff;
 		unsigned qid = (cqe->user_data >> 16) & 0xffff;
@@ -471,14 +471,7 @@ static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
 		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %d tag %d, cmd_op %d iof %x\n",
 			__func__, cqe->res, qid, tag, cmd_op, io->flags);
 	}
-
-	/* Mark this IO as free and ready for issuing to ubd driver */
-	io->flags |= (UBDSRV_NEED_COMMIT_RQ_COMP | UBDSRV_IO_FREE);
-
-	/* clear handling */
-	io->flags &= ~UBDSRV_IO_HANDLING;
-
-	q->tgt_io_inflight -= 1;
+	ubdsrv_mark_io_done(io, cqe->res);
 }
 
 static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
@@ -517,14 +510,7 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	 * daemon can poll on both two rings.
 	 */
 	if (cqe->res == UBD_IO_RES_OK && last_cmd_op != UBD_IO_COMMIT_REQ) {
-		if (tgt->ops->handle_io) {
-			io->result = tgt->ops->handle_io(dev, qid, tag);
-
-			/* Mark this IO as free and ready for issuing to ubd driver */
-			io->flags |= (UBDSRV_NEED_COMMIT_RQ_COMP | UBDSRV_IO_FREE);
-		} else {
-			tgt->ops->handle_io_async(dev, qid, tag);
-		}
+		tgt->ops->handle_io_async(dev, qid, tag);
 	} else {
 		/*
 		 * COMMIT_REQ will be completed immediately since no fetching
