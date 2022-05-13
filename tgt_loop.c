@@ -130,7 +130,7 @@ static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 
 	/* bit63 marks us as tgt io */
 	//sqe->flags = IOSQE_FIXED_FILE;
-	sqe->user_data = build_user_data(tag, q->q_id, io_op) | (1ULL << 63);
+	sqe->user_data = build_user_data(tag, io_op, 1);
 	sqe->fd = 1;
 	sqe->opcode = io_op;
 	switch (io_op) {

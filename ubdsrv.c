@@ -68,7 +68,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		__WRITE_ONCE(cmd->result, io->result);
 
 	buf_addr = (__u64)io->buf_addr;
-	user_data = build_user_data(tag, q->q_id, cmd_op);
+	user_data = build_user_data(tag, cmd_op, 0);
 
 	/* These fields should be written once, never change */
 	__WRITE_ONCE(sqe->user_data, user_data);
@@ -465,7 +465,7 @@ static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
 	if (cqe->res < 0) {
 		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %u tag %u, cmd_op %u iof %x\n",
 			__func__, cqe->res,
-			user_data_to_qid(cqe->user_data),
+			q->q_id,
 			user_data_to_tag(cqe->user_data),
 			user_data_to_op(cqe->user_data),
 			io->flags);
@@ -481,13 +481,12 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	struct ubdsrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	struct ubdsrv_tgt_info *tgt = &ctrl_dev->tgt;
 	unsigned tag = user_data_to_tag(cqe->user_data);
-	unsigned qid = user_data_to_qid(cqe->user_data);
 	unsigned cmd_op = user_data_to_op(cqe->user_data);
 	int fetch = (cqe->res != UBD_IO_RES_ABORT) && !q->stopping;
 	struct ubd_io *io = &q->ios[tag];
 
 	INFO(syslog(LOG_INFO, "%s: user_data %lx res %d (qid %d tag %u, cmd_op %u) iof %x\n",
-			__func__, cqe->user_data, cqe->res, qid, tag,
+			__func__, cqe->user_data, cqe->res, q->q_id, tag,
 			cmd_op, io->flags));
 
 	if (is_target_io(cqe->user_data)) {
@@ -509,7 +508,7 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	 * daemon can poll on both two rings.
 	 */
 	if (cqe->res == UBD_IO_RES_OK && cmd_op != UBD_IO_COMMIT_REQ) {
-		tgt->ops->handle_io_async(dev, qid, tag);
+		tgt->ops->handle_io_async(dev, q->q_id, tag);
 	} else {
 		/*
 		 * COMMIT_REQ will be completed immediately since no fetching
