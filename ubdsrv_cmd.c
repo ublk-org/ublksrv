@@ -602,5 +602,5 @@ int main(int argc, char *argv[])
 
 	INFO(printf("cmd %s: result %d\n", cmd, ret));
 
-	return 0;
+	return ret;
 }
