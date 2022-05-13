@@ -178,6 +178,32 @@ static inline struct ubdsrv_queue *ubdsrv_get_queue(struct ubdsrv_dev *dev,
 	return dev->__queues[q_id];
 }
 
+static inline int is_target_io(__u64 user_data)
+{
+	return (user_data & (1ULL << 63)) != 0;
+}
+
+static inline __u64 build_user_data(unsigned tag, unsigned q_id, unsigned op)
+{
+	return tag | (q_id << 16) | ((__u64)op << 32);
+}
+
+static inline unsigned int user_data_to_tag(__u64 user_data)
+{
+	return user_data & 0xffff;
+}
+
+static inline unsigned int user_data_to_qid(__u64 user_data)
+{
+
+	return (user_data >> 16) & 0xffff;
+}
+
+static inline unsigned int user_data_to_op(__u64 user_data)
+{
+	return (user_data >> 32) & 0xffff;
+}
+
 int ubdsrv_start_io_daemon(struct ubdsrv_ctrl_dev *dev);
 int ubdsrv_stop_io_daemon(struct ubdsrv_ctrl_dev *dev);
 int ubdsrv_get_io_daemon_pid(struct ubdsrv_ctrl_dev *ctrl_dev);
