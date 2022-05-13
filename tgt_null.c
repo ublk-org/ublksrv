@@ -17,11 +17,9 @@ static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc,
 	return 0;
 }
 
-static int null_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
+static int null_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
+		int tag)
 {
-	struct ubdsrv_queue *q = ubdsrv_get_queue(dev, qid);
-	struct ubd_io *io = &q->ios[tag];
-
 	ubdsrv_mark_io_done(io, 0);
 
 	return 0;

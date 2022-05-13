@@ -508,7 +508,7 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	 * daemon can poll on both two rings.
 	 */
 	if (cqe->res == UBD_IO_RES_OK && cmd_op != UBD_IO_COMMIT_REQ) {
-		tgt->ops->handle_io_async(dev, q->q_id, tag);
+		tgt->ops->handle_io_async(q, io, tag);
 	} else {
 		/*
 		 * COMMIT_REQ will be completed immediately since no fetching

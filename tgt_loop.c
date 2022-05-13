@@ -105,11 +105,10 @@ static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
 	sqe->len = mode;
 }
 
-static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
+static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
+		int tag)
 {
-	struct ubdsrv_queue *q = ubdsrv_get_queue(dev, qid);
 	const struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
-	struct ubd_io *io = &q->ios[tag];
 
 	struct ubdsrv_uring *r = &q->ring;
 	struct io_sq_ring *ring = &r->sq_ring;

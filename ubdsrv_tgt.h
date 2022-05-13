@@ -36,6 +36,8 @@
 
 struct ubdsrv_ctrl_dev;
 struct ubdsrv_dev;
+struct ubdsrv_queue;
+struct ubd_io;
 struct ubdsrv_tgt_info;
 
 #define  UBDSRV_TGT_MAX_FDS	8
@@ -64,7 +66,7 @@ struct ubdsrv_tgt_type {
 	char *name;
 	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, int argc,
 			char *argv[]);
-	int (*handle_io_async)(struct ubdsrv_dev *, int qid, int tag);
+	int (*handle_io_async)(struct ubdsrv_queue *, struct ubd_io *, int tag);
 	int (*prepare_io)(struct ubdsrv_tgt_info *);
 	void (*usage_for_add)(void);
 
