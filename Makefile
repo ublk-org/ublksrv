@@ -24,10 +24,10 @@ clean:
 	rm -f ./test/*~
 
 test:
-	make -C ${TOP_DIR}tests test
+	make -s -C ${TOP_DIR}tests test
 
 loop_test:
-	make -C ${TOP_DIR}tests loop
+	make -s -C ${TOP_DIR}tests loop
 
 null_test:
-	make -C ${TOP_DIR}tests null
+	make -s -C ${TOP_DIR}tests null
