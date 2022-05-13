@@ -463,6 +463,14 @@ static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
 	struct ubd_io *io = &q->ios[tag];
 
 	io->result = cqe->res;
+	if (cqe->res < 0) {
+		unsigned tag = cqe->user_data & 0xffff;
+		unsigned qid = (cqe->user_data >> 16) & 0xffff;
+		unsigned cmd_op = cqe->user_data >> 32 & 0x7fffffff;
+
+		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %d tag %d, cmd_op %d iof %x\n",
+			__func__, cqe->res, qid, tag, cmd_op, io->flags);
+	}
 
 	/* Mark this IO as free and ready for issuing to ubd driver */
 	io->flags |= (UBDSRV_NEED_COMMIT_RQ_COMP | UBDSRV_IO_FREE);
