@@ -104,9 +104,5 @@ int ubdsrv_setup_ring(struct ubdsrv_uring *r, unsigned flags, int depth,
 	cring->cqes = ptr + p.cq_off.cqes;
 	r->cq_ring_mask = *cring->ring_mask;
 
-	syslog(LOG_INFO, "depth %u sqs %u/%x cqs %u/%x", depth,
-			p.sq_entries, r->sq_ring_mask,
-			p.cq_entries, r->cq_ring_mask);
-
 	return 0;
 }
