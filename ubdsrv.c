@@ -460,7 +460,7 @@ static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
 	struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
 {
 	q->tgt_io_inflight -= 1;
-	if (cqe->res < 0) {
+	if (cqe->res < 0 && cqe->res != -EAGAIN) {
 		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %u tag %u, cmd_op %u\n",
 			__func__, cqe->res, q->q_id,
 			user_data_to_tag(cqe->user_data),

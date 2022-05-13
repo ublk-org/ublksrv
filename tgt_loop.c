@@ -162,9 +162,13 @@ static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 
 int loop_complete_tgt_io(struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
 {
-	struct ubd_io *io = &q->ios[user_data_to_tag(cqe->user_data)];
+	unsigned int tag = user_data_to_tag(cqe->user_data);
+	struct ubd_io *io = &q->ios[tag];
 
-	ubdsrv_mark_io_done(io, cqe->res);
+	if (cqe->res != -EAGAIN)
+		ubdsrv_mark_io_done(io, cqe->res);
+	else
+		loop_handle_io_async(q, io, tag);
 
 	return 0;
 }
