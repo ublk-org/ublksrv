@@ -149,6 +149,7 @@ static int loop_handle_io_async(struct ubdsrv_dev *dev, int qid, int tag)
 
 	ring->array[index] = index;
 
+	q->tgt_io_inflight += 1;
 	commit_queue_io_cmd(q, tail + 1);
 
 	INFO(syslog(LOG_INFO, "%s: ubd io %x %llx %u\n", __func__,

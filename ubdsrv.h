@@ -102,7 +102,7 @@ struct ubdsrv_queue {
 	char *io_cmd_buf;
 	void *io_buf;
 
-	unsigned inflight;
+	unsigned cmd_inflight, tgt_io_inflight;
 	unsigned short stopping;
 
 	/*

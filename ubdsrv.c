@@ -150,7 +150,7 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 
 	if (cnt > 0) {
 		commit_queue_io_cmd(q, tail + cnt);
-		q->inflight += cnt;
+		q->cmd_inflight += cnt;
 	}
 
 	INFO(syslog(LOG_INFO, "%s: queued %d, to_handle %d\n",
@@ -161,7 +161,7 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 
 static int ubdsrv_queue_is_done(struct ubdsrv_queue *q)
 {
-	return q->stopping && q->inflight == 0;
+	return q->stopping && (!q->cmd_inflight && !q->tgt_io_inflight);
 }
 
 static int ubdsrv_dev_is_done(struct ubdsrv_dev *dev)
@@ -320,7 +320,8 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
 	q->io_cmd_buf = NULL;
-	q->inflight = 0;
+	q->cmd_inflight = 0;
+	q->tgt_io_inflight = 0;
 	q->tid = gettid();
 	memcpy(&q->cpuset, &ctrl_dev->queues_cpuset[q->q_id],
 			sizeof(q->cpuset));
@@ -468,6 +469,8 @@ static void ubdsrv_handle_tgt_cqe(struct ubdsrv_dev *dev,
 
 	/* clear handling */
 	io->flags &= ~UBDSRV_IO_HANDLING;
+
+	q->tgt_io_inflight -= 1;
 }
 
 static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
@@ -480,7 +483,7 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	int tag = cqe->user_data & 0xffff;
 	int qid = (cqe->user_data >> 16) & 0xffff;
 	unsigned last_cmd_op = cqe->user_data >> 32 & 0x7fffffff;
-	int fetch = (cqe->res != UBD_IO_RES_ABORT);
+	int fetch = (cqe->res != UBD_IO_RES_ABORT) && !q->stopping;
 	struct ubd_io *io = &q->ios[tag];
 
 	INFO(syslog(LOG_INFO, "%s: user_data %lx res %d (qid %d tag %d, cmd_op %d) iof %x\n",
@@ -492,7 +495,7 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 		return;
 	}
 
-	q->inflight--;
+	q->cmd_inflight--;
 
 	if (!fetch) {
 		q->stopping = 1;
@@ -593,8 +596,9 @@ static void *ubdsrv_io_handler_fn(void *data)
 		int to_submit, submitted, reapped;
 
 		to_submit = ubdsrv_submit_fetch_commands(q);
-		INFO(syslog(LOG_INFO, "dev%d-q%d: to_submit %d inflight %d stopping %d\n",
-					dev_id, q->q_id, to_submit, q->inflight,
+		INFO(syslog(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
+					dev_id, q->q_id, to_submit,
+					q->cmd_inflight, q->tgt_io_inflight,
 					q->stopping));
 
 		if (ubdsrv_queue_is_done(q))
