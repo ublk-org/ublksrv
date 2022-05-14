@@ -153,9 +153,10 @@ static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 
 	INFO(syslog(LOG_INFO, "%s: ubd io %x %llx %u\n", __func__,
 			iod->op_flags, iod->start_sector, iod->nr_sectors));
-	INFO(syslog(LOG_INFO, "%s: queue io op %d(%llu %llx %llx) user_data %lx iof %x\n",
+	INFO(syslog(LOG_INFO, "%s: queue io op %d(%llu %llx %llx)"
+				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx) iof %x\n",
 			__func__, io_op, sqe->off, sqe->len, sqe->addr,
-			sqe->user_data, io->flags));
+			q->q_id, tag, io_op, 1, sqe->user_data, io->flags));
 
 	return 0;
 }

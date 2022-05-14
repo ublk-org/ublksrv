@@ -481,9 +481,9 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 	int fetch = (cqe->res != UBD_IO_RES_ABORT) && !q->stopping;
 	struct ubd_io *io = &q->ios[tag];
 
-	INFO(syslog(LOG_INFO, "%s: user_data %lx res %d (qid %d tag %u, cmd_op %u) iof %x\n",
-			__func__, cqe->user_data, cqe->res, q->q_id, tag,
-			cmd_op, io->flags));
+	INFO(syslog(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d) iof %x stopping %d\n",
+			__func__, cqe->res, q->q_id, tag, cmd_op,
+			is_target_io(cqe->user_data), io->flags, q->stopping));
 
 	if (is_target_io(cqe->user_data)) {
 		ubdsrv_handle_tgt_cqe(tgt, q, cqe);
@@ -578,8 +578,7 @@ static void *ubdsrv_io_handler_fn(void *data)
 		return NULL;
 	}
 
-	INFO(syslog(LOG_INFO, "ubd dev %d queue %d started",
-				dev_id, q->q_id));
+	INFO(syslog(LOG_INFO, "ubd dev %d queue %d started", dev_id, q->q_id));
 	do {
 		int to_submit, submitted, reapped;
 
@@ -600,6 +599,7 @@ static void *ubdsrv_io_handler_fn(void *data)
 				to_submit, submitted, reapped));
 	} while (1);
 
+	INFO(syslog(LOG_INFO, "ubd dev %d queue %d killed", dev_id, q->q_id));
 	ubdsrv_queue_deinit(q);
 	return NULL;
 }
@@ -654,7 +654,7 @@ static void ubdsrv_io_handler(void *data)
 
  out:
 	unlink(pid_file);
-	syslog(LOG_INFO, "end ubdsrv io daemon, running %d", ubdsrv_stop);
+	syslog(LOG_INFO, "end ubdsrv io daemon");
 	closelog();
 }
 
