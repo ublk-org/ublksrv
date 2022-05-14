@@ -578,7 +578,8 @@ static void *ubdsrv_io_handler_fn(void *data)
 		return NULL;
 	}
 
-	INFO(syslog(LOG_INFO, "ubd dev %d queue %d started", dev_id, q->q_id));
+	syslog(LOG_INFO, "tid %d: ubd dev %d queue %d started", q->tid,
+			dev_id, q->q_id);
 	do {
 		int to_submit, submitted, reapped;
 
@@ -599,7 +600,7 @@ static void *ubdsrv_io_handler_fn(void *data)
 				to_submit, submitted, reapped));
 	} while (1);
 
-	INFO(syslog(LOG_INFO, "ubd dev %d queue %d killed", dev_id, q->q_id));
+	syslog(LOG_INFO, "ubd dev %d queue %d exited", dev_id, q->q_id);
 	ubdsrv_queue_deinit(q);
 	return NULL;
 }
