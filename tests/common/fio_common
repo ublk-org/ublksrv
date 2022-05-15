@@ -119,9 +119,11 @@ FIO_TERSE_FIELDS=(
 	# Disk utilization (11 fields per disk)
 )
 
+FIO_OUTPUT="$TEST_DIR/.fio_perf"
+
 _fio_perf_report() {
 	# If there is more than one group, we don't know what to report.
-	if [[ $(wc -l < "$TEST_DIR/fio_perf") -gt 1 ]]; then
+	if [[ $(wc -l < "$FIO_OUTPUT") -gt 1 ]]; then
 		echo "_fio_perf: too many terse lines" >&2
 		return
 	fi
@@ -133,7 +135,7 @@ _fio_perf_report() {
 			echo "_fio_perf: unknown fio terse field '$name'" >&2
 			continue
 		fi
-		value="$(cut -d ';' -f "$field" "$TEST_DIR/fio_perf")"
+		value="$(cut -d ';' -f "$field" "$FIO_OUTPUT")"
 		TEST_RUN["$FIO_PERF_PREFIX$name"]="$value"
 	done
 }
@@ -149,7 +151,7 @@ __run_fio_libaio() {
 	BATCH=16
 	FIO=fio
 
-	$FIO --output=$TEST_DIR/fio_perf --output-format=terse --terse-version=4 --group_reporting=1 \
+	$FIO --output=$FIO_OUTPUT --output-format=terse --terse-version=4 --group_reporting=1 \
 		--bs=$BS --ioengine=libaio \
         --iodepth=$QD \
         --iodepth_batch_submit=$BATCH \
@@ -157,5 +159,77 @@ __run_fio_libaio() {
         --filename=$DEVS \
         --direct=1 --runtime=$RTIME --numjobs=$JOBS --rw=$RW \
         --name=test > /dev/null 2>&1
+}
+
+__ubd_loop_backing_file() {
+	eval $UBD list > ${UBD_TMP}
+	file=`cat ${UBD_TMP} | grep "loop backing" | awk '{print $6}'`
+	echo $file
+}
+
+__run_fio_perf() {
+	__run_fio_libaio $@
 	_fio_perf_report
+}
+
+__remove_ubd_dev_return() {
+	file=`__ubd_loop_backing_file`
+	if [ $# -eq 1 ]; then
+		eval $UBD del -n $1
+	else
+		eval $UBD del -a
+	fi
+	RES=$?
+	[ "$file" != "" ] && rm -f $file
+	echo $RES
+}
+
+__remove_ubd_dev() {
+	__remove_ubd_dev_return > /dev/null 2>&1
+}
+
+__create_ubd_dev()
+{
+	ubd_type=$1
+	nr_queues=$2
+
+	[ "$nr_queues" = "" ] && nr_queues=1
+
+	if [ "$ubd_type" = "loop" ]; then
+			file=`mktemp /tmp/ubd_loop_XXXXX`
+			truncate -s 2G $file
+	fi
+
+	eval $UBD add -t $ubd_type -q $nr_queues -f $file > /dev/null 2>&1
+}
+
+__run_dev_perf()
+{
+	TYPE=$1
+	JOBS=$2
+	QUEUES=$3
+	RT=10
+
+	__remove_ubd_dev
+	__create_ubd_dev $TYPE $QUEUES
+
+	FILE=`__ubd_loop_backing_file`
+	echo -e "running fio (ubd/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	RW="randwrite"
+	FIO_PERF_FIELDS=("write iops")
+	__run_fio_perf /dev/ubdb0 4k $RW $JOBS 20
+	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["write iops"]}"
+
+	RW="randread"
+	FIO_PERF_FIELDS=("read iops")
+	__run_fio_perf /dev/ubdb0 4k $RW $JOBS $RT
+	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["read iops"]}"
+
+	RW="rw"
+	FIO_PERF_FIELDS=("read iops" "write iops")
+	__run_fio_perf /dev/ubdb0 4k $RW $JOBS $RT
+	echo -e "\t$RW: jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+
+	__remove_ubd_dev 0
+	echo ""
 }

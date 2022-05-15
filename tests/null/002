@@ -1,0 +1,3 @@
+#!/bin/bash
+
+__run_dev_perf "null" 2 2

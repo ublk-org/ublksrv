@@ -1,0 +1,5 @@
+#!/bin/bash
+
+. common/fio_common
+
+__run_dev_perf "loop" 1 1

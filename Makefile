@@ -21,13 +21,11 @@ $(UBDSRV_PROGS): $(UBDSRV_OBJS)
 clean:
 	rm -f  $(UBDSRV_PROGS) $(UBDSRV_OBJS)
 	rm -f *~ *.d
-	rm -f ./test/*~
+	make -s -C ${TOP_DIR}tests clean
 
-test:
-	make -s -C ${TOP_DIR}tests test
+test: $(UBDSRV_PROGS)
+	make -s -C ${TOP_DIR}tests run T=${T}
 
-loop_test:
-	make -s -C ${TOP_DIR}tests loop
-
-null_test:
-	make -s -C ${TOP_DIR}tests null
+test_all: $(UBDSRV_PROGS)
+	make -s -C ${TOP_DIR}tests run T="null"
+	make -s -C ${TOP_DIR}tests run T="loop"

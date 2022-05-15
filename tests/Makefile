@@ -1,18 +1,10 @@
 
 THIS_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: test loop null
+.PHONY: run clean
 
-test:
-	${THIS_DIR}null_001 1 1
-	${THIS_DIR}null_001 2 2
-	${THIS_DIR}loop_001 1 1
-	${THIS_DIR}loop_001 2 2
+run:
+	${THIS_DIR}/run_test.sh ${THIS_DIR}${T}
 
-loop:
-	${THIS_DIR}loop_001 1 1
-	${THIS_DIR}loop_001 2 2
-
-null:
-	${THIS_DIR}null_001 1 1
-	${THIS_DIR}null_001 2 2
+clean:
+	find ${THIS_DIR} -name "*~" | xargs rm -f
