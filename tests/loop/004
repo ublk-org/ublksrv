@@ -1,0 +1,5 @@
+#!/bin/bash
+
+. common/fio_common
+
+__run_loop_dev_perf "kloop" 1 1

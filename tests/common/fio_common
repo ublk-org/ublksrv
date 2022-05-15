@@ -203,33 +203,77 @@ __create_ubd_dev()
 	eval $UBD add -t $ubd_type -q $nr_queues -f $file > /dev/null 2>&1
 }
 
+__remove_kernel_loop_dev() {
+	backing=`losetup | grep loop0 | awk '{print $6}'`
+	losetup -D
+	rm -f $backing	
+}
+
+__create_kernel_loop_dev() {
+	losetup -D
+	file=`mktemp /tmp/ubd_loop_XXXXX`
+	truncate -s 2G $file
+	losetup -f $file --direct-io=on
+	#losetup -l
+}
+
+__run_dev_perf_no_create()
+{
+	TYPE=$1
+	JOBS=$2
+	QUEUES=$3
+	DEV=$4
+	FILE=$5
+	RT=10
+
+	RW="randwrite"
+	FIO_PERF_FIELDS=("write iops")
+	__run_fio_perf $DEV 4k $RW $JOBS 20
+	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["write iops"]}"
+
+	RW="randread"
+	FIO_PERF_FIELDS=("read iops")
+	__run_fio_perf $DEV 4k $RW $JOBS $RT
+	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["read iops"]}"
+
+	RW="rw"
+	FIO_PERF_FIELDS=("read iops" "write iops")
+	__run_fio_perf $DEV 4k $RW $JOBS $RT
+	echo -e "\t$RW: jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+
+	echo ""
+}
+
 __run_dev_perf()
 {
 	TYPE=$1
 	JOBS=$2
 	QUEUES=$3
-	RT=10
+	DEV="/dev/ubdb0"
 
 	__remove_ubd_dev
 	__create_ubd_dev $TYPE $QUEUES
 
 	FILE=`__ubd_loop_backing_file`
+
 	echo -e "running fio (ubd/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
-	RW="randwrite"
-	FIO_PERF_FIELDS=("write iops")
-	__run_fio_perf /dev/ubdb0 4k $RW $JOBS 20
-	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["write iops"]}"
-
-	RW="randread"
-	FIO_PERF_FIELDS=("read iops")
-	__run_fio_perf /dev/ubdb0 4k $RW $JOBS $RT
-	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["read iops"]}"
-
-	RW="rw"
-	FIO_PERF_FIELDS=("read iops" "write iops")
-	__run_fio_perf /dev/ubdb0 4k $RW $JOBS $RT
-	echo -e "\t$RW: jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
 
 	__remove_ubd_dev 0
-	echo ""
+}
+
+__run_loop_dev_perf()
+{
+	TYPE=$1
+	JOBS=$2
+	DEV="/dev/loop0"
+
+	__create_kernel_loop_dev
+
+	FILE=`losetup | grep loop0 | awk '{print $6}'`
+
+	echo -e "running fio (kernel_loop/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
+
+	__remove_kernel_loop_dev
 }
