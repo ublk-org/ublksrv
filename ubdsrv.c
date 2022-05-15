@@ -80,6 +80,10 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	__WRITE_ONCE(cmd->q_id, q->q_id);
 
 	io->flags &= ~(UBDSRV_IO_FREE | UBDSRV_NEED_COMMIT_RQ_COMP);
+
+	INFO(syslog(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
+			__func__, q->q_id, tag, cmd_op,
+			io->flags, q->stopping));
 	return 1;
 }
 
@@ -152,9 +156,6 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 		commit_queue_io_cmd(q, tail + cnt);
 		q->cmd_inflight += cnt;
 	}
-
-	INFO(syslog(LOG_INFO, "%s: queued %d, to_handle %d\n",
-				__func__, cnt, to_handle));
 
 	return cnt + to_handle;
 }
