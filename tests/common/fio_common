@@ -266,6 +266,7 @@ __run_loop_dev_perf()
 {
 	TYPE=$1
 	JOBS=$2
+	QUEUES=$3
 	DEV="/dev/loop0"
 
 	__create_kernel_loop_dev
