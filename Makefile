@@ -27,5 +27,4 @@ test: $(UBDSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run T=${T}
 
 test_all: $(UBDSRV_PROGS)
-	make -s -C ${TOP_DIR}tests run T="null"
-	make -s -C ${TOP_DIR}tests run T="loop"
+	make -s -C ${TOP_DIR}tests run_test_all
