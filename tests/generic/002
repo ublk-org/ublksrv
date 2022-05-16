@@ -1,0 +1,29 @@
+#!/bin/bash
+
+. common/fio_common
+
+echo -e "\trun fio with kill ubq_deamon"
+
+DEV=/dev/ubdb0
+BS=4k
+RW=rw
+JOBS=4
+QUEUES=2
+RUNTIME=10
+LOOPS=10
+
+CNT=0
+while [ $CNT -le $LOOPS ]; do
+	__create_ubd_dev "null" $QUEUES
+	echo -e "\trun fio with killing queue daemon $CNT"
+	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RUNTIME > /dev/null 2 >& 1 &
+	sleep 2
+	queue_tid=`__ubd_get_queue_tid 0`
+	kill -9 $queue_tid
+	wait 
+	sleep 5
+	state=`__ubd_get_dev_state`
+	[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon"
+	__remove_ubd_dev
+	let CNT++
+done

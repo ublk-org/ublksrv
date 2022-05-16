@@ -167,6 +167,20 @@ __ubd_loop_backing_file() {
 	echo $file
 }
 
+__ubd_get_queue_tid() {
+	QID=$1
+	eval $UBD list > ${UBD_TMP}
+	q_tid=`cat ${UBD_TMP} | grep "queue ${QID}" | awk '{print $4}'`
+	echo $q_tid
+}
+
+__ubd_get_dev_state() {
+	QID=$1
+	eval $UBD list > ${UBD_TMP}
+	q_tid=`cat ${UBD_TMP} | grep "state" | awk '{print $11}'`
+	echo $q_tid
+}
+
 __run_fio_perf() {
 	__run_fio_libaio $@
 	_fio_perf_report
