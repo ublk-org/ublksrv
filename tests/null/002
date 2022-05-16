@@ -1,3 +1,5 @@
 #!/bin/bash
 
+. common/fio_common
+
 __run_dev_perf "null" 2 2

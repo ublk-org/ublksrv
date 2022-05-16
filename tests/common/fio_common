@@ -256,7 +256,7 @@ __run_dev_perf()
 
 	FILE=`__ubd_loop_backing_file`
 
-	echo -e "running fio (ubd/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	echo -e "\tfio (ubd/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
 	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
 
 	__remove_ubd_dev 0
@@ -273,7 +273,7 @@ __run_loop_dev_perf()
 
 	FILE=`losetup | grep loop0 | awk '{print $6}'`
 
-	echo -e "running fio (kernel_loop/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	echo -e "\tfio (kernel_loop/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
 	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
 
 	__remove_kernel_loop_dev

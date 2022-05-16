@@ -2,7 +2,7 @@
 
 . common/fio_common
 
-echo  "`basename $0`: run fio with delete ubd test"
+echo -e "\trun fio with delete ubd-loop test"
 
 DEV=/dev/ubdb0
 BS=4k
@@ -15,7 +15,7 @@ LOOPS=10
 CNT=0
 while [ $CNT -le $LOOPS ]; do
 	__create_ubd_dev "loop" $QUEUES
-	echo -e "\trun fio on ubd, and delete $CNT"
+	echo -e "\trun fio on ubd with delete $CNT"
 	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RUNTIME > /dev/null 2 >& 1 &
 	sleep 4
 	RES=`__remove_ubd_dev_return 0`

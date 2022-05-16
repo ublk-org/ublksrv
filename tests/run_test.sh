@@ -8,14 +8,26 @@ export UBD=${DIR}/../ubd
 export TEST_DIR=$DIR
 export UBD_TMP=`mktemp /tmp/ubd_tmp_XXXXX`
 
+run_test() {
+	TS=$1
+
+	NAME=`basename $TS`
+	TMP=`dirname $TS`
+	GRP=`basename $TMP`
+
+	echo "running $GRP/$NAME"
+	sh -c $TS 
+}
+
+
 TEST=$1
 
 if [ -d $TEST ]; then
 		for ITEM in `ls ${TEST}`; do
-				. $TEST/$ITEM
+				run_test $TEST/$ITEM
 		done
 elif [ -f $TEST ]; then
-	sh -c $TEST 
+		run_test $TEST
 fi
 
 rm -f ${UBD_TMP}
