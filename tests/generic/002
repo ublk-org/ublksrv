@@ -13,7 +13,7 @@ RUNTIME=10
 LOOPS=10
 
 CNT=0
-while [ $CNT -le $LOOPS ]; do
+while [ $CNT -lt $LOOPS ]; do
 	__create_ubd_dev "null" $QUEUES
 	echo -e "\trun fio with killing queue daemon $CNT"
 	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RUNTIME > /dev/null 2 >& 1 &
