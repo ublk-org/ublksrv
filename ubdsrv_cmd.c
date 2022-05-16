@@ -301,6 +301,18 @@ static int ubdsrv_stop_dev(struct ubdsrv_ctrl_dev *dev)
 	ubdsrv_stop_io_daemon(dev);
 }
 
+static char *ubdsrv_dev_state_desc(struct ubdsrv_ctrl_dev *dev)
+{
+	switch (dev->dev_info.state) {
+	case UBD_S_DEV_DEAD:
+		return "DEAD";
+	case UBD_S_DEV_LIVE:
+		return "LIVE";
+	default:
+		return "UNKNOWN";
+	};
+}
+
 static void ubdsrv_dump(struct ubdsrv_ctrl_dev *dev)
 {
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
@@ -312,9 +324,10 @@ static void ubdsrv_dump(struct ubdsrv_ctrl_dev *dev)
 			info->dev_id,
                         info->nr_hw_queues, info->queue_depth,
                         info->block_size, info->dev_blocks);
-	printf("\tmax rq size: %d daemon pid: %d flags %lx\n",
+	printf("\tmax rq size %d daemon pid %d flags %lx state %s\n",
                         info->block_size * info->rq_max_blocks,
-			info->ubdsrv_pid, info->flags[0]);
+			info->ubdsrv_pid, info->flags[0],
+			ubdsrv_dev_state_desc(dev));
 
 	snprintf(buf, 64, "%s_%d", UBDSRV_SHM_DIR, info->ubdsrv_pid);
 	fd = shm_open(buf, O_RDONLY, 0);

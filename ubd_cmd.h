@@ -51,6 +51,10 @@
  */
 #define UBD_F_SUPPORT_ZERO_COPY	0
 
+/* device state */
+#define UBD_S_DEV_DEAD	0
+#define UBD_S_DEV_LIVE	1
+
 /* shipped via sqe->cmd of io_uring command */
 struct ubdsrv_ctrl_cmd {
 	/* sent to which device, must be valid */
