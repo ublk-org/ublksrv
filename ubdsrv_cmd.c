@@ -287,6 +287,41 @@ static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
  * 3) the ubd daemon figures out that all sqes are completed, and free,
  * then close /dev/ubdcN and exit itself.
  */
+
+static int ubdsrv_add_dev(struct ubdsrv_ctrl_dev *dev)
+{
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op	= UBD_CMD_ADD_DEV,
+		.flags	= CTRL_CMD_HAS_BUF,
+		.addr = (__u64)&dev->dev_info,
+		.len = sizeof(struct ubdsrv_ctrl_dev_info),
+	};
+
+	return __ubdsrv_ctrl_cmd(dev, &data);
+}
+
+static int ubdsrv_del_dev(struct ubdsrv_ctrl_dev *dev)
+{
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op = UBD_CMD_DEL_DEV,
+		.flags = 0,
+	};
+
+	return __ubdsrv_ctrl_cmd(dev, &data);
+}
+
+static int ubdsrv_get_dev_info(struct ubdsrv_ctrl_dev *dev)
+{
+	struct ubdsrv_ctrl_cmd_data data = {
+		.cmd_op	= UBD_CMD_GET_DEV_INFO,
+		.flags	= CTRL_CMD_HAS_BUF,
+		.addr = (__u64)&dev->dev_info,
+		.len = sizeof(struct ubdsrv_ctrl_dev_info),
+	};
+
+	return __ubdsrv_ctrl_cmd(dev, &data);
+}
+
 static int ubdsrv_stop_dev(struct ubdsrv_ctrl_dev *dev)
 {
 	struct ubdsrv_ctrl_cmd_data data = {
@@ -298,7 +333,7 @@ static int ubdsrv_stop_dev(struct ubdsrv_ctrl_dev *dev)
 	if (ret)
 		return ret;
 
-	ubdsrv_stop_io_daemon(dev);
+	return ubdsrv_stop_io_daemon(dev);
 }
 
 static char *ubdsrv_dev_state_desc(struct ubdsrv_ctrl_dev *dev)
@@ -353,10 +388,6 @@ int cmd_dev_add(int argc, char *argv[])
 	unsigned int queues = 0;
 	unsigned int depth = 0;
 	int opt, ret, zcopy = 0;
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op	= UBD_CMD_ADD_DEV,
-		.flags	= CTRL_CMD_HAS_BUF,
-	};
 
 	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:z",
 				  longopts, NULL)) != -1) {
@@ -391,9 +422,7 @@ int cmd_dev_add(int argc, char *argv[])
 	if (ubdsrv_tgt_init(&dev->tgt, type, argc, argv))
 		die("usbsrv: target init failed\n");
 
-	data.addr = (__u64)&dev->dev_info;
-	data.len = sizeof(struct ubdsrv_ctrl_dev_info);
-	ret = __ubdsrv_ctrl_cmd(dev, &data);
+	ret = ubdsrv_add_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "can't add dev %d\n", number);
 		goto fail;
@@ -402,11 +431,10 @@ int cmd_dev_add(int argc, char *argv[])
 	ret = ubdsrv_start_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "start dev failed %d\n", number);
-		data.cmd_op = UBD_CMD_DEL_DEV;
-		data.flags = 0;
-		__ubdsrv_ctrl_cmd(dev, &data);
+		ubdsrv_del_dev(dev);
 		goto fail;
 	}
+	ret = ubdsrv_get_dev_info(dev);
 	ubdsrv_dump(dev);
  fail:
 	ubdsrv_dev_deinit(dev);
@@ -454,18 +482,12 @@ static void cmd_dev_add_usage(char *cmd)
 
 static int __cmd_dev_del(int number, bool log)
 {
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op	= UBD_CMD_GET_DEV_INFO,
-		.flags	= CTRL_CMD_HAS_BUF,
-	};
 	struct ubdsrv_ctrl_dev *dev;
 	int ret;
 
 	dev = ubdsrv_dev_init(number, false);
 
-	data.addr = (__u64)&dev->dev_info;
-	data.len = sizeof(struct ubdsrv_ctrl_dev_info);
-	ret = __ubdsrv_ctrl_cmd(dev, &data);
+	ret = ubdsrv_get_dev_info(dev);
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
@@ -478,9 +500,7 @@ static int __cmd_dev_del(int number, bool log)
 		goto fail;
 	}
 
-	data.cmd_op = UBD_CMD_DEL_DEV;
-	data.flags = 0;
-	ret = __ubdsrv_ctrl_cmd(dev, &data);
+	ret = ubdsrv_del_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "delete dev %d failed\n", number);
 		goto fail;
@@ -532,15 +552,9 @@ static void cmd_dev_del_usage(char *cmd)
 static int list_one_dev(int number, bool log)
 {
 	struct ubdsrv_ctrl_dev *dev = ubdsrv_dev_init(number, false);
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op	= UBD_CMD_GET_DEV_INFO,
-		.flags	= CTRL_CMD_HAS_BUF,
-		.addr = (__u64)&dev->dev_info,
-		.len = sizeof(struct ubdsrv_ctrl_dev_info),
-	};
 	int ret;
 
-	ret = __ubdsrv_ctrl_cmd(dev, &data);
+	ret = ubdsrv_get_dev_info(dev);
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
