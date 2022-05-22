@@ -20,14 +20,20 @@ while [ $CNT -lt $LOOPS ]; do
 	sleep 2
 	queue_tid=`__ubd_get_queue_tid 0`
 	kill -9 $queue_tid
-	wait 
-	sleep 5
-	state=`__ubd_get_dev_state`
+	sleep 2
+	secs=0
+	while [ $secs -lt 10 ]; do
+		state=`__ubd_get_dev_state 0`
+		[ "$state" == "DEAD" ] && break
+		sleep 1
+		let secs++
+	done
 	[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
 	RES=`__remove_ubd_dev_return 0`
 	if [ $RES -ne 0 ]; then
 			echo -e "\tdelete ubd0 failed"
 			exit -1
 	fi
+	wait
 	let CNT++
 done

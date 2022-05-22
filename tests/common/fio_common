@@ -175,10 +175,10 @@ __ubd_get_queue_tid() {
 }
 
 __ubd_get_dev_state() {
-	QID=$1
-	eval $UBD list > ${UBD_TMP}
-	q_tid=`cat ${UBD_TMP} | grep "state" | awk '{print $11}'`
-	echo $q_tid
+	DEV_ID=$1
+	eval $UBD list -n $DEV_ID > ${UBD_TMP}
+	state=`cat ${UBD_TMP} | grep "state" | awk '{print $11}'`
+	echo $state
 }
 
 __run_fio_perf() {
