@@ -199,7 +199,7 @@ __remove_ubd_dev_return() {
 }
 
 __remove_ubd_dev() {
-	__remove_ubd_dev_return > /dev/null 2>&1
+	__remove_ubd_dev_return $@ > /dev/null 2>&1
 }
 
 __create_ubd_dev()
