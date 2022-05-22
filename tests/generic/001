@@ -9,14 +9,14 @@ BS=4k
 RW=rw
 JOBS=4
 QUEUES=4
-RUNTIME=10
+RT=$TRUNTIME
 LOOPS=10
 
 CNT=0
 while [ $CNT -lt $LOOPS ]; do
 	__create_ubd_dev "loop" $QUEUES
 	echo -e "\trun fio on ubd with delete $CNT"
-	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RUNTIME > /dev/null 2 >& 1 &
+	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 	sleep 4
 	RES=`__remove_ubd_dev_return 0`
 	if [ $RES -ne 0 ]; then

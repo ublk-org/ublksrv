@@ -9,14 +9,14 @@ BS=4k
 RW=rw
 JOBS=4
 QUEUES=2
-RUNTIME=10
+RT=$TRUNTIME
 LOOPS=10
 
 CNT=0
 while [ $CNT -lt $LOOPS ]; do
 	__create_ubd_dev "null" $QUEUES
 	echo -e "\trun fio with killing queue daemon $CNT"
-	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RUNTIME > /dev/null 2 >& 1 &
+	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 	sleep 2
 	queue_tid=`__ubd_get_queue_tid 0`
 	kill -9 $queue_tid

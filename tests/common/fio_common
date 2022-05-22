@@ -238,7 +238,7 @@ __run_dev_perf_no_create()
 	QUEUES=$3
 	DEV=$4
 	FILE=$5
-	RT=10
+	RT=$TRUNTIME
 
 	RW="randwrite"
 	FIO_PERF_FIELDS=("write iops")
