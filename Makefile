@@ -19,14 +19,19 @@ all:$(UBDSRV_PROGS)
 $(UBDSRV_PROGS): $(UBDSRV_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(UBDSRV_OBJS) $(LIBS)
 
-.PHONY: clean test loop_test null_test
+.PHONY: clean test test_all cscope
 clean:
 	rm -f  $(UBDSRV_PROGS) $(UBDSRV_OBJS)
 	rm -f *~ *.d
 	make -s -C ${TOP_DIR}tests clean
+	rm -f cscope.*
 
 test: $(UBDSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run T=${T} R=${R}
 
 test_all: $(UBDSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run_test_all R=${R}
+
+cscope:
+	find . -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" > cscope.files
+	cscope -q -b -f cscope.out
