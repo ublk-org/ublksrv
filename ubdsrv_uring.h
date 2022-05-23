@@ -87,8 +87,7 @@ static inline int io_uring_unregister_buffers(struct ubdsrv_uring *r)
 			IORING_UNREGISTER_BUFFERS, NULL, 0);
 }
 
-int ubdsrv_setup_ring(struct ubdsrv_uring *r, unsigned flags, int depth,
-		struct iovec *base, int nr_buf);
+int ubdsrv_setup_ring(struct ubdsrv_uring *r, unsigned flags, int depth);
 int ubdsrv_reap_events_uring(struct ubdsrv_uring *r,
 		void (*handle_cqe)(struct ubdsrv_uring *r,
 			struct io_uring_cqe *cqe, void *data), void *data);

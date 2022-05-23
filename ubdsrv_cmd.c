@@ -153,7 +153,7 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 	info->rq_max_blocks = DEF_BUF_SIZE / info->block_size;
 
 	/* 32 is enough to send ctrl commands */
-	if (ubdsrv_setup_ring(&dev->ring, IORING_SETUP_SQE128, 32, NULL, 0))
+	if (ubdsrv_setup_ring(&dev->ring, IORING_SETUP_SQE128, 32))
 		exit(-1);
 
 	pthread_mutex_init(&dev->lock, NULL);

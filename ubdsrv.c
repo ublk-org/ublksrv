@@ -347,8 +347,7 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 		q->ios[i].flags = UBDSRV_NEED_FETCH_RQ | UBDSRV_IO_FREE;
 	}
 
-	ret = ubdsrv_setup_ring(&q->ring, IORING_SETUP_SQE128,
-			ring_depth, NULL, 0);
+	ret = ubdsrv_setup_ring(&q->ring, IORING_SETUP_SQE128, ring_depth);
 	if (ret)
 		goto fail;
 

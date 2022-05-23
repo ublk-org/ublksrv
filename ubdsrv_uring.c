@@ -38,8 +38,7 @@ int ubdsrv_reap_events_uring(struct ubdsrv_uring *r,
 	return reaped;
 }
 
-int ubdsrv_setup_ring(struct ubdsrv_uring *r, unsigned flags, int depth,
-		struct iovec *base, int nr_buf)
+int ubdsrv_setup_ring(struct ubdsrv_uring *r, unsigned flags, int depth)
 {
 	struct io_sq_ring *sring = &r->sq_ring;
 	struct io_cq_ring *cring = &r->cq_ring;
@@ -64,20 +63,6 @@ int ubdsrv_setup_ring(struct ubdsrv_uring *r, unsigned flags, int depth,
 	r->ring_fd = fd;
 
 	//io_uring_probe(fd);
-
-	if (nr_buf) {
-		/* setup fixed buffers */
-		rlim.rlim_cur = RLIM_INFINITY;
-		rlim.rlim_max = RLIM_INFINITY;
-
-		/* ignore potential error, not needed on newer kernels */
-		setrlimit(RLIMIT_MEMLOCK, &rlim);
-		ret = io_uring_register_buffers(r, base, nr_buf);
-		if (ret < 0) {
-			perror("io_uring_register_buffers");
-			return 1;
-		}
-	}
 
 	ptr = mmap(0, p.sq_off.array + p.sq_entries * sizeof(__u32),
 			PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
