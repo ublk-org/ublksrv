@@ -25,9 +25,15 @@ static int null_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 	return 0;
 }
 
+static int null_prepare_io(struct ubdsrv_tgt_info *tgt)
+{
+	tgt->nr_fds = 0;
+}
+
 struct ubdsrv_tgt_type  null_tgt_type = {
 	.type	= UBDSRV_TGT_TYPE_NULL,
 	.name	=  "null",
+	.prepare_io	=  null_prepare_io,
 	.init_tgt = null_init_tgt,
 	.handle_io_async = null_handle_io_async,
 };

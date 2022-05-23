@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -g -D_GNU_SOURCE -MMD
-LIBS = -lrt -lpthread
+CFLAGS = -g -D_GNU_SOURCE -MMD -I /root/git/liburing/src/include/
+LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
 
 %.o : %.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@

@@ -35,7 +35,7 @@ static char *pop_cmd(int *argc, char *argv[])
 
 
 /*******************ctrl dev operation ********************************/
-static inline void init_cmd(struct ubdsrv_ctrl_dev *dev,
+static inline void ubdsrv_ctrl_init_cmd(struct ubdsrv_ctrl_dev *dev,
 		struct io_uring_sqe *sqe,
 		struct ubdsrv_ctrl_cmd_data *data)
 {
@@ -44,7 +44,6 @@ static inline void init_cmd(struct ubdsrv_ctrl_dev *dev,
 
 	sqe->fd = ctrl_fd;
 	sqe->opcode = IORING_OP_URING_CMD;
-	sqe->user_data = (unsigned long) -1;
 	sqe->ioprio = 0;
 	sqe->off = 0;
 
@@ -61,58 +60,44 @@ static inline void init_cmd(struct ubdsrv_ctrl_dev *dev,
 	cmd->queue_id = -1;
 
 	sqe->cmd_op = data->cmd_op;
+
+	io_uring_sqe_set_data(sqe, cmd);
+
+	INFO(fprintf(stdout, "dev %d cmd_op %u, user_data %llx\n",
+			dev->dev_info.dev_id, data->cmd_op, cmd));
 }
 
-static int queue_cmd(struct ubdsrv_ctrl_dev *dev,
+static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
 		struct ubdsrv_ctrl_cmd_data *data)
 {
-	struct ubdsrv_uring *r = &dev->ring;
-	struct io_sq_ring *ring = &r->sq_ring;
-	unsigned index, tail, next_tail;
 	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
+	int ret = -EINVAL;
 
-	next_tail = tail = *ring->tail;
-	next_tail++;
+	sqe = io_uring_get_sqe(&dev->ring);
+	if (!sqe) {
+		fprintf(stderr, "can't get sqe ret %d\n", ret);
+		return ret;
+	}
 
-	if (next_tail == atomic_load_acquire(ring->head))
-		return -1;
+	ubdsrv_ctrl_init_cmd(dev, sqe, data);
 
-	index = tail & r->sq_ring_mask;
-	/* IORING_SETUP_SQE128 */
-	sqe = ubdsrv_uring_get_sqe(r, index, true);
+	ret = io_uring_submit(&dev->ring);
+	if (ret < 0) {
+		fprintf(stderr, "uring submit ret %d\n", ret);
+		return ret;
+	}
 
-	init_cmd(dev, sqe, data);
-
-	ring->array[index] = index;
-	tail = next_tail;
-
-	atomic_store_release(ring->tail, tail);
-
-	return 0;
-}
-
-static void ubdsrv_ctrl_handle_cqe(struct ubdsrv_uring *r,
-		struct io_uring_cqe *cqe, void *data)
-{
-	struct ubdsrv_ctrl_dev *dev =
-		container_of(r, struct ubdsrv_ctrl_dev, ring);
+	ret = io_uring_wait_cqe(&dev->ring, &cqe);
+	if (ret < 0) {
+		fprintf(stderr, "wait cqe: %s\n", strerror(-ret));
+		return ret;
+	}
+	io_uring_cqe_seen(&dev->ring, cqe);
 
 	INFO(fprintf(stdout, "dev %d, ctrl cqe res %d, user_data %llx\n",
 			dev->dev_info.dev_id, cqe->res, cqe->user_data));
-	int *cnt = data;
-
-	if (cqe->res >= 0 && cnt)
-		(*cnt)++;
-}
-
-static int reap_events_uring(struct ubdsrv_ctrl_dev *dev)
-{
-	int cnt = 0;
-
-	ubdsrv_reap_events_uring(&dev->ring,
-			ubdsrv_ctrl_handle_cqe, &cnt);
-
-	return cnt;
+	return cqe->res;
 }
 
 static void setup_ctrl_dev()
@@ -134,6 +119,7 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 {
 	struct ubdsrv_ctrl_dev *dev = malloc(sizeof(*dev));
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
+	int ret;
 
 	if (!dev)
 		die("allocate dev failed\n");
@@ -153,30 +139,16 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 	info->rq_max_blocks = DEF_BUF_SIZE / info->block_size;
 
 	/* 32 is enough to send ctrl commands */
-	if (ubdsrv_setup_ring(&dev->ring, IORING_SETUP_SQE128, 32))
-		exit(-1);
+	ret = ubdsrv_setup_ring(32, &dev->ring, IORING_SETUP_SQE128);
+	if (ret < 0) {
+		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
+		free(dev);
+		return NULL;
+	}
 
 	pthread_mutex_init(&dev->lock, NULL);
 
 	return dev;
-}
-
-static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
-		struct ubdsrv_ctrl_cmd_data *data)
-{
-	unsigned flags = IORING_ENTER_GETEVENTS;
-	int ret;
-
-	ret = queue_cmd(dev, data);
-	if (ret) {
-		fprintf(stderr, "can't queue cmd %x\n", data->cmd_op);
-		return -1;
-	}
-
-	ret = io_uring_enter(&dev->ring, 1, 1, flags);
-	ret = reap_events_uring(dev);
-
-	return ret - 1;
 }
 
 /* queues_cpuset is only used for setting up queue pthread daemon */

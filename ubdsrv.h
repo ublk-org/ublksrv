@@ -60,7 +60,7 @@
 #define UBDSRV_SHM_SIZE  1024
 
 struct ubdsrv_ctrl_dev {
-	struct ubdsrv_uring ring;
+	struct io_uring ring;
 
 	unsigned bs_shift;
 	struct ubdsrv_ctrl_dev_info  dev_info;
@@ -112,7 +112,7 @@ struct ubdsrv_queue {
 	 *
 	 * ring depth == dev_info->queue_depth.
 	 */
-	struct ubdsrv_uring ring;
+	struct io_uring ring;
 
 	cpu_set_t cpuset;
 	unsigned  tid;
@@ -136,9 +136,10 @@ static inline struct ubdsrv_io_desc *ubdsrv_get_iod(struct ubdsrv_queue *q, int 
                 &(q->io_cmd_buf[tag * sizeof(struct ubdsrv_io_desc)]);
 }
 
+/*
 static inline int prep_queue_io_cmd(struct ubdsrv_queue *q)
 {
-	struct ubdsrv_uring *r = &q->ring;
+	struct io_uring *r = &q->ring;
 	struct io_sq_ring *ring = &r->sq_ring;
 
 	return *ring->tail;
@@ -146,11 +147,12 @@ static inline int prep_queue_io_cmd(struct ubdsrv_queue *q)
 
 static inline void commit_queue_io_cmd(struct ubdsrv_queue *q, unsigned tail)
 {
-	struct ubdsrv_uring *r = &q->ring;
+	struct io_uring *r = &q->ring;
 	struct io_sq_ring *ring = &r->sq_ring;
 
 	atomic_store_release(ring->tail, tail);
 }
+*/
 
 static inline void ubdsrv_mark_io_handling(struct ubd_io *io)
 {

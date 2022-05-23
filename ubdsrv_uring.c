@@ -1,3 +1,4 @@
+/*
 #include "ubdsrv_uring.h"
 
 int ubdsrv_io_uring_register_files(struct ubdsrv_uring *r,
@@ -38,56 +39,7 @@ int ubdsrv_reap_events_uring(struct ubdsrv_uring *r,
 	return reaped;
 }
 
-int ubdsrv_setup_ring(struct ubdsrv_uring *r, unsigned flags, int depth)
+int ubdsrv_setup_ring(struct io_uring *r, unsigned flags, int depth)
 {
-	struct io_sq_ring *sring = &r->sq_ring;
-	struct io_cq_ring *cring = &r->cq_ring;
-	struct io_uring_params p;
-	int fd;
-	void *ptr;
-	struct rlimit rlim;
-	int ret;
-	int mut = (flags & IORING_SETUP_SQE128) ? 2 : 1;
-
-	memset(&p, 0, sizeof(p));
-
-	p.flags |= flags;
-
-	fd = io_uring_setup(depth, &p);
-	if (fd < 0) {
-		perror("io_uring_setup");
-		return 1;
-	}
-
-	r->ring_depth = p.sq_entries;
-	r->ring_fd = fd;
-
-	//io_uring_probe(fd);
-
-	ptr = mmap(0, p.sq_off.array + p.sq_entries * sizeof(__u32),
-			PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
-			IORING_OFF_SQ_RING);
-	sring->head = ptr + p.sq_off.head;
-	sring->tail = ptr + p.sq_off.tail;
-	sring->ring_mask = ptr + p.sq_off.ring_mask;
-	sring->ring_entries = ptr + p.sq_off.ring_entries;
-	sring->flags = ptr + p.sq_off.flags;
-	sring->array = ptr + p.sq_off.array;
-	r->sq_ring_mask = *sring->ring_mask;
-
-	r->sqes = mmap(0, p.sq_entries * sizeof(struct io_uring_sqe)*mut,
-			PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
-			IORING_OFF_SQES);
-
-	ptr = mmap(0, p.cq_off.cqes + p.cq_entries * sizeof(struct io_uring_cqe),
-			PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
-			IORING_OFF_CQ_RING);
-	cring->head = ptr + p.cq_off.head;
-	cring->tail = ptr + p.cq_off.tail;
-	cring->ring_mask = ptr + p.cq_off.ring_mask;
-	cring->ring_entries = ptr + p.cq_off.ring_entries;
-	cring->cqes = ptr + p.cq_off.cqes;
-	r->cq_ring_mask = *cring->ring_mask;
-
-	return 0;
-}
+	return io_uring_queue_init(depth, r, flags)
+}*/

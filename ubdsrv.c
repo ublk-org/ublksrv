@@ -78,6 +78,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	__WRITE_ONCE(cmd->tag, tag);
 	__WRITE_ONCE(cmd->addr, buf_addr);
 	__WRITE_ONCE(cmd->q_id, q->q_id);
+	sqe->flags |= IOSQE_FIXED_FILE;
 
 	io->flags &= ~(UBDSRV_IO_FREE | UBDSRV_NEED_COMMIT_RQ_COMP);
 
@@ -85,36 +86,6 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 			__func__, q->q_id, tag, cmd_op,
 			io->flags, q->stopping));
 	return 1;
-}
-
-/*
- * queue io command with @tag to ring
- *
- * fix me: batching submission
- */
-static int queue_io_cmd(struct ubdsrv_queue *q, unsigned tail, unsigned tag)
-{
-	struct ubdsrv_uring *r = &q->ring;
-	struct io_sq_ring *ring = &r->sq_ring;
-	unsigned index, next_tail = tail + 1;
-	struct io_uring_sqe *sqe;
-	int ret;
-
-	if (next_tail == atomic_load_acquire(ring->head)) {
-		syslog(LOG_INFO, "ring is full, tail %u head %u\n", next_tail,
-				*ring->head);
-		return -1;
-	}
-
-	index = tail & r->sq_ring_mask;
-	/* IORING_SETUP_SQE128 */
-	sqe = ubdsrv_uring_get_sqe(r, index, true);
-
-	ret = prep_io_cmd(q, sqe, tag);
-	if (ret > 0)
-		ring->array[index] = index;
-
-	return ret;
 }
 
 /*
@@ -127,7 +98,7 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 {
 	unsigned cnt = 0, to_handle = 0;
 	int i = 0, ret = 0;
-	int tail = prep_queue_io_cmd(q);
+	struct io_uring_sqe *sqe;
 
 	for (i = 0; i < q->q_depth; i++) {
 		struct ubd_io *io = &q->ios[i];
@@ -146,16 +117,17 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 		if (!(io->flags &
 			(UBDSRV_NEED_FETCH_RQ | UBDSRV_NEED_COMMIT_RQ_COMP)))
 			continue;
-		ret = queue_io_cmd(q, tail + cnt, i);
+		sqe = io_uring_get_sqe(&q->ring);
+		if (!sqe)
+			break;
+		ret = prep_io_cmd(q, sqe, i);
 		if (ret < 0)
 			break;
 		cnt += ret;
 	}
 
-	if (cnt > 0) {
-		commit_queue_io_cmd(q, tail + cnt);
+	if (cnt > 0)
 		q->cmd_inflight += cnt;
-	}
 
 	return cnt + to_handle;
 }
@@ -254,11 +226,11 @@ static int ubdsrv_init_io_bufs(struct ubdsrv_dev *dev)
 
 static void ubdsrv_init_io_cmds(struct ubdsrv_dev *dev, struct ubdsrv_queue *q)
 {
-	struct ubdsrv_uring *r = &q->ring;
+	struct io_uring *r = &q->ring;
 	struct io_uring_sqe *sqe;
 	int i;
 
-	for (i = 0; i < r->ring_depth; i++) {
+	for (i = 0; i < q->q_depth; i++) {
 		struct io_uring_sqe *sqe = ubdsrv_uring_get_sqe(r, i, true);
 
 		/* These fields should be written once, never change */
@@ -281,7 +253,7 @@ static void ubdsrv_queue_deinit(struct ubdsrv_queue *q)
 	int i;
 
 	if (q->ring.ring_fd > 0) {
-		ubdsrv_io_uring_unregister_files(&q->ring);
+		io_uring_unregister_files(&q->ring);
 		close(q->ring.ring_fd);
 		q->ring.ring_fd = -1;
 	}
@@ -347,11 +319,11 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 		q->ios[i].flags = UBDSRV_NEED_FETCH_RQ | UBDSRV_IO_FREE;
 	}
 
-	ret = ubdsrv_setup_ring(&q->ring, IORING_SETUP_SQE128, ring_depth);
-	if (ret)
+	ret = ubdsrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128);
+	if (ret < 0)
 		goto fail;
 
-	ret = ubdsrv_io_uring_register_files(&q->ring, ctrl_dev->tgt.fds,
+	ret = io_uring_register_files(&q->ring, ctrl_dev->tgt.fds,
 			ctrl_dev->tgt.nr_fds + 1);
 	if (ret)
 		goto fail;
@@ -469,7 +441,7 @@ static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
 	tgt->ops->complete_tgt_io(q, cqe);
 }
 
-static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
+static void ubdsrv_handle_cqe(struct io_uring *r,
 		struct io_uring_cqe *cqe, void *data)
 {
 	struct ubdsrv_queue *q = container_of(r, struct ubdsrv_queue, ring);
@@ -516,6 +488,25 @@ static void ubdsrv_handle_cqe(struct ubdsrv_uring *r,
 		 * */
 		io->flags = UBDSRV_IO_FREE;
 	}
+}
+
+static int ubdsrv_reap_events_uring(struct io_uring *r)
+{
+	struct io_uring_cqe *cqes[64];
+	int cnt, i;
+	int total = 0;
+
+	do {
+		cnt = io_uring_peek_batch_cqe(r, cqes, 64);
+		for (i = 0; i < cnt; i++) {
+			ubdsrv_handle_cqe(r, cqes[i], NULL);
+			io_uring_cqe_seen(r, cqes[i]);
+		}
+		if (cnt > 0)
+			total += cnt;
+	} while (cnt > 0);
+
+	return total;
 }
 
 static void sig_handler(int sig)
@@ -592,10 +583,11 @@ static void *ubdsrv_io_handler_fn(void *data)
 		if (ubdsrv_queue_is_done(q))
 			break;
 
-		submitted = io_uring_enter(&q->ring, to_submit, 1,
-				IORING_ENTER_GETEVENTS);
-		reapped = ubdsrv_reap_events_uring(&q->ring,
-				ubdsrv_handle_cqe, NULL);
+		//submitted = io_uring_enter(&q->ring, to_submit, 1,
+		//		IORING_ENTER_GETEVENTS);
+		submitted = io_uring_submit_and_wait(&q->ring, 1);
+		reapped = ubdsrv_reap_events_uring(&q->ring);
+
 		INFO(syslog(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
 				to_submit, submitted, reapped));
 	} while (1);

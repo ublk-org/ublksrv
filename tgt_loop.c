@@ -109,26 +109,15 @@ static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 		int tag)
 {
 	const struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
-
-	struct ubdsrv_uring *r = &q->ring;
-	struct io_sq_ring *ring = &r->sq_ring;
-	struct io_uring_sqe *sqe;
 	unsigned io_op = ubdsrv_convert_cmd_op(iod);
-	unsigned index, tail = prep_queue_io_cmd(q);
-
-	if (tail + 1 == atomic_load_acquire(ring->head)) {
-		syslog(LOG_INFO, "ring is full, tail %u head %u\n", tail,
-				*ring->head);
-		return -1;
-	}
+	struct io_uring_sqe *sqe;
 
 	ubdsrv_mark_io_handling(io);
 
-	index = tail & r->sq_ring_mask;
-	sqe = ubdsrv_uring_get_sqe(r, index, true);
+	sqe = io_uring_get_sqe(&q->ring);
 
 	/* bit63 marks us as tgt io */
-	//sqe->flags = IOSQE_FIXED_FILE;
+	sqe->flags = IOSQE_FIXED_FILE;
 	sqe->user_data = build_user_data(tag, io_op, 1);
 	sqe->fd = 1;
 	sqe->opcode = io_op;
@@ -146,10 +135,7 @@ static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 	}
 	sqe->off = iod->start_sector << 9;
 
-	ring->array[index] = index;
-
 	q->tgt_io_inflight += 1;
-	commit_queue_io_cmd(q, tail + 1);
 
 	INFO(syslog(LOG_INFO, "%s: ubd io %x %llx %u\n", __func__,
 			iod->op_flags, iod->start_sector, iod->nr_sectors));
