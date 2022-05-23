@@ -1,6 +1,7 @@
 #ifndef UBDSRV_INC_H
 #define UBDSRV_INC_H
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <errno.h>
 #include <assert.h>

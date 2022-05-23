@@ -10,15 +10,6 @@
 #endif
 
 /*********type************/
-typedef int bool;
-
-#ifndef false
-#define false   0
-#endif
-
-#ifndef true
-#define true    1
-#endif
 
 /************ arch **************/
 #ifdef __cplusplus
