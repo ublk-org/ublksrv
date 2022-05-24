@@ -41,7 +41,6 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	struct ubdsrv_io_cmd *cmd = (struct ubdsrv_io_cmd *)&sqe->cmd;
 	struct ubd_io *io;
 	unsigned long cmd_op;
-	__u64 buf_addr;
 	__u64 user_data;
 
 	io = &q->ios[tag];
@@ -65,20 +64,19 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 
 	if (cmd_op == UBD_IO_COMMIT_REQ ||
 			cmd_op == UBD_IO_COMMIT_AND_FETCH_REQ)
-		__WRITE_ONCE(cmd->result, io->result);
-
-	buf_addr = (__u64)io->buf_addr;
-	user_data = build_user_data(tag, cmd_op, 0);
+		cmd->result = io->result;
 
 	/* These fields should be written once, never change */
-	__WRITE_ONCE(sqe->user_data, user_data);
-	__WRITE_ONCE(sqe->cmd_op, cmd_op);
-	__WRITE_ONCE(sqe->fd, /*dev->cdev_fd*/0);
-	__WRITE_ONCE(sqe->opcode, IORING_OP_URING_CMD);
-	__WRITE_ONCE(cmd->tag, tag);
-	__WRITE_ONCE(cmd->addr, buf_addr);
-	__WRITE_ONCE(cmd->q_id, q->q_id);
-	sqe->flags |= IOSQE_FIXED_FILE;
+	sqe->cmd_op	= cmd_op;
+	sqe->fd		= 0;	/*dev->cdev_fd*/
+	sqe->opcode	=  IORING_OP_URING_CMD;
+	sqe->flags	|= IOSQE_FIXED_FILE;
+	cmd->tag	= tag;
+	cmd->addr	= (__u64)io->buf_addr;
+	cmd->q_id	= q->q_id;
+
+	user_data = build_user_data(tag, cmd_op, 0);
+	io_uring_sqe_set_data64(sqe, user_data);
 
 	io->flags &= ~(UBDSRV_IO_FREE | UBDSRV_NEED_COMMIT_RQ_COMP);
 

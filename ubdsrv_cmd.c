@@ -45,7 +45,6 @@ static inline void ubdsrv_ctrl_init_cmd(struct ubdsrv_ctrl_dev *dev,
 	sqe->fd = ctrl_fd;
 	sqe->opcode = IORING_OP_URING_CMD;
 	sqe->ioprio = 0;
-	sqe->off = 0;
 
 	if (data->flags & CTRL_CMD_HAS_BUF) {
 		cmd->addr = data->addr;
