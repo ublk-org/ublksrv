@@ -6,7 +6,10 @@ DIR=$(cd "$(dirname "$0")";pwd)
 
 export UBD=${DIR}/../ubd
 export TEST_DIR=$DIR
+export UBD_TMP_DIR=$DIR/tmp
 export UBD_TMP=`mktemp /tmp/ubd_tmp_XXXXX`
+
+[ ! -d ${UBD_TMP_DIR} ] && mkdir ${UBD_TMP_DIR}
 
 run_test() {
 	TS=$1

@@ -210,8 +210,8 @@ __create_ubd_dev()
 	[ "$nr_queues" = "" ] && nr_queues=1
 
 	if [ "$ubd_type" = "loop" ]; then
-			file=`mktemp /tmp/ubd_loop_XXXXX`
-			truncate -s 2G $file
+		file=`mktemp -p ${UBD_TMP_DIR}  ubd_loop_XXXXX`
+		truncate -s 2G $file
 	fi
 
 	eval $UBD add -t $ubd_type -q $nr_queues -f $file > /dev/null 2>&1
@@ -225,7 +225,7 @@ __remove_kernel_loop_dev() {
 
 __create_kernel_loop_dev() {
 	losetup -D
-	file=`mktemp /tmp/ubd_loop_XXXXX`
+	file=`mktemp -p ${UBD_TMP_DIR}  ubd_loop_XXXXX`
 	truncate -s 2G $file
 	losetup -f $file --direct-io=on
 	#losetup -l
