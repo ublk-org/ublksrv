@@ -490,21 +490,15 @@ static void ubdsrv_handle_cqe(struct io_uring *r,
 
 static int ubdsrv_reap_events_uring(struct io_uring *r)
 {
-	struct io_uring_cqe *cqes[64];
-	int cnt, i;
-	int total = 0;
+	struct io_uring_cqe *cqe;
+	unsigned head;
+	int count = 0;
 
-	do {
-		cnt = io_uring_peek_batch_cqe(r, cqes, 64);
-		for (i = 0; i < cnt; i++) {
-			ubdsrv_handle_cqe(r, cqes[i], NULL);
-			io_uring_cqe_seen(r, cqes[i]);
-		}
-		if (cnt > 0)
-			total += cnt;
-	} while (cnt > 0);
-
-	return total;
+	io_uring_for_each_cqe(r, head, cqe) {
+		ubdsrv_handle_cqe(r, cqe, NULL);
+		count += 1;
+	}
+	io_uring_cq_advance(r, count);
 }
 
 static void sig_handler(int sig)
