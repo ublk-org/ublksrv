@@ -93,3 +93,25 @@ cat /etc/systemd/system/delete-ubd-before-shutdown.service
 systemctl daemon-reload
 systemctl enable delete-ubd-before-shutdown.service
 
+4 build
+
+1) run 'make' directly
+
+2) dependency
+- liburing with IORING_SETUP_SQE128 support
+- linux kernel 5.9(IORING_SETUP_SQE128 support)
+
+5 test
+5.1 run all built tests
+
+make test_all
+
+5.2 run test group
+
+make test T=null
+make test T=loop
+make test T=generic
+
+5.3 run single test
+
+make test T=generic/001
