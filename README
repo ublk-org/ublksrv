@@ -64,7 +64,10 @@ or
 During shutdown or reboot, the distribution may call reboot syscall after
 killing application tasks. When ubdsrv daemon is killed(by SIGKILL maybe),
 both ubdsrv and ubd driver can't get notified, then the daemon may hang
-when canceling io_uring requests in do_exit().
+when canceling io_uring requests in do_exit(). So far ubdsrv has one builtin
+monitor for checking if ubdsrv daemon is dead, and the period is 5s. Without
+the following systemd service script, system may take at most 5 seconds for
+removing ubd device during shutdown or reboot.
 
 So far, one approach is to delete ubd device before shutdown is started, such
 as in case of systemd, the following approach can avoid the issue:
