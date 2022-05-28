@@ -33,9 +33,16 @@
 #include <sys/mman.h>
 #include <dirent.h>
 
+#include "liburing.h"
+
+#include "utils.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ubd_cmd.h"
 #include "ubdsrv_tgt.h"
-#include "utils.h"
 
 #define MAX_NR_UBD_DEVS	128
 
@@ -100,7 +107,7 @@ struct ubdsrv_queue {
 	 * by issued io_uring command beforehand.
 	 * */
 	char *io_cmd_buf;
-	void *io_buf;
+	char *io_buf;
 
 	unsigned cmd_inflight, tgt_io_inflight;
 	unsigned short stopping;
@@ -125,7 +132,7 @@ struct ubdsrv_dev {
 	int cdev_fd;
 
 	struct ubdsrv_queue *__queues[MAX_NR_HW_QUEUES];
-	void	*io_buf_start;
+	char	*io_buf_start;
 	pthread_t *thread;
 };
 
@@ -219,5 +226,9 @@ static inline void ubdsrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op)
 
 	*addr = cmd_op;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

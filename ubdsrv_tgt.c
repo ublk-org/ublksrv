@@ -51,6 +51,8 @@ int ubdsrv_prepare_io(struct ubdsrv_tgt_info *tgt)
 
 	if (tgt->ops->prepare_io)
 		return tgt->ops->prepare_io(tgt);
+
+	return 0;
 }
 
 void ubdsrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,

@@ -28,8 +28,6 @@
 #include <syslog.h>
 #include <signal.h>
 
-#include "liburing.h"
-
 struct ubdsrv_ctrl_dev;
 struct ubdsrv_dev;
 struct ubdsrv_queue;
@@ -59,7 +57,7 @@ struct ubdsrv_tgt_info_null {
 
 struct ubdsrv_tgt_type {
 	int  type;
-	char *name;
+	const char *name;
 	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, int argc,
 			char *argv[]);
 	int (*handle_io_async)(struct ubdsrv_queue *, struct ubd_io *, int tag);

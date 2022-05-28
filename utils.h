@@ -1,6 +1,10 @@
 #ifndef UBDSRV_UTILS_INC
 #define UBDSRV_UTILS_INC
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 static inline unsigned ilog2(unsigned x)
 {
     return sizeof(unsigned) * 8 - 1 - __builtin_clz(x);
@@ -19,7 +23,7 @@ do {                                                                    \
 #define offsetof(TYPE, MEMBER)  ((size_t)&((TYPE *)0)->MEMBER)
 #endif
 #define container_of(ptr, type, member) ({                              \
-	void *__mptr = (void *)(ptr);                                   \
+	unsigned long __mptr = (unsigned long)(ptr);                    \
 	((type *)(__mptr - offsetof(type, member))); })
 
 void die(const char *fmt, ...);
@@ -39,5 +43,8 @@ int start_daemon(int flags, void (*child_entry)(void *), void *data);
 #define CPF_CLOEXEC 1
 int create_pid_file(const char *pidFile, int flags, int *pid_fd);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

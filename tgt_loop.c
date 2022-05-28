@@ -179,8 +179,8 @@ struct ubdsrv_tgt_type  loop_tgt_type = {
 	.handle_io_async = loop_handle_io_async,
 	.complete_tgt_io = loop_complete_tgt_io,
 	.prepare_io	=  loop_prepare_io,
-	.list_tgt	=  loop_list,
 	.usage_for_add	=  loop_usage_for_add,
+	.list_tgt	=  loop_list,
 };
 
 static void tgt_loop_init() __attribute__((constructor));

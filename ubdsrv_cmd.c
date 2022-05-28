@@ -39,7 +39,7 @@ static inline void ubdsrv_ctrl_init_cmd(struct ubdsrv_ctrl_dev *dev,
 		struct ubdsrv_ctrl_cmd_data *data)
 {
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
-	struct ubdsrv_ctrl_cmd *cmd =  ubdsrv_get_sqe_cmd(sqe);
+	struct ubdsrv_ctrl_cmd *cmd = (struct ubdsrv_ctrl_cmd *)ubdsrv_get_sqe_cmd(sqe);
 
 	sqe->fd = ctrl_fd;
 	sqe->opcode = IORING_OP_URING_CMD;
@@ -115,7 +115,7 @@ static void ubdsrv_dev_deinit(struct ubdsrv_ctrl_dev *dev)
 
 static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 {
-	struct ubdsrv_ctrl_dev *dev = malloc(sizeof(*dev));
+	struct ubdsrv_ctrl_dev *dev = (struct ubdsrv_ctrl_dev *)malloc(sizeof(*dev));
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
 	int ret;
 
@@ -159,7 +159,7 @@ static int ubdsrv_get_affinity(struct ubdsrv_ctrl_dev *ctrl_dev)
 	cpu_set_t *sets;
 	int i;
 
-	sets = calloc(sizeof(cpu_set_t), ctrl_dev->dev_info.nr_hw_queues);
+	sets = (cpu_set_t *)calloc(sizeof(cpu_set_t), ctrl_dev->dev_info.nr_hw_queues);
 	if (!sets)
 		return -1;
 
@@ -174,7 +174,7 @@ static int ubdsrv_get_affinity(struct ubdsrv_ctrl_dev *ctrl_dev)
 		}
 	}
 	ctrl_dev->queues_cpuset = sets;
-	ctrl_dev->q_id = calloc(sizeof(unsigned short),
+	ctrl_dev->q_id = (unsigned short *)calloc(sizeof(unsigned short),
 			ctrl_dev->dev_info.nr_hw_queues);
 	if (!ctrl_dev->q_id)
 		return -1;
@@ -306,7 +306,7 @@ static int ubdsrv_stop_dev(struct ubdsrv_ctrl_dev *dev)
 	return ubdsrv_stop_io_daemon(dev);
 }
 
-static char *ubdsrv_dev_state_desc(struct ubdsrv_ctrl_dev *dev)
+static const char *ubdsrv_dev_state_desc(struct ubdsrv_ctrl_dev *dev)
 {
 	switch (dev->dev_info.state) {
 	case UBD_S_DEV_DEAD:
@@ -323,7 +323,7 @@ static void ubdsrv_dump(struct ubdsrv_ctrl_dev *dev)
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
 	int fd;
 	char buf[64];
-	char *addr;
+	void *addr;
 
 	printf("dev id %d: nr_hw_queues %d queue_depth %d block size %d dev_capacity %lld\n",
 			info->dev_id,
@@ -420,7 +420,7 @@ struct tgt_types_name {
 static void collect_tgt_types(unsigned int idx,
 		const struct ubdsrv_tgt_type *type, void *pdata)
 {
-	struct tgt_types_name *data = pdata;
+	struct tgt_types_name *data = (struct tgt_types_name *)pdata;
 
 	if (idx > 0)
 		data->pos += snprintf(data->names + data->pos,

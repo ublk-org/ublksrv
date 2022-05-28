@@ -37,7 +37,7 @@ static void *ubdsrv_io_handler_fn(void *data);
 static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		unsigned tag)
 {
-	struct ubdsrv_io_cmd *cmd = ubdsrv_get_sqe_cmd(sqe);
+	struct ubdsrv_io_cmd *cmd = (struct ubdsrv_io_cmd *)ubdsrv_get_sqe_cmd(sqe);
 	struct ubd_io *io;
 	unsigned int cmd_op;
 	__u64 user_data;
@@ -56,8 +56,8 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	} else if (io->flags & UBDSRV_NEED_COMMIT_RQ_COMP) {
 			cmd_op = UBD_IO_COMMIT_REQ;
 	} else {
-		syslog(LOG_ERR, "io flags is zero, index %d, tag %d\n", index,
-				cmd->tag);
+		syslog(LOG_ERR, "io flags is zero, tag %d\n",
+				(int)cmd->tag);
 		return -1;
 	}
 
@@ -210,7 +210,7 @@ static int ubdsrv_init_io_bufs(struct ubdsrv_dev *dev)
 	if (addr == MAP_FAILED)
 		return -1;
 
-	dev->io_buf_start = addr;
+	dev->io_buf_start = (char *)addr;
 
 	for (i = 0; i < nr_queues; i++) {
 		struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
@@ -280,7 +280,7 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 	unsigned long off;
 	int ring_depth = depth + ctrl_dev->tgt.tgt_ring_depth;
 
-	q = malloc(sizeof(struct ubdsrv_queue) + sizeof(struct ubd_io) *
+	q = (struct ubdsrv_queue *)malloc(sizeof(struct ubdsrv_queue) + sizeof(struct ubd_io) *
 		ctrl_dev->dev_info.queue_depth);
 	dev->__queues[q_id] = q;
 
@@ -299,7 +299,7 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 	cmd_buf_size = ubdsrv_queue_cmd_buf_sz(q);
 	off = UBDSRV_CMD_BUF_OFFSET +
 		q_id * (UBD_MAX_QUEUE_DEPTH * sizeof(struct ubdsrv_io_desc));
-	q->io_cmd_buf = mmap(0, cmd_buf_size, PROT_READ,
+	q->io_cmd_buf = (char *)mmap(0, cmd_buf_size, PROT_READ,
 			MAP_SHARED | MAP_POPULATE, dev->cdev_fd, off);
 	if (q->io_cmd_buf == MAP_FAILED)
 		goto fail;
@@ -372,7 +372,7 @@ static void ubdsrv_setup_tgt_shm(struct ubdsrv_dev *dev)
 
 	ftruncate(fd, UBDSRV_SHM_SIZE);
 
-	dev->ctrl_dev->shm_addr = mmap(NULL, UBDSRV_SHM_SIZE,
+	dev->ctrl_dev->shm_addr = (char *)mmap(NULL, UBDSRV_SHM_SIZE,
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	dev->ctrl_dev->shm_offset = 0;
 	dev->ctrl_dev->shm_fd = fd;
@@ -410,7 +410,7 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 	if (ubdsrv_prepare_io(&dev->ctrl_dev->tgt) < 0)
 		goto fail;
 
-	dev->thread = calloc(sizeof(pthread_t),
+	dev->thread = (pthread_t *)calloc(sizeof(pthread_t),
 			ctrl_dev->dev_info.nr_hw_queues);
 	if (!dev->thread)
 		goto fail;
@@ -498,6 +498,8 @@ static int ubdsrv_reap_events_uring(struct io_uring *r)
 		count += 1;
 	}
 	io_uring_cq_advance(r, count);
+
+	return count;
 }
 
 static void sig_handler(int sig)
@@ -591,7 +593,7 @@ static void *ubdsrv_io_handler_fn(void *data)
 static sigset_t   signal_mask;
 static void ubdsrv_io_handler(void *data)
 {
-	struct ubdsrv_ctrl_dev *ctrl_dev = data;
+	struct ubdsrv_ctrl_dev *ctrl_dev = (struct ubdsrv_ctrl_dev *)data;
 	struct ubdsrv_tgt_info *tgt = &ctrl_dev->tgt;
 	int dev_id = ctrl_dev->dev_info.dev_id;
 	int ret, pid_fd;
