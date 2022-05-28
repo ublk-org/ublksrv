@@ -35,7 +35,6 @@
 
 #include "ubd_cmd.h"
 #include "ubdsrv_tgt.h"
-#include "ubdsrv_uring.h"
 #include "utils.h"
 
 #define MAX_NR_UBD_DEVS	128
@@ -187,5 +186,26 @@ static inline unsigned int user_data_to_op(__u64 user_data)
 int ubdsrv_start_io_daemon(struct ubdsrv_ctrl_dev *dev);
 int ubdsrv_stop_io_daemon(struct ubdsrv_ctrl_dev *dev);
 int ubdsrv_get_io_daemon_pid(struct ubdsrv_ctrl_dev *ctrl_dev);
+
+/* two helpers for setting up io_uring */
+static inline int ubdsrv_setup_ring(int depth, struct io_uring *r,
+		unsigned flags)
+{
+	struct io_uring_params p;
+
+	memset(&p, 0, sizeof(p));
+        p.flags = flags | IORING_SETUP_CQSIZE;
+        p.cq_entries = depth;
+
+        return io_uring_queue_init_params(depth, r, &p);
+}
+
+static inline struct io_uring_sqe *ubdsrv_uring_get_sqe(struct io_uring *r,
+		int idx, bool is_sqe128)
+{
+	if (is_sqe128)
+		return  &r->sq.sqes[idx << 1];
+	return  &r->sq.sqes[idx];
+}
 
 #endif
