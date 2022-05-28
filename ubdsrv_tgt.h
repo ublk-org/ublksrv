@@ -28,7 +28,6 @@
 #include <syslog.h>
 #include <signal.h>
 
-#include "dep.h"
 #include "liburing.h"
 
 struct ubdsrv_ctrl_dev;
