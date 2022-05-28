@@ -29,10 +29,7 @@
 #include <signal.h>
 
 #include "dep.h"
-//#include "../arch/arch.h"
-//#include "../os/linux/io_uring.h"
 #include "liburing.h"
-#include "utils.h"
 
 struct ubdsrv_ctrl_dev;
 struct ubdsrv_dev;

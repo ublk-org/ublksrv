@@ -1,5 +1,4 @@
 #include "ubdsrv.h"
-#include "utils.h"
 
 /*
  * /dev/ubdbN shares same lifetime with the ubd io daemon:

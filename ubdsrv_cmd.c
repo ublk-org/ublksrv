@@ -1,4 +1,3 @@
-#include "utils.h"
 #include "ubdsrv.h"
 
 #define CTRL_CMD_HAS_DATA	1
