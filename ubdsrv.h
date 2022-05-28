@@ -208,4 +208,16 @@ static inline struct io_uring_sqe *ubdsrv_uring_get_sqe(struct io_uring *r,
 	return  &r->sq.sqes[idx];
 }
 
+static inline void *ubdsrv_get_sqe_cmd(struct io_uring_sqe *sqe)
+{
+	return (void *)&sqe->addr3;
+}
+
+static inline void ubdsrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op)
+{
+	__u32 *addr = (__u32 *)&sqe->off;
+
+	*addr = cmd_op;
+}
+
 #endif

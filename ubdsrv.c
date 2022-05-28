@@ -37,9 +37,9 @@ static void *ubdsrv_io_handler_fn(void *data);
 static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		unsigned tag)
 {
-	struct ubdsrv_io_cmd *cmd = (struct ubdsrv_io_cmd *)&sqe->cmd;
+	struct ubdsrv_io_cmd *cmd = ubdsrv_get_sqe_cmd(sqe);
 	struct ubd_io *io;
-	unsigned long cmd_op;
+	unsigned int cmd_op;
 	__u64 user_data;
 
 	io = &q->ios[tag];
@@ -66,7 +66,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 		cmd->result = io->result;
 
 	/* These fields should be written once, never change */
-	sqe->cmd_op	= cmd_op;
+	ubdsrv_set_sqe_cmd_op(sqe, cmd_op);
 	sqe->fd		= 0;	/*dev->cdev_fd*/
 	sqe->opcode	=  IORING_OP_URING_CMD;
 	sqe->flags	|= IOSQE_FIXED_FILE;

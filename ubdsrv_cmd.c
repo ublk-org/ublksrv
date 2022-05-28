@@ -39,7 +39,7 @@ static inline void ubdsrv_ctrl_init_cmd(struct ubdsrv_ctrl_dev *dev,
 		struct ubdsrv_ctrl_cmd_data *data)
 {
 	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
-	struct ubdsrv_ctrl_cmd *cmd = (struct ubdsrv_ctrl_cmd *)&sqe->cmd;
+	struct ubdsrv_ctrl_cmd *cmd =  ubdsrv_get_sqe_cmd(sqe);
 
 	sqe->fd = ctrl_fd;
 	sqe->opcode = IORING_OP_URING_CMD;
@@ -57,7 +57,7 @@ static inline void ubdsrv_ctrl_init_cmd(struct ubdsrv_ctrl_dev *dev,
 	cmd->dev_id = info->dev_id;
 	cmd->queue_id = -1;
 
-	sqe->cmd_op = data->cmd_op;
+	ubdsrv_set_sqe_cmd_op(sqe, data->cmd_op);
 
 	io_uring_sqe_set_data(sqe, cmd);
 
