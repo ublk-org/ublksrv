@@ -7,7 +7,7 @@ LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
 
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 
-UBDSRV_OBJS = ubdsrv_cmd.o ubdsrv.o ubdsrv_uring.o utils.o ubdsrv_tgt.o tgt_null.o tgt_loop.o
+UBDSRV_OBJS = ubdsrv_cmd.o ubdsrv.o utils.o ubdsrv_tgt.o tgt_null.o tgt_loop.o
 UBDSRV_PROGS = ubd
 
 R = 10
