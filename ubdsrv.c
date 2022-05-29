@@ -231,9 +231,9 @@ static void ubdsrv_init_io_cmds(struct ubdsrv_dev *dev, struct ubdsrv_queue *q)
 		struct io_uring_sqe *sqe = ubdsrv_uring_get_sqe(r, i, true);
 
 		/* These fields should be written once, never change */
-		__WRITE_ONCE(sqe->flags, IOSQE_FIXED_FILE);
-		__WRITE_ONCE(sqe->ioprio, 0);
-		__WRITE_ONCE(sqe->off, 0);
+		sqe->flags = IOSQE_FIXED_FILE;
+		sqe->ioprio = 0;
+		sqe->off = 0;
 	}
 }
 

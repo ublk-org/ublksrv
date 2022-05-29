@@ -13,12 +13,6 @@ static inline unsigned ilog2(unsigned x)
 #define round_up(val, rnd) \
 	(((val) + (rnd - 1)) & ~(rnd - 1))
 
-#define __READ_ONCE(x)  (*(const volatile typeof(x) *)&(x))
-#define __WRITE_ONCE(x, val)                                            \
-do {                                                                    \
-        *(volatile typeof(x) *)&(x) = (val);                            \
-} while (0)
-
 #ifndef offsetof
 #define offsetof(TYPE, MEMBER)  ((size_t)&((TYPE *)0)->MEMBER)
 #endif
