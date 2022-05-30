@@ -34,19 +34,22 @@ static sig_atomic_t volatile ubdsrv_stop = 0;
 
 static void *ubdsrv_io_handler_fn(void *data);
 
-static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
-		unsigned tag)
+static int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
 {
-	struct ubdsrv_io_cmd *cmd = (struct ubdsrv_io_cmd *)ubdsrv_get_sqe_cmd(sqe);
-	struct ubd_io *io;
+	struct ubd_io *io = &q->ios[tag];
+	struct ubdsrv_io_cmd *cmd;
+	struct io_uring_sqe *sqe;
 	unsigned int cmd_op;
 	__u64 user_data;
 
-	io = &q->ios[tag];
-	if (!(io->flags & UBDSRV_IO_FREE)) {
-		syslog(LOG_ERR, "io isn't free qid %d, tag %d\n", q->q_id, tag);
-		return -1;
-	}
+	/* only freed io can be issued */
+	if (!(io->flags & UBDSRV_IO_FREE))
+		return 0;
+
+	/* we issue because we need either fetching or committing */
+	if (!(io->flags &
+		(UBDSRV_NEED_FETCH_RQ | UBDSRV_NEED_COMMIT_RQ_COMP)))
+		return 0;
 
 	if (io->flags & UBDSRV_NEED_FETCH_RQ) {
 		if (io->flags & UBDSRV_NEED_COMMIT_RQ_COMP)
@@ -58,8 +61,18 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 	} else {
 		syslog(LOG_ERR, "io flags is zero, tag %d\n",
 				(int)cmd->tag);
+		return 0;
+	}
+
+	sqe = io_uring_get_sqe(&q->ring);
+	if (!sqe) {
+		syslog(LOG_ERR, "%s: run out of sqe %d, tag %d\n",
+				__func__, q->q_id, tag);
 		return -1;
 	}
+
+	cmd = (struct ubdsrv_io_cmd *)ubdsrv_get_sqe_cmd(sqe);
+
 
 	if (cmd_op == UBD_IO_COMMIT_REQ ||
 			cmd_op == UBD_IO_COMMIT_AND_FETCH_REQ)
@@ -93,25 +106,11 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
  */
 static void ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 {
-	unsigned cnt = 0, to_handle = 0;
+	unsigned cnt = 0;
 	int i = 0, ret = 0;
-	struct io_uring_sqe *sqe;
 
 	for (i = 0; i < q->q_depth; i++) {
-		struct ubd_io *io = &q->ios[i];
-
-		/* only freed io can be issued */
-		if (!(io->flags & UBDSRV_IO_FREE))
-			continue;
-
-		/* we issue because we need either fetching or committing */
-		if (!(io->flags &
-			(UBDSRV_NEED_FETCH_RQ | UBDSRV_NEED_COMMIT_RQ_COMP)))
-			continue;
-		sqe = io_uring_get_sqe(&q->ring);
-		if (!sqe)
-			break;
-		ret = prep_io_cmd(q, sqe, i);
+		ret = ubdsrv_queue_io_cmd(q, i);
 		if (ret < 0)
 			break;
 		cnt += ret;
