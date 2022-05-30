@@ -61,8 +61,8 @@ static inline void ubdsrv_ctrl_init_cmd(struct ubdsrv_ctrl_dev *dev,
 
 	io_uring_sqe_set_data(sqe, cmd);
 
-	INFO(fprintf(stdout, "dev %d cmd_op %u, user_data %llx\n",
-			dev->dev_info.dev_id, data->cmd_op, cmd));
+	ubdsrv_printf(stdout, "dev %d cmd_op %u, user_data %llx\n",
+			dev->dev_info.dev_id, data->cmd_op, cmd);
 }
 
 static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
@@ -93,8 +93,8 @@ static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
 	}
 	io_uring_cqe_seen(&dev->ring, cqe);
 
-	INFO(fprintf(stdout, "dev %d, ctrl cqe res %d, user_data %llx\n",
-			dev->dev_info.dev_id, cqe->res, cqe->user_data));
+	ubdsrv_printf(stdout, "dev %d, ctrl cqe res %d, user_data %llx\n",
+			dev->dev_info.dev_id, cqe->res, cqe->user_data);
 	return cqe->res;
 }
 
@@ -597,7 +597,7 @@ int main(int argc, char *argv[])
 		cmd_dev_list_usage(exe);
 	}
 
-	INFO(printf("cmd %s: result %d\n", cmd, ret));
+	ubdsrv_printf(stdout, "cmd %s: result %d\n", cmd, ret);
 
 	return ret;
 }

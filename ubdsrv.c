@@ -79,9 +79,9 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
 
 	io->flags &= ~(UBDSRV_IO_FREE | UBDSRV_NEED_COMMIT_RQ_COMP);
 
-	INFO(syslog(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
+	ubdsrv_log(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
 			__func__, q->q_id, tag, cmd_op,
-			io->flags, q->stopping));
+			io->flags, q->stopping);
 	return 1;
 }
 
@@ -376,8 +376,8 @@ static void ubdsrv_setup_tgt_shm(struct ubdsrv_dev *dev)
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	dev->ctrl_dev->shm_offset = 0;
 	dev->ctrl_dev->shm_fd = fd;
-	INFO(syslog(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
-				buf, fd, dev->ctrl_dev->shm_addr));
+	ubdsrv_log(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
+				buf, fd, dev->ctrl_dev->shm_addr);
 }
 
 static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
@@ -450,9 +450,9 @@ static void ubdsrv_handle_cqe(struct io_uring *r,
 	int fetch = (cqe->res != UBD_IO_RES_ABORT) && !q->stopping;
 	struct ubd_io *io = &q->ios[tag];
 
-	INFO(syslog(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d) iof %x stopping %d\n",
+	ubdsrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d) iof %x stopping %d\n",
 			__func__, cqe->res, q->q_id, tag, cmd_op,
-			is_target_io(cqe->user_data), io->flags, q->stopping));
+			is_target_io(cqe->user_data), io->flags, q->stopping);
 
 	if (is_target_io(cqe->user_data)) {
 		ubdsrv_handle_tgt_cqe(tgt, q, cqe);
@@ -568,10 +568,10 @@ static void *ubdsrv_io_handler_fn(void *data)
 		int to_submit, submitted, reapped;
 
 		to_submit = ubdsrv_submit_fetch_commands(q);
-		INFO(syslog(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
+		ubdsrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
 					dev_id, q->q_id, to_submit,
 					q->cmd_inflight, q->tgt_io_inflight,
-					q->stopping));
+					q->stopping);
 
 		if (ubdsrv_queue_is_done(q))
 			break;
@@ -581,8 +581,8 @@ static void *ubdsrv_io_handler_fn(void *data)
 		submitted = io_uring_submit_and_wait(&q->ring, 1);
 		reapped = ubdsrv_reap_events_uring(&q->ring);
 
-		INFO(syslog(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
-				to_submit, submitted, reapped));
+		ubdsrv_log(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
+				to_submit, submitted, reapped);
 	} while (1);
 
 	syslog(LOG_INFO, "ubd dev %d queue %d exited", dev_id, q->q_id);

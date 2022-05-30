@@ -5,6 +5,27 @@
 extern "C" {
 #endif
 
+#ifdef DEBUG
+static inline void ubdsrv_log(int priority, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsyslog(priority, fmt, ap);
+}
+
+static inline void ubdsrv_printf(FILE *stream, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stream, fmt, ap);
+}
+#else
+static inline void ubdsrv_log(int priority, const char *fmt, ...) { }
+static inline void ubdsrv_printf(FILE *stream, const char *fmt, ...) {}
+#endif
+
 static inline unsigned ilog2(unsigned x)
 {
     return sizeof(unsigned) * 8 - 1 - __builtin_clz(x);

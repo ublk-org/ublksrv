@@ -61,8 +61,6 @@ extern "C" {
 
 #define UBDSRV_SHM_DIR	"ubdsrv"
 
-#define INFO(s)
-
 #define UBDSRV_SHM_SIZE  1024
 
 struct ubdsrv_ctrl_dev {
