@@ -1,0 +1,29 @@
+#!/bin/bash
+
+. common/fio_common
+
+echo -n -e "\tmount/umount ubd device with root fstype..."
+
+DEV=/dev/ubdb0
+QUEUES=2
+
+__create_ubd_dev "loop" $QUEUES
+
+ROOT_FSTYPE=`findmnt -l -o FSTYPE -n /`
+
+wipefs -a $DEV
+eval mkfs.${ROOT_FSTYPE} $DEV > /dev/null 2>&1
+
+MNT=`mktemp -d`
+mount $DEV  $MNT > /dev/null 2>&1
+
+UBD_FSTYPE=`findmnt -l -o FSTYPE -n $MNT`
+if [ "$UBD_FSTYPE" = "$ROOT_FSTYPE" ]; then
+		echo "ok"
+else
+		echo "failed"
+fi
+umount $MNT > /dev/null 2>&1
+
+__remove_ubd_dev 0
+rm -fr $MNT
