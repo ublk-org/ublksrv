@@ -565,24 +565,21 @@ static void *ubdsrv_io_handler_fn(void *data)
 	syslog(LOG_INFO, "tid %d: ubd dev %d queue %d started", q->tid,
 			dev_id, q->q_id);
 	do {
-		int to_submit, submitted, reapped;
+		int submitted, reapped;
 
-		to_submit = ubdsrv_submit_fetch_commands(q);
+		ubdsrv_submit_fetch_commands(q);
 		ubdsrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
-					dev_id, q->q_id, to_submit,
+					dev_id, q->q_id, io_uring_sq_ready(&q->ring),
 					q->cmd_inflight, q->tgt_io_inflight,
 					q->stopping);
 
 		if (ubdsrv_queue_is_done(q))
 			break;
 
-		//submitted = io_uring_enter(&q->ring, to_submit, 1,
-		//		IORING_ENTER_GETEVENTS);
 		submitted = io_uring_submit_and_wait(&q->ring, 1);
 		reapped = ubdsrv_reap_events_uring(&q->ring);
 
-		ubdsrv_log(LOG_INFO, "io_submit %d, submitted %d, reapped %d",
-				to_submit, submitted, reapped);
+		ubdsrv_log(LOG_INFO, "submitted %d, reapped %d", submitted, reapped);
 	} while (1);
 
 	syslog(LOG_INFO, "ubd dev %d queue %d exited", dev_id, q->q_id);
