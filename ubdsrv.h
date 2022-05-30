@@ -86,7 +86,6 @@ struct ubd_io {
 #define UBDSRV_NEED_FETCH_RQ		(1UL << 0)
 #define UBDSRV_NEED_COMMIT_RQ_COMP	(1UL << 1)
 #define UBDSRV_IO_FREE			(1UL << 2)
-#define UBDSRV_IO_HANDLING		(1UL << 3)
 	unsigned int flags;
 	unsigned int result;
 };
@@ -140,15 +139,6 @@ static inline struct ubdsrv_io_desc *ubdsrv_get_iod(struct ubdsrv_queue *q, int 
                 &(q->io_cmd_buf[tag * sizeof(struct ubdsrv_io_desc)]);
 }
 
-static inline void ubdsrv_mark_io_handling(struct ubd_io *io)
-{
-	/*
-	 * mark handling, so that ubdsrv_submit_fetch_commands() will
-	 * count us for submission
-	 */
-	io->flags |= UBDSRV_IO_HANDLING;
-}
-
 static inline void ubdsrv_mark_io_done(struct ubd_io *io, int res)
 {
 	/*
@@ -156,7 +146,6 @@ static inline void ubdsrv_mark_io_done(struct ubd_io *io, int res)
 	 * result and fetch new request via io_uring command.
 	 */
 	io->flags |= (UBDSRV_NEED_COMMIT_RQ_COMP | UBDSRV_IO_FREE);
-	io->flags &= ~UBDSRV_IO_HANDLING;
 
 	io->result = res;
 }

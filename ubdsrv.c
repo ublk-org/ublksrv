@@ -91,7 +91,7 @@ static int prep_io_cmd(struct ubdsrv_queue *q, struct io_uring_sqe *sqe,
  *
  * todo: queue io commands with batching
  */
-static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
+static void ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 {
 	unsigned cnt = 0, to_handle = 0;
 	int i = 0, ret = 0;
@@ -99,12 +99,6 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 
 	for (i = 0; i < q->q_depth; i++) {
 		struct ubd_io *io = &q->ios[i];
-
-		if (io->flags & UBDSRV_IO_HANDLING) {
-			io->flags &= ~UBDSRV_IO_HANDLING;
-			to_handle += 1;
-			continue;
-		}
 
 		/* only freed io can be issued */
 		if (!(io->flags & UBDSRV_IO_FREE))
@@ -125,8 +119,6 @@ static int ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 
 	if (cnt > 0)
 		q->cmd_inflight += cnt;
-
-	return cnt + to_handle;
 }
 
 static int ubdsrv_queue_is_done(struct ubdsrv_queue *q)

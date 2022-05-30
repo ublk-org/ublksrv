@@ -112,8 +112,6 @@ static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 	unsigned io_op = ubdsrv_convert_cmd_op(iod);
 	struct io_uring_sqe *sqe;
 
-	ubdsrv_mark_io_handling(io);
-
 	sqe = io_uring_get_sqe(&q->ring);
 
 	/* bit63 marks us as tgt io */
