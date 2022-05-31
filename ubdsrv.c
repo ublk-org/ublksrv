@@ -34,7 +34,7 @@ static sig_atomic_t volatile ubdsrv_stop = 0;
 
 static void *ubdsrv_io_handler_fn(void *data);
 
-static int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
+int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
 {
 	struct ubd_io *io = &q->ios[tag];
 	struct ubdsrv_io_cmd *cmd;
@@ -414,6 +414,9 @@ fail:
 static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
 	struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
 {
+	unsigned tag = user_data_to_tag(cqe->user_data);
+	struct ubd_io *io = &q->ios[tag];
+
 	q->tgt_io_inflight -= 1;
 	if (cqe->res < 0 && cqe->res != -EAGAIN) {
 		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %u tag %u, cmd_op %u\n",
@@ -421,7 +424,16 @@ static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
 			user_data_to_tag(cqe->user_data),
 			user_data_to_op(cqe->user_data));
 	}
-	tgt->ops->complete_tgt_io(q, cqe);
+
+	if (!ubdsrv_io_done(io)) {
+		if (!io->queued_tgt_io)
+			syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
+				__func__, cqe->res, q->q_id,
+				user_data_to_tag(cqe->user_data),
+				user_data_to_op(cqe->user_data));
+		io->tgt_io_cqe = cqe;
+		io->co.resume();
+	}
 }
 
 static void ubdsrv_handle_cqe(struct io_uring *r,
@@ -459,7 +471,7 @@ static void ubdsrv_handle_cqe(struct io_uring *r,
 	 * daemon can poll on both two rings.
 	 */
 	if (cqe->res == UBD_IO_RES_OK && cmd_op != UBD_IO_COMMIT_REQ) {
-		tgt->ops->handle_io_async(q, io, tag);
+		io->co = tgt->ops->handle_io_async(q, io, tag);
 	} else {
 		/*
 		 * COMMIT_REQ will be completed immediately since no fetching
@@ -550,15 +562,14 @@ static void *ubdsrv_io_handler_fn(void *data)
 
 	syslog(LOG_INFO, "tid %d: ubd dev %d queue %d started", q->tid,
 			dev_id, q->q_id);
+	ubdsrv_submit_fetch_commands(q);
 	do {
 		int submitted, reapped;
 
-		ubdsrv_submit_fetch_commands(q);
 		ubdsrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
 					dev_id, q->q_id, io_uring_sq_ready(&q->ring),
 					q->cmd_inflight, q->tgt_io_inflight,
 					q->stopping);
-
 		if (ubdsrv_queue_is_done(q))
 			break;
 

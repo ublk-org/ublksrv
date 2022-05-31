@@ -87,7 +87,16 @@ struct ubd_io {
 #define UBDSRV_NEED_COMMIT_RQ_COMP	(1UL << 1)
 #define UBDSRV_IO_FREE			(1UL << 2)
 	unsigned int flags;
-	unsigned int result;
+
+	union {
+		/* result is updated after all target ios are done */
+		unsigned int result;
+
+		/* current completed target io cqe */
+		int queued_tgt_io;
+	};
+	struct io_uring_cqe *tgt_io_cqe;
+	co_handle_type co;
 };
 
 struct ubdsrv_queue {
@@ -148,6 +157,11 @@ static inline void ubdsrv_mark_io_done(struct ubd_io *io, int res)
 	io->flags |= (UBDSRV_NEED_COMMIT_RQ_COMP | UBDSRV_IO_FREE);
 
 	io->result = res;
+}
+
+static inline bool ubdsrv_io_done(struct ubd_io *io)
+{
+	return io->flags & UBDSRV_IO_FREE;
 }
 
 static inline struct ubdsrv_queue *ubdsrv_get_queue(struct ubdsrv_dev *dev,
@@ -213,6 +227,8 @@ static inline void ubdsrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op)
 
 	*addr = cmd_op;
 }
+
+extern int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag);
 
 #ifdef __cplusplus
 }

@@ -105,7 +105,7 @@ static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
 	sqe->len = mode;
 }
 
-static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
+static int loop_queue_tgt_io(struct ubdsrv_queue *q, struct ubd_io *io,
 		int tag)
 {
 	const struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
@@ -113,6 +113,8 @@ static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 	struct io_uring_sqe *sqe;
 
 	sqe = io_uring_get_sqe(&q->ring);
+	if (!sqe)
+		return 0;
 
 	/* bit63 marks us as tgt io */
 	sqe->flags = IOSQE_FIXED_FILE;
@@ -142,20 +144,37 @@ static int loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 			__func__, io_op, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, io_op, 1, sqe->user_data, io->flags);
 
-	return 0;
+	return 1;
 }
 
-int loop_complete_tgt_io(struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
+static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
+		int tag)
 {
-	unsigned int tag = user_data_to_tag(cqe->user_data);
-	struct ubd_io *io = &q->ios[tag];
+	struct io_uring_cqe *cqe;
+	int ret;
+ again:
+	ret = loop_queue_tgt_io(q, io, tag);
+	if (ret) {
+		if (io->queued_tgt_io)
+			ubdsrv_log(LOG_INFO, "bad queued_tgt_io %d\n",
+					io->queued_tgt_io);
+		io->queued_tgt_io += 1;
 
-	if (cqe->res != -EAGAIN)
+		co_io_job_submit_and_wait();
+		io->queued_tgt_io -= 1;
+
+		cqe = io->tgt_io_cqe;
+		if (cqe->res == -EAGAIN)
+			goto again;
+
+		/* all target io is done, so this io command is completed */
 		ubdsrv_mark_io_done(io, cqe->res);
-	else
-		loop_handle_io_async(q, io, tag);
 
-	return 0;
+		/* commit and re-fetch to ubd driver */
+		ubdsrv_queue_io_cmd(q, tag);
+	} else {
+		ubdsrv_log(LOG_INFO, "no sqe %d\n", tag);
+	}
 }
 
 static int loop_list(struct ubdsrv_tgt_info *tgt)
@@ -175,7 +194,6 @@ struct ubdsrv_tgt_type  loop_tgt_type = {
 	.name	=  "loop",
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
-	.complete_tgt_io = loop_complete_tgt_io,
 	.prepare_io	=  loop_prepare_io,
 	.usage_for_add	=  loop_usage_for_add,
 	.list_tgt	=  loop_list,

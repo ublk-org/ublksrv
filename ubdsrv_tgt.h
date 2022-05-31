@@ -60,13 +60,7 @@ struct ubdsrv_tgt_type {
 	const char *name;
 	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, int argc,
 			char *argv[]);
-	int (*handle_io_async)(struct ubdsrv_queue *, struct ubd_io *, int tag);
-
-	/*
-	 * If target io is submitted via io_uring, the target has to implement
-	 * ->complete_tgt_io() for handling the completion
-	 */
-	int (*complete_tgt_io)(struct ubdsrv_queue *, struct io_uring_cqe *cqe);
+	co_io_job (*handle_io_async)(struct ubdsrv_queue *, struct ubd_io *, int tag);
 
 	int (*prepare_io)(struct ubdsrv_tgt_info *);
 	void (*usage_for_add)(void);

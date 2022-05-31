@@ -17,12 +17,15 @@ static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc,
 	return 0;
 }
 
-static int null_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
+static co_io_job null_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 		int tag)
 {
 	ubdsrv_mark_io_done(io, 0);
 
-	return 0;
+	/* commit and re-fetch to ubd driver */
+	ubdsrv_queue_io_cmd(q, tag);
+
+	co_io_job_return();
 }
 
 static int null_prepare_io(struct ubdsrv_tgt_info *tgt)
