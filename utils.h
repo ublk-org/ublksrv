@@ -1,6 +1,9 @@
 #ifndef UBDSRV_UTILS_INC
 #define UBDSRV_UTILS_INC
 
+#include <coroutine>
+#include <iostream>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,5 +64,72 @@ int create_pid_file(const char *pidFile, int flags, int *pid_fd);
 #ifdef __cplusplus
 }
 #endif
+
+/* For using C++20 coroutine */
+/*
+ * Due to the use of std::cout, the member functions await_ready,
+ * await_suspend, and await_resume cannot be declared as constexpr.
+ */
+struct ubd_suspend_always {
+    bool await_ready() const noexcept {
+        return false;
+    }
+    void await_suspend(std::coroutine_handle<>) const noexcept {
+    }
+    void await_resume() const noexcept {
+    }
+};
+
+/*
+ * When you don't resume the Awaitable such as the coroutine object returned
+ * by the member function final_suspend, the function await_resume is not
+ * processed. In contrast, the Awaitable's ubd_suspend_never the function is
+ * immediately ready because await_ready returns true and, hence, does
+ * not suspend.
+ */
+struct ubd_suspend_never {
+    bool await_ready() const noexcept {
+        return true;
+    }
+    void await_suspend(std::coroutine_handle<>) const noexcept {
+    }
+    void await_resume() const noexcept {
+    }
+};
+
+using co_handle_type = std::coroutine_handle<>;
+struct co_io_job {
+    struct promise_type {
+        co_io_job get_return_object() {
+            return {std::coroutine_handle<promise_type>::from_promise(*this)};
+        }
+        ubd_suspend_never initial_suspend() {
+            return {};
+        }
+        ubd_suspend_never final_suspend() noexcept {
+            return {};
+        }
+        void return_void() {}
+        void unhandled_exception() {}
+    };
+
+    co_handle_type coro;
+
+    co_io_job(co_handle_type h): coro(h){}
+
+    void resume() {
+        coro.resume();
+    }
+
+    operator co_handle_type() const { return coro; }
+};
+
+#define co_io_job_submit_and_wait() do {		\
+	co_await ubd_suspend_always();			\
+} while (0)
+
+#define co_io_job_return() do {		\
+	co_return;			\
+} while (0)
 
 #endif

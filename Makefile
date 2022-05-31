@@ -1,5 +1,5 @@
 CC = g++
-CFLAGS = -g -O2 -D_GNU_SOURCE -MMD -I /root/git/liburing/src/include/
+CFLAGS = -g -O2 -D_GNU_SOURCE -MMD -fcoroutines -std=c++20 -I /root/git/liburing/src/include/
 LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
 
 %.o : %.c
