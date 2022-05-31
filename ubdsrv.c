@@ -92,6 +92,8 @@ static int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
 
 	io->flags &= ~(UBDSRV_IO_FREE | UBDSRV_NEED_COMMIT_RQ_COMP);
 
+	q->cmd_inflight += 1;
+
 	ubdsrv_log(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
 			__func__, q->q_id, tag, cmd_op,
 			io->flags, q->stopping);
@@ -107,17 +109,10 @@ static int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
 static void ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
 {
 	unsigned cnt = 0;
-	int i = 0, ret = 0;
+	int i = 0;
 
-	for (i = 0; i < q->q_depth; i++) {
-		ret = ubdsrv_queue_io_cmd(q, i);
-		if (ret < 0)
-			break;
-		cnt += ret;
-	}
-
-	if (cnt > 0)
-		q->cmd_inflight += cnt;
+	for (i = 0; i < q->q_depth; i++)
+		ubdsrv_queue_io_cmd(q, i);
 }
 
 static int ubdsrv_queue_is_done(struct ubdsrv_queue *q)
