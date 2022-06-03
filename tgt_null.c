@@ -20,7 +20,9 @@ static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc,
 static co_io_job null_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 		int tag)
 {
-	ubdsrv_mark_io_done(io, 0);
+	const struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
+
+	ubdsrv_mark_io_done(io, iod->nr_sectors << 9);
 
 	/* commit and re-fetch to ubd driver */
 	ubdsrv_queue_io_cmd(q, tag);
