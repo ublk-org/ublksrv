@@ -137,8 +137,8 @@ static int loop_queue_tgt_io(struct ubdsrv_queue *q, struct ubd_io *io,
 
 	q->tgt_io_inflight += 1;
 
-	ubdsrv_log(LOG_INFO, "%s: ubd io %x %llx %u\n", __func__,
-			iod->op_flags, iod->start_sector, iod->nr_sectors);
+	ubdsrv_log(LOG_INFO, "%s: tag %d ubd io %x %llx %u\n", __func__, tag,
+			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
 	ubdsrv_log(LOG_INFO, "%s: queue io op %d(%llu %llx %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx) iof %x\n",
 			__func__, io_op, sqe->off, sqe->len, sqe->addr,
@@ -152,6 +152,8 @@ static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 {
 	struct io_uring_cqe *cqe;
 	int ret;
+
+	io->queued_tgt_io = 0;
  again:
 	ret = loop_queue_tgt_io(q, io, tag);
 	if (ret) {
