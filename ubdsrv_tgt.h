@@ -60,6 +60,11 @@ struct ubdsrv_tgt_type {
 	const char *name;
 	int (*init_tgt)(struct ubdsrv_tgt_info *, int type, int argc,
 			char *argv[]);
+	/*
+	 * c++20 coroutine is stackless, and can't be nested, so any
+	 * functions called from ->handle_io_async can't be defined as
+	 * coroutine, and please keep it in mind.
+	 */
 	co_io_job (*handle_io_async)(struct ubdsrv_queue *, struct ubd_io *, int tag);
 
 	int (*prepare_io)(struct ubdsrv_tgt_info *);

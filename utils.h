@@ -124,6 +124,10 @@ struct co_io_job {
     operator co_handle_type() const { return coro; }
 };
 
+/*
+ * c++20 is stackless coroutine, and can't handle nested coroutine, so
+ * the following two have to be defined as macro
+ */
 #define co_io_job_submit_and_wait() do {		\
 	co_await ubd_suspend_always();			\
 } while (0)
