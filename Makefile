@@ -2,7 +2,7 @@ CC = g++
 CFLAGS = -g -O2 -D_GNU_SOURCE -MMD -fcoroutines -std=c++20 -I /root/git/liburing/src/include/
 LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
 
-%.o : %.c
+%.o : %.c Makefile
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
