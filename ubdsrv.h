@@ -32,6 +32,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <dirent.h>
+#include <sys/prctl.h>
 
 #include "liburing.h"
 

@@ -313,6 +313,9 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 
 	ubdsrv_init_io_cmds(dev, q);
 
+	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
+		syslog(LOG_INFO, "ubd dev %d queue %d set_io_flusher failed",
+			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 
 	return q;
  fail:
