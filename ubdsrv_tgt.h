@@ -47,7 +47,6 @@ enum {
 };
 
 struct ubdsrv_tgt_info_loop {
-	int backing_fd;
 	char backing_file[1024];
 };
 
