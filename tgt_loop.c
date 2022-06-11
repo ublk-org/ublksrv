@@ -179,7 +179,8 @@ static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 	}
 }
 
-static int loop_prepare_target(struct ubdsrv_tgt_info *tgt)
+static int loop_prepare_target(struct ubdsrv_tgt_info *tgt,
+		struct ubdsrv_dev *dev)
 {
 	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
 			struct ubdsrv_ctrl_dev, tgt);

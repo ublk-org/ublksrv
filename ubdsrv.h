@@ -136,11 +136,12 @@ struct ubdsrv_queue {
 
 struct ubdsrv_dev {
 	struct ubdsrv_ctrl_dev	*ctrl_dev;
-	int cdev_fd;
+	void	*target_data;
 
 	struct ubdsrv_queue *__queues[MAX_NR_HW_QUEUES];
 	char	*io_buf_start;
 	pthread_t *thread;
+	int cdev_fd;
 };
 
 static inline struct ubdsrv_io_desc *ubdsrv_get_iod(struct ubdsrv_queue *q, int tag)

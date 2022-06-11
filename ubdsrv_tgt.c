@@ -41,13 +41,13 @@ int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, int argc, char
  * Called in ubd daemon process context, and before creating per-queue
  * thread context
  */
-int ubdsrv_prepare_target(struct ubdsrv_tgt_info *tgt)
+int ubdsrv_prepare_target(struct ubdsrv_tgt_info *tgt, struct ubdsrv_dev *dev)
 {
 	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
 			struct ubdsrv_ctrl_dev, tgt);
 
 	if (tgt->ops->prepare_target)
-		return tgt->ops->prepare_target(tgt);
+		return tgt->ops->prepare_target(tgt, dev);
 
 	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
 		UBDSRV_SHM_SIZE - cdev->shm_offset,

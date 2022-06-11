@@ -74,7 +74,7 @@ struct ubdsrv_tgt_type {
 	 * Usually, tgt code can setup output for list command; meantime
 	 * prepare for handling io, or all kinds of things.
 	 */
-	int (*prepare_target)(struct ubdsrv_tgt_info *);
+	int (*prepare_target)(struct ubdsrv_tgt_info *, struct ubdsrv_dev *);
 
 	void (*usage_for_add)(void);
 };
@@ -114,7 +114,7 @@ static inline unsigned ubdsrv_convert_cmd_op(const struct ubdsrv_io_desc *iod)
 int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type,
 		int argc, char *argv[]);
 int ubdsrv_register_tgt_type(struct ubdsrv_tgt_type *type);
-int ubdsrv_prepare_target(struct ubdsrv_tgt_info *tgt);
+int ubdsrv_prepare_target(struct ubdsrv_tgt_info *tgt, struct ubdsrv_dev *dev);
 void ubdsrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 			const struct ubdsrv_tgt_type *type, void *data),
 		void *data);
