@@ -179,10 +179,16 @@ static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 	}
 }
 
-static int loop_list(struct ubdsrv_tgt_info *tgt)
+static int loop_prepare_target(struct ubdsrv_tgt_info *tgt)
 {
 	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
 			struct ubdsrv_ctrl_dev, tgt);
+	int ret;
+
+	ret = loop_prepare_io(tgt);
+
+	if (ret)
+		return ret;
 
 	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
 			UBDSRV_SHM_SIZE - cdev->shm_offset,
@@ -196,9 +202,8 @@ struct ubdsrv_tgt_type  loop_tgt_type = {
 	.name	=  "loop",
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
-	.prepare_io	=  loop_prepare_io,
+	.prepare_target	=  loop_prepare_target,
 	.usage_for_add	=  loop_usage_for_add,
-	.list_tgt	=  loop_list,
 };
 
 static void tgt_loop_init() __attribute__((constructor));

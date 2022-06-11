@@ -30,9 +30,16 @@ static co_io_job null_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
 	co_io_job_return();
 }
 
-static int null_prepare_io(struct ubdsrv_tgt_info *tgt)
+static int null_prepare_target(struct ubdsrv_tgt_info *tgt)
 {
+	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
+			struct ubdsrv_ctrl_dev, tgt);
+
 	tgt->nr_fds = 0;
+
+	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
+			UBDSRV_SHM_SIZE - cdev->shm_offset,
+			"target type: %s\n", tgt->ops->name);
 
 	return 0;
 }
@@ -42,7 +49,7 @@ struct ubdsrv_tgt_type  null_tgt_type = {
 	.name	=  "null",
 	.init_tgt = null_init_tgt,
 	.handle_io_async = null_handle_io_async,
-	.prepare_io	=  null_prepare_io,
+	.prepare_target	=  null_prepare_target,
 };
 
 static void tgt_null_init() __attribute__((constructor));

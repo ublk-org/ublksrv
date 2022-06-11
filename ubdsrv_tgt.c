@@ -37,20 +37,21 @@ int ubdsrv_tgt_init(struct ubdsrv_tgt_info *tgt, char *type, int argc, char
 	return -1;
 }
 
-int ubdsrv_prepare_io(struct ubdsrv_tgt_info *tgt)
+/*
+ * Called in ubd daemon process context, and before creating per-queue
+ * thread context
+ */
+int ubdsrv_prepare_target(struct ubdsrv_tgt_info *tgt)
 {
 	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
 			struct ubdsrv_ctrl_dev, tgt);
 
-	if (tgt->ops->list_tgt)
-		tgt->ops->list_tgt(tgt);
-	else
-		cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
-			UBDSRV_SHM_SIZE - cdev->shm_offset,
-			"target type: %s\n", tgt->ops->name);
+	if (tgt->ops->prepare_target)
+		return tgt->ops->prepare_target(tgt);
 
-	if (tgt->ops->prepare_io)
-		return tgt->ops->prepare_io(tgt);
+	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
+		UBDSRV_SHM_SIZE - cdev->shm_offset,
+		"target type: %s\n", tgt->ops->name);
 
 	return 0;
 }

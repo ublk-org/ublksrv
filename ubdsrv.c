@@ -396,7 +396,7 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 		goto fail;
 
 	ret = -1;
-	if (ubdsrv_prepare_io(&dev->ctrl_dev->tgt) < 0)
+	if (ubdsrv_prepare_target(&dev->ctrl_dev->tgt) < 0)
 		goto fail;
 
 	dev->thread = (pthread_t *)calloc(sizeof(pthread_t),
