@@ -76,6 +76,8 @@ struct ubdsrv_tgt_type {
 	int (*prepare_target)(struct ubdsrv_tgt_info *, struct ubdsrv_dev *);
 
 	void (*usage_for_add)(void);
+
+	void (*deinit_tgt)(struct ubdsrv_tgt_info *, struct ubdsrv_dev *);
 };
 
 struct ubdsrv_tgt_info {
@@ -117,13 +119,6 @@ int ubdsrv_prepare_target(struct ubdsrv_tgt_info *tgt, struct ubdsrv_dev *dev);
 void ubdsrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 			const struct ubdsrv_tgt_type *type, void *data),
 		void *data);
-
-static inline void ubdsrv_tgt_exit(struct ubdsrv_tgt_info *tgt)
-{
-	int i;
-
-	for (i = 1; i < tgt->nr_fds; i++)
-		close(tgt->fds[i]);
-}
+void ubdsrv_tgt_deinit(struct ubdsrv_tgt_info *tgt, struct ubdsrv_dev *dev);
 
 #endif

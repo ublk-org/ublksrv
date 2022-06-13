@@ -336,7 +336,7 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 		close(dev->ctrl_dev->shm_fd);
 	}
 
-	ubdsrv_tgt_exit(&dev->ctrl_dev->tgt);
+	ubdsrv_tgt_deinit(&dev->ctrl_dev->tgt, dev);
 	free(dev->thread);
 
 	if (dev->cdev_fd >= 0) {

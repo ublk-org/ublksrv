@@ -73,3 +73,18 @@ void ubdsrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 	}
 }
 
+static inline void ubdsrv_tgt_exit(struct ubdsrv_tgt_info *tgt)
+{
+	int i;
+
+	for (i = 1; i < tgt->nr_fds; i++)
+		close(tgt->fds[i]);
+}
+
+void ubdsrv_tgt_deinit(struct ubdsrv_tgt_info *tgt, struct ubdsrv_dev *dev)
+{
+	ubdsrv_tgt_exit(tgt);
+
+	if (tgt->ops->deinit_tgt)
+		tgt->ops->deinit_tgt(tgt, dev);
+}
