@@ -166,7 +166,7 @@ static inline bool ubdsrv_io_done(struct ubd_io *io)
 	return io->flags & UBDSRV_IO_FREE;
 }
 
-static inline struct ubdsrv_queue *ubdsrv_get_queue(struct ubdsrv_dev *dev,
+static inline struct ubdsrv_queue *ubdsrv_get_queue(const struct ubdsrv_dev *dev,
 		int q_id)
 {
 	return dev->__queues[q_id];
