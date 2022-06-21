@@ -17,10 +17,10 @@ static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc,
 	return 0;
 }
 
-static co_io_job null_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
-		int tag)
+static co_io_job null_handle_io_async(struct ubdsrv_queue *q, int tag)
 {
 	const struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
+	struct ubd_io *io = &q->ios[tag];
 
 	ubdsrv_mark_io_done(io, iod->nr_sectors << 9);
 

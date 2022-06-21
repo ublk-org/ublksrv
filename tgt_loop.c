@@ -147,9 +147,9 @@ static int loop_queue_tgt_io(struct ubdsrv_queue *q, struct ubd_io *io,
 	return 1;
 }
 
-static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, struct ubd_io *io,
-		int tag)
+static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, int tag)
 {
+	struct ubd_io *io = &q->ios[tag];
 	struct io_uring_cqe *cqe;
 	int ret;
 

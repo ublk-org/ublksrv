@@ -64,7 +64,7 @@ struct ubdsrv_tgt_type {
 	 * functions called from ->handle_io_async can't be defined as
 	 * coroutine, and please keep it in mind.
 	 */
-	co_io_job (*handle_io_async)(struct ubdsrv_queue *, struct ubd_io *, int tag);
+	co_io_job (*handle_io_async)(struct ubdsrv_queue *, int tag);
 
 	/*
 	 * Called in daemon task context, and before starting per-queue
