@@ -66,6 +66,8 @@ struct ubdsrv_tgt_type {
 	 */
 	co_io_job (*handle_io_async)(struct ubdsrv_queue *, int tag);
 
+	void (*tgt_io_done)(struct ubdsrv_queue *, struct io_uring_cqe *);
+
 	/*
 	 * Called in daemon task context, and before starting per-queue
 	 * thread.

@@ -179,6 +179,22 @@ static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, int tag)
 	}
 }
 
+static void loop_tgt_io_done(struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
+{
+	int tag = user_data_to_tag(cqe->user_data);
+	struct ubd_io *io = &q->ios[tag];
+
+	if (!ubdsrv_io_done(io)) {
+		if (!io->queued_tgt_io)
+			syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
+				__func__, cqe->res, q->q_id,
+				user_data_to_tag(cqe->user_data),
+				user_data_to_op(cqe->user_data));
+		io->tgt_io_cqe = cqe;
+		io->co.resume();
+	}
+}
+
 static int loop_prepare_target(struct ubdsrv_tgt_info *tgt,
 		struct ubdsrv_dev *dev)
 {
@@ -203,6 +219,7 @@ struct ubdsrv_tgt_type  loop_tgt_type = {
 	.name	=  "loop",
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
+	.tgt_io_done = loop_tgt_io_done,
 	.prepare_target	=  loop_prepare_target,
 	.usage_for_add	=  loop_usage_for_add,
 };

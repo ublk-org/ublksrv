@@ -428,15 +428,8 @@ static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
 			user_data_to_op(cqe->user_data));
 	}
 
-	if (!ubdsrv_io_done(io)) {
-		if (!io->queued_tgt_io)
-			syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
-				__func__, cqe->res, q->q_id,
-				user_data_to_tag(cqe->user_data),
-				user_data_to_op(cqe->user_data));
-		io->tgt_io_cqe = cqe;
-		io->co.resume();
-	}
+	if (tgt->ops->tgt_io_done)
+		tgt->ops->tgt_io_done(q, cqe);
 }
 
 static void ubdsrv_handle_cqe(struct io_uring *r,
