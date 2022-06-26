@@ -414,11 +414,11 @@ fail:
 	return ret;
 }
 
+/* Be careful, target io may not have one ubd_io associated with  */
 static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
 	struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
-	struct ubd_io *io = &q->ios[tag];
 
 	q->tgt_io_inflight -= 1;
 	if (cqe->res < 0 && cqe->res != -EAGAIN) {
@@ -442,17 +442,19 @@ static void ubdsrv_handle_cqe(struct io_uring *r,
 	unsigned tag = user_data_to_tag(cqe->user_data);
 	unsigned cmd_op = user_data_to_op(cqe->user_data);
 	int fetch = (cqe->res != UBD_IO_RES_ABORT) && !q->stopping;
-	struct ubd_io *io = &q->ios[tag];
+	struct ubd_io *io;
 
-	ubdsrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d) iof %x stopping %d\n",
+	ubdsrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d) stopping %d\n",
 			__func__, cqe->res, q->q_id, tag, cmd_op,
-			is_target_io(cqe->user_data), io->flags, q->stopping);
+			is_target_io(cqe->user_data), q->stopping);
 
+	/* Don't retrieve io in case of target io */
 	if (is_target_io(cqe->user_data)) {
 		ubdsrv_handle_tgt_cqe(tgt, q, cqe);
 		return;
 	}
 
+	io = &q->ios[tag];
 	q->cmd_inflight--;
 
 	if (!fetch) {
