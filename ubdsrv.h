@@ -178,9 +178,11 @@ static inline int is_target_io(__u64 user_data)
 }
 
 static inline __u64 build_user_data(unsigned tag, unsigned op,
-		unsigned is_target_io)
+		unsigned tgt_data, unsigned is_target_io)
 {
-	return tag | (op << 16) | (__u64)is_target_io << 63;
+	assert(!(tag >> 16) && !(op >> 8) && !(tgt_data >> 16));
+
+	return tag | (op << 16) | (tgt_data << 24) | (__u64)is_target_io << 63;
 }
 
 static inline unsigned int user_data_to_tag(__u64 user_data)
@@ -190,7 +192,12 @@ static inline unsigned int user_data_to_tag(__u64 user_data)
 
 static inline unsigned int user_data_to_op(__u64 user_data)
 {
-	return (user_data >> 16) & 0xffff;
+	return (user_data >> 16) & 0xff;
+}
+
+static inline unsigned int user_data_to_tgt_data(__u64 user_data)
+{
+	return (user_data >> 24) & 0xffff;
 }
 
 int ubdsrv_start_io_daemon(struct ubdsrv_ctrl_dev *dev);

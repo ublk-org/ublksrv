@@ -118,7 +118,7 @@ static int loop_queue_tgt_io(struct ubdsrv_queue *q, struct ubd_io *io,
 
 	/* bit63 marks us as tgt io */
 	sqe->flags = IOSQE_FIXED_FILE;
-	sqe->user_data = build_user_data(tag, io_op, 1);
+	sqe->user_data = build_user_data(tag, io_op, 0, 1);
 	sqe->fd = 1;
 	sqe->opcode = io_op;
 	switch (io_op) {

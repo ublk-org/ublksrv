@@ -87,7 +87,7 @@ int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
 	cmd->addr	= (__u64)io->buf_addr;
 	cmd->q_id	= q->q_id;
 
-	user_data = build_user_data(tag, cmd_op, 0);
+	user_data = build_user_data(tag, cmd_op, 0, 0);
 	io_uring_sqe_set_data64(sqe, user_data);
 
 	io->flags &= ~(UBDSRV_IO_FREE | UBDSRV_NEED_COMMIT_RQ_COMP);
