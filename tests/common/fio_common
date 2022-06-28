@@ -214,7 +214,7 @@ __create_ublk_dev()
 		truncate -s 2G $file
 	fi
 
-	eval $UBLK add -t $ublk_type -q $nr_queues -f $file > /dev/null 2>&1
+	eval $UBLK add -t $ublk_type -q $nr_queues -d 128 -f $file > /dev/null 2>&1
 }
 
 __remove_kernel_loop_dev() {
