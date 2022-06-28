@@ -1,9 +1,9 @@
-#include "ubdsrv.h"
+#include "ublksrv.h"
 
 #define CTRL_CMD_HAS_DATA	1
 #define CTRL_CMD_HAS_BUF	2
 
-struct ubdsrv_ctrl_cmd_data {
+struct ublksrv_ctrl_cmd_data {
 	unsigned short cmd_op;
 	unsigned short flags;
 
@@ -34,12 +34,12 @@ static char *pop_cmd(int *argc, char *argv[])
 
 
 /*******************ctrl dev operation ********************************/
-static inline void ubdsrv_ctrl_init_cmd(struct ubdsrv_ctrl_dev *dev,
+static inline void ublksrv_ctrl_init_cmd(struct ublksrv_ctrl_dev *dev,
 		struct io_uring_sqe *sqe,
-		struct ubdsrv_ctrl_cmd_data *data)
+		struct ublksrv_ctrl_cmd_data *data)
 {
-	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
-	struct ubdsrv_ctrl_cmd *cmd = (struct ubdsrv_ctrl_cmd *)ubdsrv_get_sqe_cmd(sqe);
+	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
+	struct ublksrv_ctrl_cmd *cmd = (struct ublksrv_ctrl_cmd *)ublksrv_get_sqe_cmd(sqe);
 
 	sqe->fd = ctrl_fd;
 	sqe->opcode = IORING_OP_URING_CMD;
@@ -57,16 +57,16 @@ static inline void ubdsrv_ctrl_init_cmd(struct ubdsrv_ctrl_dev *dev,
 	cmd->dev_id = info->dev_id;
 	cmd->queue_id = -1;
 
-	ubdsrv_set_sqe_cmd_op(sqe, data->cmd_op);
+	ublksrv_set_sqe_cmd_op(sqe, data->cmd_op);
 
 	io_uring_sqe_set_data(sqe, cmd);
 
-	ubdsrv_printf(stdout, "dev %d cmd_op %u, user_data %llx\n",
+	ublksrv_printf(stdout, "dev %d cmd_op %u, user_data %llx\n",
 			dev->dev_info.dev_id, data->cmd_op, cmd);
 }
 
-static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
-		struct ubdsrv_ctrl_cmd_data *data)
+static int __ublksrv_ctrl_cmd(struct ublksrv_ctrl_dev *dev,
+		struct ublksrv_ctrl_cmd_data *data)
 {
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
@@ -78,7 +78,7 @@ static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
 		return ret;
 	}
 
-	ubdsrv_ctrl_init_cmd(dev, sqe, data);
+	ublksrv_ctrl_init_cmd(dev, sqe, data);
 
 	ret = io_uring_submit(&dev->ring);
 	if (ret < 0) {
@@ -93,7 +93,7 @@ static int __ubdsrv_ctrl_cmd(struct ubdsrv_ctrl_dev *dev,
 	}
 	io_uring_cqe_seen(&dev->ring, cqe);
 
-	ubdsrv_printf(stdout, "dev %d, ctrl cqe res %d, user_data %llx\n",
+	ublksrv_printf(stdout, "dev %d, ctrl cqe res %d, user_data %llx\n",
 			dev->dev_info.dev_id, cqe->res, cqe->user_data);
 	return cqe->res;
 }
@@ -107,16 +107,16 @@ static void setup_ctrl_dev()
 	}
 }
 
-static void ubdsrv_dev_deinit(struct ubdsrv_ctrl_dev *dev)
+static void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev)
 {
 	close(dev->ring.ring_fd);
 	free(dev);
 }
 
-static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
+static struct ublksrv_ctrl_dev *ublksrv_dev_init(int dev_id, bool zcopy)
 {
-	struct ubdsrv_ctrl_dev *dev = (struct ubdsrv_ctrl_dev *)malloc(sizeof(*dev));
-	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
+	struct ublksrv_ctrl_dev *dev = (struct ublksrv_ctrl_dev *)malloc(sizeof(*dev));
+	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 	int ret;
 
 	if (!dev)
@@ -124,11 +124,11 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 
 	memset(dev, 0, sizeof(*dev));
 	if (zcopy)
-		dev->dev_info.flags[0] |= (1ULL << UBD_F_SUPPORT_ZERO_COPY);
+		dev->dev_info.flags[0] |= (1ULL << UBLK_F_SUPPORT_ZERO_COPY);
 	else
-		dev->dev_info.flags[0] &= ~(1ULL << UBD_F_SUPPORT_ZERO_COPY);
+		dev->dev_info.flags[0] &= ~(1ULL << UBLK_F_SUPPORT_ZERO_COPY);
 
-	/* -1 means we ask ubd driver to allocate one free to us */
+	/* -1 means we ask ublk driver to allocate one free to us */
 	info->dev_id = dev_id;
 	info->nr_hw_queues = DEF_NR_HW_QUEUES;
 	info->queue_depth = DEF_QD;
@@ -137,7 +137,7 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 	info->rq_max_blocks = DEF_BUF_SIZE / info->block_size;
 
 	/* 32 is enough to send ctrl commands */
-	ret = ubdsrv_setup_ring(32, &dev->ring, IORING_SETUP_SQE128);
+	ret = ublksrv_setup_ring(32, &dev->ring, IORING_SETUP_SQE128);
 	if (ret < 0) {
 		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
 		free(dev);
@@ -150,10 +150,10 @@ static struct ubdsrv_ctrl_dev *ubdsrv_dev_init(int dev_id, bool zcopy)
 }
 
 /* queues_cpuset is only used for setting up queue pthread daemon */
-static int ubdsrv_get_affinity(struct ubdsrv_ctrl_dev *ctrl_dev)
+static int ublksrv_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op	= UBD_CMD_GET_QUEUE_AFFINITY,
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_GET_QUEUE_AFFINITY,
 		.flags	= CTRL_CMD_HAS_DATA | CTRL_CMD_HAS_BUF,
 	};
 	cpu_set_t *sets;
@@ -168,7 +168,7 @@ static int ubdsrv_get_affinity(struct ubdsrv_ctrl_dev *ctrl_dev)
 		data.addr = (__u64)&sets[i];
 		data.len = sizeof(cpu_set_t);
 
-		if (__ubdsrv_ctrl_cmd(ctrl_dev, &data) < 0) {
+		if (__ublksrv_ctrl_cmd(ctrl_dev, &data) < 0) {
 			free(sets);
 			return -1;
 		}
@@ -187,44 +187,44 @@ static int ubdsrv_get_affinity(struct ubdsrv_ctrl_dev *ctrl_dev)
 }
 
 /*
- * Start the ubdsrv device:
+ * Start the ublksrv device:
  *
  * 1) fork a daemon for handling IO command from driver
  *
  * 2) wait for the device becoming ready: the daemon should submit
- * sqes to /dev/ubdcN, just like usb's urb usage, each request needs
- * one sqe. If one IO request comes to kernel driver of /dev/ubdbN,
+ * sqes to /dev/ublkcN, just like usb's urb usage, each request needs
+ * one sqe. If one IO request comes to kernel driver of /dev/ublkbN,
  * the sqe for this request is completed, and the daemon gets notified.
  * When every io request of driver gets its own sqe queued, we think
- * /dev/ubdbN is ready to start
+ * /dev/ublkbN is ready to start
  *
  * 3) in current process context, sent START_DEV command to
- * /dev/ubd-control with device id, which will cause ubd driver to
- * expose /dev/ubdbN
+ * /dev/ublk-control with device id, which will cause ublk driver to
+ * expose /dev/ublkbN
  */
-static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
+static int ublksrv_start_dev(struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op	= UBD_CMD_START_DEV,
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_START_DEV,
 		.flags	= CTRL_CMD_HAS_DATA,
 	};
 	int cnt = 0, daemon_pid;
 	int ret;
 
-	if (ubdsrv_get_affinity(ctrl_dev) < 0)
+	if (ublksrv_get_affinity(ctrl_dev) < 0)
 		return -1;
 
 	switch (fork()) {
 	case -1:
 		return -1;
 	case 0:
-		ubdsrv_start_io_daemon(ctrl_dev);
+		ublksrv_start_io_daemon(ctrl_dev);
 		break;
 	}
 
 	/* wait until daemon is started, or timeout after 3 seconds */
 	do {
-		daemon_pid = ubdsrv_get_io_daemon_pid(ctrl_dev);
+		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev);
 		if (daemon_pid < 0) {
 			usleep(100000);
 			cnt++;
@@ -234,8 +234,8 @@ static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
 	if (daemon_pid < 0)
 		return -1;
 
-	ctrl_dev->dev_info.ubdsrv_pid = data.data = daemon_pid;
-	ret = __ubdsrv_ctrl_cmd(ctrl_dev, &data);
+	ctrl_dev->dev_info.ublksrv_pid = data.data = daemon_pid;
+	ret = __ublksrv_ctrl_cmd(ctrl_dev, &data);
 
 	/* disk is added now, so queue cpusets can be freed */
 	free(ctrl_dev->queues_cpuset);
@@ -246,81 +246,81 @@ static int ubdsrv_start_dev(struct ubdsrv_ctrl_dev *ctrl_dev)
 }
 
 /*
- * Stop the ubdsrv device:
+ * Stop the ublksrv device:
  *
- * 1) send STOP_DEV command to /dev/ubd-control with device id provided
+ * 1) send STOP_DEV command to /dev/ublk-control with device id provided
  *
- * 2) ubd driver gets this command, freeze /dev/ubdbN, then complete all
+ * 2) ublk driver gets this command, freeze /dev/ublkbN, then complete all
  * pending seq, meantime tell the daemon via cqe->res to not submit sqe
- * any more, since we are being closed. Also delete /dev/ubdbN.
+ * any more, since we are being closed. Also delete /dev/ublkbN.
  *
- * 3) the ubd daemon figures out that all sqes are completed, and free,
- * then close /dev/ubdcN and exit itself.
+ * 3) the ublk daemon figures out that all sqes are completed, and free,
+ * then close /dev/ublkcN and exit itself.
  */
 
-static int ubdsrv_add_dev(struct ubdsrv_ctrl_dev *dev)
+static int ublksrv_add_dev(struct ublksrv_ctrl_dev *dev)
 {
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op	= UBD_CMD_ADD_DEV,
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_ADD_DEV,
 		.flags	= CTRL_CMD_HAS_BUF,
 		.addr = (__u64)&dev->dev_info,
-		.len = sizeof(struct ubdsrv_ctrl_dev_info),
+		.len = sizeof(struct ublksrv_ctrl_dev_info),
 	};
 
-	return __ubdsrv_ctrl_cmd(dev, &data);
+	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
-static int ubdsrv_del_dev(struct ubdsrv_ctrl_dev *dev)
+static int ublksrv_del_dev(struct ublksrv_ctrl_dev *dev)
 {
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op = UBD_CMD_DEL_DEV,
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op = UBLK_CMD_DEL_DEV,
 		.flags = 0,
 	};
 
-	return __ubdsrv_ctrl_cmd(dev, &data);
+	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
-static int ubdsrv_get_dev_info(struct ubdsrv_ctrl_dev *dev)
+static int ublksrv_get_dev_info(struct ublksrv_ctrl_dev *dev)
 {
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op	= UBD_CMD_GET_DEV_INFO,
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_GET_DEV_INFO,
 		.flags	= CTRL_CMD_HAS_BUF,
 		.addr = (__u64)&dev->dev_info,
-		.len = sizeof(struct ubdsrv_ctrl_dev_info),
+		.len = sizeof(struct ublksrv_ctrl_dev_info),
 	};
 
-	return __ubdsrv_ctrl_cmd(dev, &data);
+	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
-static int ubdsrv_stop_dev(struct ubdsrv_ctrl_dev *dev)
+static int ublksrv_stop_dev(struct ublksrv_ctrl_dev *dev)
 {
-	struct ubdsrv_ctrl_cmd_data data = {
-		.cmd_op	= UBD_CMD_STOP_DEV,
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_STOP_DEV,
 	};
 	int ret;
 
-	ret = __ubdsrv_ctrl_cmd(dev, &data);
+	ret = __ublksrv_ctrl_cmd(dev, &data);
 	if (ret)
 		return ret;
 
-	return ubdsrv_stop_io_daemon(dev);
+	return ublksrv_stop_io_daemon(dev);
 }
 
-static const char *ubdsrv_dev_state_desc(struct ubdsrv_ctrl_dev *dev)
+static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 {
 	switch (dev->dev_info.state) {
-	case UBD_S_DEV_DEAD:
+	case UBLK_S_DEV_DEAD:
 		return "DEAD";
-	case UBD_S_DEV_LIVE:
+	case UBLK_S_DEV_LIVE:
 		return "LIVE";
 	default:
 		return "UNKNOWN";
 	};
 }
 
-static void ubdsrv_dump(struct ubdsrv_ctrl_dev *dev)
+static void ublksrv_dump(struct ublksrv_ctrl_dev *dev)
 {
-	struct ubdsrv_ctrl_dev_info *info = &dev->dev_info;
+	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 	int fd;
 	char buf[64];
 	void *addr;
@@ -331,14 +331,14 @@ static void ubdsrv_dump(struct ubdsrv_ctrl_dev *dev)
                         info->block_size, info->dev_blocks);
 	printf("\tmax rq size %d daemon pid %d flags %lx state %s\n",
                         info->block_size * info->rq_max_blocks,
-			info->ubdsrv_pid, info->flags[0],
-			ubdsrv_dev_state_desc(dev));
+			info->ublksrv_pid, info->flags[0],
+			ublksrv_dev_state_desc(dev));
 
-	snprintf(buf, 64, "%s_%d", UBDSRV_SHM_DIR, info->ubdsrv_pid);
+	snprintf(buf, 64, "%s_%d", UBLKSRV_SHM_DIR, info->ublksrv_pid);
 	fd = shm_open(buf, O_RDONLY, 0);
 	if (fd <= 0)
 		return;
-	addr = mmap(NULL, UBDSRV_SHM_SIZE, PROT_READ, MAP_SHARED, fd, 0);
+	addr = mmap(NULL, UBLKSRV_SHM_SIZE, PROT_READ, MAP_SHARED, fd, 0);
 	printf("\t%s\n", addr);
 }
 
@@ -352,7 +352,7 @@ int cmd_dev_add(int argc, char *argv[])
 		{ "zero_copy",		1,	NULL, 'z' },
 		{ NULL }
 	};
-	struct ubdsrv_ctrl_dev *dev;
+	struct ublksrv_ctrl_dev *dev;
 	int number = -1;
 	char *type = NULL;
 	unsigned int queues = 0;
@@ -382,32 +382,32 @@ int cmd_dev_add(int argc, char *argv[])
 
 	setup_ctrl_dev();
 
-	dev = ubdsrv_dev_init(number, zcopy);
+	dev = ublksrv_dev_init(number, zcopy);
 	if (queues && queues <= MAX_NR_HW_QUEUES)
 		dev->dev_info.nr_hw_queues = queues;
 	if (depth && depth <= MAX_QD)
 		dev->dev_info.queue_depth = depth;
 
 	optind = 0;	/* so that tgt code can parse their arguments */
-	if (ubdsrv_tgt_init(&dev->tgt, type, argc, argv))
+	if (ublksrv_tgt_init(&dev->tgt, type, argc, argv))
 		die("usbsrv: target init failed\n");
 
-	ret = ubdsrv_add_dev(dev);
+	ret = ublksrv_add_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "can't add dev %d\n", number);
 		goto fail;
 	}
 
-	ret = ubdsrv_start_dev(dev);
+	ret = ublksrv_start_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "start dev failed %d\n", number);
-		ubdsrv_del_dev(dev);
+		ublksrv_del_dev(dev);
 		goto fail;
 	}
-	ret = ubdsrv_get_dev_info(dev);
-	ubdsrv_dump(dev);
+	ret = ublksrv_get_dev_info(dev);
+	ublksrv_dump(dev);
  fail:
-	ubdsrv_dev_deinit(dev);
+	ublksrv_dev_deinit(dev);
 
 	return ret;
 }
@@ -418,7 +418,7 @@ struct tgt_types_name {
 };
 
 static void collect_tgt_types(unsigned int idx,
-		const struct ubdsrv_tgt_type *type, void *pdata)
+		const struct ublksrv_tgt_type *type, void *pdata)
 {
 	struct tgt_types_name *data = (struct tgt_types_name *)pdata;
 
@@ -430,7 +430,7 @@ static void collect_tgt_types(unsigned int idx,
 }
 
 static void show_tgt_add_usage(unsigned int idx,
-		const struct ubdsrv_tgt_type *type, void *data)
+		const struct ublksrv_tgt_type *type, void *data)
 {
 	if (type->usage_for_add)
 		type->usage_for_add();
@@ -443,41 +443,41 @@ static void cmd_dev_add_usage(char *cmd)
 	};
 
 	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "{");
-	ubdsrv_for_each_tgt_type(collect_tgt_types, &data);
+	ublksrv_for_each_tgt_type(collect_tgt_types, &data);
 	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "}");
 
 	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n", cmd, data.names);
-	ubdsrv_for_each_tgt_type(show_tgt_add_usage, NULL);
+	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
 
 static int __cmd_dev_del(int number, bool log)
 {
-	struct ubdsrv_ctrl_dev *dev;
+	struct ublksrv_ctrl_dev *dev;
 	int ret;
 
-	dev = ubdsrv_dev_init(number, false);
+	dev = ublksrv_dev_init(number, false);
 
-	ret = ubdsrv_get_dev_info(dev);
+	ret = ublksrv_get_dev_info(dev);
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
 		goto fail;
 	}
 
-	ret = ubdsrv_stop_dev(dev);
+	ret = ublksrv_stop_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "stop dev %d failed\n", number);
 		goto fail;
 	}
 
-	ret = ubdsrv_del_dev(dev);
+	ret = ublksrv_del_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "delete dev %d failed\n", number);
 		goto fail;
 	}
 
 fail:
-	ubdsrv_dev_deinit(dev);
+	ublksrv_dev_deinit(dev);
 	return ret;
 }
 
@@ -488,7 +488,7 @@ int cmd_dev_del(int argc, char *argv[])
 		{ "all",		0,	NULL, 'a' },
 		{ NULL }
 	};
-	struct ubdsrv_ctrl_dev *dev;
+	struct ublksrv_ctrl_dev *dev;
 	int number = -1;
 	int opt, ret, i;
 
@@ -508,7 +508,7 @@ int cmd_dev_del(int argc, char *argv[])
 	if (number >= 0)
 		return __cmd_dev_del(number, true);
 
-	for (i = 0; i < MAX_NR_UBD_DEVS; i++)
+	for (i = 0; i < MAX_NR_UBLK_DEVS; i++)
 		ret = __cmd_dev_del(i, false);
 
 	return ret;
@@ -521,17 +521,17 @@ static void cmd_dev_del_usage(char *cmd)
 
 static int list_one_dev(int number, bool log)
 {
-	struct ubdsrv_ctrl_dev *dev = ubdsrv_dev_init(number, false);
+	struct ublksrv_ctrl_dev *dev = ublksrv_dev_init(number, false);
 	int ret;
 
-	ret = ubdsrv_get_dev_info(dev);
+	ret = ublksrv_get_dev_info(dev);
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
 	} else
-		ubdsrv_dump(dev);
+		ublksrv_dump(dev);
 
-	ubdsrv_dev_deinit(dev);
+	ublksrv_dev_deinit(dev);
 
 	return ret;
 }
@@ -542,7 +542,7 @@ int cmd_list_dev_info(int argc, char *argv[])
 		{ "number",		0,	NULL, 'n' },
 		{ NULL }
 	};
-	struct ubdsrv_ctrl_dev *dev;
+	struct ublksrv_ctrl_dev *dev;
 	int number = -1;
 	int opt, ret, i;
 
@@ -560,7 +560,7 @@ int cmd_list_dev_info(int argc, char *argv[])
 	if (number >= 0)
 		return list_one_dev(number, true);
 
-	for (i = 0; i < MAX_NR_UBD_DEVS; i++)
+	for (i = 0; i < MAX_NR_UBLK_DEVS; i++)
 		list_one_dev(i, false);
 
 	return ret;
@@ -597,7 +597,7 @@ int main(int argc, char *argv[])
 		cmd_dev_list_usage(exe);
 	}
 
-	ubdsrv_printf(stdout, "cmd %s: result %d\n", cmd, ret);
+	ublksrv_printf(stdout, "cmd %s: result %d\n", cmd, ret);
 
 	return ret;
 }

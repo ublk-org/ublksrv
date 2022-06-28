@@ -4,12 +4,12 @@ DIR=$(cd "$(dirname "$0")";pwd)
 
 #. $DIR/common/fio_common
 
-export UBD=${DIR}/../ubd
+export UBLK=${DIR}/../ublk
 export TEST_DIR=$DIR
-export UBD_TMP_DIR=$DIR/tmp
-export UBD_TMP=`mktemp /tmp/ubd_tmp_XXXXX`
+export UBLK_TMP_DIR=$DIR/tmp
+export UBLK_TMP=`mktemp /tmp/ublk_tmp_XXXXX`
 
-[ ! -d ${UBD_TMP_DIR} ] && mkdir ${UBD_TMP_DIR}
+[ ! -d ${UBLK_TMP_DIR} ] && mkdir ${UBLK_TMP_DIR}
 
 run_test() {
 	TS=$1
@@ -34,4 +34,4 @@ elif [ -f $TEST ]; then
 		run_test $TEST
 fi
 
-rm -f ${UBD_TMP}
+rm -f ${UBLK_TMP}

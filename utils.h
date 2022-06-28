@@ -1,5 +1,5 @@
-#ifndef UBDSRV_UTILS_INC
-#define UBDSRV_UTILS_INC
+#ifndef UBLKSRV_UTILS_INC
+#define UBLKSRV_UTILS_INC
 
 #include <coroutine>
 #include <iostream>
@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #ifdef DEBUG
-static inline void ubdsrv_log(int priority, const char *fmt, ...)
+static inline void ublksrv_log(int priority, const char *fmt, ...)
 {
     va_list ap;
 
@@ -17,7 +17,7 @@ static inline void ubdsrv_log(int priority, const char *fmt, ...)
     vsyslog(priority, fmt, ap);
 }
 
-static inline void ubdsrv_printf(FILE *stream, const char *fmt, ...)
+static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
 {
     va_list ap;
 
@@ -25,8 +25,8 @@ static inline void ubdsrv_printf(FILE *stream, const char *fmt, ...)
     vfprintf(stream, fmt, ap);
 }
 #else
-static inline void ubdsrv_log(int priority, const char *fmt, ...) { }
-static inline void ubdsrv_printf(FILE *stream, const char *fmt, ...) {}
+static inline void ublksrv_log(int priority, const char *fmt, ...) { }
+static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
 #endif
 
 static inline unsigned ilog2(unsigned x)
@@ -70,7 +70,7 @@ int create_pid_file(const char *pidFile, int flags, int *pid_fd);
  * Due to the use of std::cout, the member functions await_ready,
  * await_suspend, and await_resume cannot be declared as constexpr.
  */
-struct ubd_suspend_always {
+struct ublk_suspend_always {
     bool await_ready() const noexcept {
         return false;
     }
@@ -83,11 +83,11 @@ struct ubd_suspend_always {
 /*
  * When you don't resume the Awaitable such as the coroutine object returned
  * by the member function final_suspend, the function await_resume is not
- * processed. In contrast, the Awaitable's ubd_suspend_never the function is
+ * processed. In contrast, the Awaitable's ublk_suspend_never the function is
  * immediately ready because await_ready returns true and, hence, does
  * not suspend.
  */
-struct ubd_suspend_never {
+struct ublk_suspend_never {
     bool await_ready() const noexcept {
         return true;
     }
@@ -103,10 +103,10 @@ struct co_io_job {
         co_io_job get_return_object() {
             return {std::coroutine_handle<promise_type>::from_promise(*this)};
         }
-        ubd_suspend_never initial_suspend() {
+        ublk_suspend_never initial_suspend() {
             return {};
         }
-        ubd_suspend_never final_suspend() noexcept {
+        ublk_suspend_never final_suspend() noexcept {
             return {};
         }
         void return_void() {}
@@ -129,7 +129,7 @@ struct co_io_job {
  * the following two have to be defined as macro
  */
 #define co_io_job_submit_and_wait() do {		\
-	co_await ubd_suspend_always();			\
+	co_await ublk_suspend_always();			\
 } while (0)
 
 #define co_io_job_return() do {		\

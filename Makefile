@@ -7,29 +7,29 @@ LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
 
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 
-UBDSRV_OBJS = ubdsrv_cmd.o ubdsrv.o utils.o ubdsrv_tgt.o tgt_null.o tgt_loop.o
-UBDSRV_PROGS = ubd
+UBLKSRV_OBJS = ublksrv_cmd.o ublksrv.o utils.o ublksrv_tgt.o tgt_null.o tgt_loop.o
+UBLKSRV_PROGS = ublk
 
 R = 10
 
-all:$(UBDSRV_PROGS)
+all:$(UBLKSRV_PROGS)
 
--include $(UBDSRV_OBJS:%.o=%.d)
+-include $(UBLKSRV_OBJS:%.o=%.d)
 
-$(UBDSRV_PROGS): $(UBDSRV_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(UBDSRV_OBJS) $(LIBS)
+$(UBLKSRV_PROGS): $(UBLKSRV_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(UBLKSRV_OBJS) $(LIBS)
 
 .PHONY: clean test test_all cscope
 clean:
-	rm -f  $(UBDSRV_PROGS) $(UBDSRV_OBJS)
+	rm -f  $(UBLKSRV_PROGS) $(UBLKSRV_OBJS)
 	rm -f *~ *.d
 	make -s -C ${TOP_DIR}tests clean
 	rm -f cscope.*
 
-test: $(UBDSRV_PROGS)
+test: $(UBLKSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run T=${T} R=${R}
 
-test_all: $(UBDSRV_PROGS)
+test_all: $(UBLKSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run_test_all R=${R}
 
 cscope:

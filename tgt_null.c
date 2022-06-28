@@ -1,12 +1,12 @@
-#include "ubdsrv.h"
+#include "ublksrv.h"
 
-static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc,
+static int null_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc,
 		char *argv[])
 {
-	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
-			struct ubdsrv_ctrl_dev, tgt);
+	struct ublksrv_ctrl_dev *cdev = container_of(tgt,
+			struct ublksrv_ctrl_dev, tgt);
 
-	if (type != UBDSRV_TGT_TYPE_NULL)
+	if (type != UBLKSRV_TGT_TYPE_NULL)
 		return -1;
 
 	tgt->dev_size = 250UL * 1024 * 1024 * 1024;
@@ -17,36 +17,36 @@ static int null_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc,
 	return 0;
 }
 
-static co_io_job null_handle_io_async(struct ubdsrv_queue *q, int tag)
+static co_io_job null_handle_io_async(struct ublksrv_queue *q, int tag)
 {
-	const struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
-	struct ubd_io *io = &q->ios[tag];
+	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
+	struct ublk_io *io = &q->ios[tag];
 
-	ubdsrv_mark_io_done(io, iod->nr_sectors << 9);
+	ublksrv_mark_io_done(io, iod->nr_sectors << 9);
 
-	/* commit and re-fetch to ubd driver */
-	ubdsrv_queue_io_cmd(q, tag);
+	/* commit and re-fetch to ublk driver */
+	ublksrv_queue_io_cmd(q, tag);
 
 	co_io_job_return();
 }
 
-static int null_prepare_target(struct ubdsrv_tgt_info *tgt,
-		struct ubdsrv_dev *dev)
+static int null_prepare_target(struct ublksrv_tgt_info *tgt,
+		struct ublksrv_dev *dev)
 {
-	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
-			struct ubdsrv_ctrl_dev, tgt);
+	struct ublksrv_ctrl_dev *cdev = container_of(tgt,
+			struct ublksrv_ctrl_dev, tgt);
 
 	tgt->nr_fds = 0;
 
 	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
-			UBDSRV_SHM_SIZE - cdev->shm_offset,
+			UBLKSRV_SHM_SIZE - cdev->shm_offset,
 			"target type: %s\n", tgt->ops->name);
 
 	return 0;
 }
 
-struct ubdsrv_tgt_type  null_tgt_type = {
-	.type	= UBDSRV_TGT_TYPE_NULL,
+struct ublksrv_tgt_type  null_tgt_type = {
+	.type	= UBLKSRV_TGT_TYPE_NULL,
 	.name	=  "null",
 	.init_tgt = null_init_tgt,
 	.handle_io_async = null_handle_io_async,
@@ -57,6 +57,6 @@ static void tgt_null_init() __attribute__((constructor));
 
 static void tgt_null_init(void)
 {
-	ubdsrv_register_tgt_type(&null_tgt_type);
+	ublksrv_register_tgt_type(&null_tgt_type);
 }
 

@@ -1,20 +1,20 @@
-#include "ubdsrv.h"
+#include "ublksrv.h"
 
-static int loop_init_tgt(struct ubdsrv_tgt_info *tgt, int type, int argc, char
+static int loop_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc, char
 		*argv[])
 {
 	static const struct option lo_longopts[] = {
 		{ "file",		1,	NULL, 'f' },
 		{ NULL }
 	};
-	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
-			struct ubdsrv_ctrl_dev, tgt);
+	struct ublksrv_ctrl_dev *cdev = container_of(tgt,
+			struct ublksrv_ctrl_dev, tgt);
 	unsigned long long bytes;
 	struct stat st;
 	int fd, opt;
 	char *file = NULL;
 
-	if (type != UBDSRV_TGT_TYPE_LOOP)
+	if (type != UBLKSRV_TGT_TYPE_LOOP)
 		return -1;
 
 	while ((opt = getopt_long(argc, argv, "-:f:",
@@ -64,7 +64,7 @@ static void loop_usage_for_add(void)
 	printf("           loop: -f backing_file\n");
 }
 
-static int loop_prepare_io(struct ubdsrv_tgt_info *tgt)
+static int loop_prepare_io(struct ublksrv_tgt_info *tgt)
 {
 	const char *file = tgt->loop.backing_file;
 	int fd;
@@ -83,19 +83,19 @@ static int loop_prepare_io(struct ubdsrv_tgt_info *tgt)
 }
 
 static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
-		const struct ubdsrv_io_desc *iod)
+		const struct ublksrv_io_desc *iod)
 {
-	__u16 ubd_op = ubdsrv_get_op(iod);
-	__u32 flags = ubdsrv_get_flags(iod);
+	__u16 ublk_op = ublksrv_get_op(iod);
+	__u32 flags = ublksrv_get_flags(iod);
 	__u32 mode = FALLOC_FL_KEEP_SIZE;
 
 	sqe->addr = iod->nr_sectors << 9;
 
 	/* follow logic of linux kernel loop */
-	if (ubd_op == UBD_IO_OP_DISCARD) {
+	if (ublk_op == UBLK_IO_OP_DISCARD) {
 		mode |= FALLOC_FL_PUNCH_HOLE;
-	} else if (ubd_op == UBD_IO_OP_WRITE_ZEROES) {
-		if (flags & UBD_IO_F_NOUNMAP)
+	} else if (ublk_op == UBLK_IO_OP_WRITE_ZEROES) {
+		if (flags & UBLK_IO_F_NOUNMAP)
 			mode |= FALLOC_FL_ZERO_RANGE;
 		else
 			mode |= FALLOC_FL_PUNCH_HOLE;
@@ -105,11 +105,11 @@ static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
 	sqe->len = mode;
 }
 
-static int loop_queue_tgt_io(struct ubdsrv_queue *q, struct ubd_io *io,
+static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
 		int tag)
 {
-	const struct ubdsrv_io_desc *iod = ubdsrv_get_iod(q, tag);
-	unsigned io_op = ubdsrv_convert_cmd_op(iod);
+	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
+	unsigned io_op = ublksrv_convert_cmd_op(iod);
 	struct io_uring_sqe *sqe;
 
 	sqe = io_uring_get_sqe(&q->ring);
@@ -137,9 +137,9 @@ static int loop_queue_tgt_io(struct ubdsrv_queue *q, struct ubd_io *io,
 
 	q->tgt_io_inflight += 1;
 
-	ubdsrv_log(LOG_INFO, "%s: tag %d ubd io %x %llx %u\n", __func__, tag,
+	ublksrv_log(LOG_INFO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
-	ubdsrv_log(LOG_INFO, "%s: queue io op %d(%llu %llx %llx)"
+	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %llx %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx) iof %x\n",
 			__func__, io_op, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, io_op, 1, sqe->user_data, io->flags);
@@ -147,9 +147,9 @@ static int loop_queue_tgt_io(struct ubdsrv_queue *q, struct ubd_io *io,
 	return 1;
 }
 
-static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, int tag)
+static co_io_job loop_handle_io_async(struct ublksrv_queue *q, int tag)
 {
-	struct ubd_io *io = &q->ios[tag];
+	struct ublk_io *io = &q->ios[tag];
 	struct io_uring_cqe *cqe;
 	int ret;
 
@@ -158,7 +158,7 @@ static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, int tag)
 	ret = loop_queue_tgt_io(q, io, tag);
 	if (ret) {
 		if (io->queued_tgt_io)
-			ubdsrv_log(LOG_INFO, "bad queued_tgt_io %d\n",
+			ublksrv_log(LOG_INFO, "bad queued_tgt_io %d\n",
 					io->queued_tgt_io);
 		io->queued_tgt_io += 1;
 
@@ -170,21 +170,21 @@ static co_io_job loop_handle_io_async(struct ubdsrv_queue *q, int tag)
 			goto again;
 
 		/* all target io is done, so this io command is completed */
-		ubdsrv_mark_io_done(io, cqe->res);
+		ublksrv_mark_io_done(io, cqe->res);
 
-		/* commit and re-fetch to ubd driver */
-		ubdsrv_queue_io_cmd(q, tag);
+		/* commit and re-fetch to ublk driver */
+		ublksrv_queue_io_cmd(q, tag);
 	} else {
-		ubdsrv_log(LOG_INFO, "no sqe %d\n", tag);
+		ublksrv_log(LOG_INFO, "no sqe %d\n", tag);
 	}
 }
 
-static void loop_tgt_io_done(struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
+static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 {
 	int tag = user_data_to_tag(cqe->user_data);
-	struct ubd_io *io = &q->ios[tag];
+	struct ublk_io *io = &q->ios[tag];
 
-	if (!ubdsrv_io_done(io)) {
+	if (!ublksrv_io_done(io)) {
 		if (!io->queued_tgt_io)
 			syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
 				__func__, cqe->res, q->q_id,
@@ -195,11 +195,11 @@ static void loop_tgt_io_done(struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
 	}
 }
 
-static int loop_prepare_target(struct ubdsrv_tgt_info *tgt,
-		struct ubdsrv_dev *dev)
+static int loop_prepare_target(struct ublksrv_tgt_info *tgt,
+		struct ublksrv_dev *dev)
 {
-	struct ubdsrv_ctrl_dev *cdev = container_of(tgt,
-			struct ubdsrv_ctrl_dev, tgt);
+	struct ublksrv_ctrl_dev *cdev = container_of(tgt,
+			struct ublksrv_ctrl_dev, tgt);
 	int ret;
 
 	ret = loop_prepare_io(tgt);
@@ -208,14 +208,14 @@ static int loop_prepare_target(struct ubdsrv_tgt_info *tgt,
 		return ret;
 
 	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
-			UBDSRV_SHM_SIZE - cdev->shm_offset,
+			UBLKSRV_SHM_SIZE - cdev->shm_offset,
 			"target type: %s backing file: %s\n",
 			tgt->ops->name, tgt->loop.backing_file);
 	return 0;
 }
 
-struct ubdsrv_tgt_type  loop_tgt_type = {
-	.type	= UBDSRV_TGT_TYPE_LOOP,
+struct ublksrv_tgt_type  loop_tgt_type = {
+	.type	= UBLKSRV_TGT_TYPE_LOOP,
 	.name	=  "loop",
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
@@ -228,5 +228,5 @@ static void tgt_loop_init() __attribute__((constructor));
 
 static void tgt_loop_init(void)
 {
-	ubdsrv_register_tgt_type(&loop_tgt_type);
+	ublksrv_register_tgt_type(&loop_tgt_type);
 }

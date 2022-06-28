@@ -1,97 +1,97 @@
-Userspace block driver(ubd)
+Userspace block driver(ublk)
 
 1 Introduction
 
-This is the userspace daemon part(ubdsrv) of the ubd framework, the other
-part is ubd blk-mq block driver[1] which supports multiple queue.
+This is the userspace daemon part(ublksrv) of the ublk framework, the other
+part is ublk blk-mq block driver[1] which supports multiple queue.
 
 The two parts communicate by io_uring's IORING_OP_URING_CMD with one
 per-queue shared cmd buffer for storing io command, and the buffer is
-read only for ubdsrv, each io command can be indexed by io request tag
-directly, and the command is written by ubd driver, and read by ubdsrv
-after getting notification from ubd driver.
+read only for ublksrv, each io command can be indexed by io request tag
+directly, and the command is written by ublk driver, and read by ublksrv
+after getting notification from ublk driver.
 
-For example, when one READ io request is submitted to ubd block driver, ubd
+For example, when one READ io request is submitted to ublk block driver, ublk
 driver stores the io command into cmd buffer first, then completes one
-IORING_OP_URING_CMD for notifying ubdsrv, and the URING_CMD is issued to
-ubd driver beforehand by ubdsrv for getting notification of any new io
+IORING_OP_URING_CMD for notifying ublksrv, and the URING_CMD is issued to
+ublk driver beforehand by ublksrv for getting notification of any new io
 request, and each URING_CMD is associated with one io request by tag,
-so depth for URING_CMD is same with queue depth of ubd block device.
+so depth for URING_CMD is same with queue depth of ublk block device.
 
-After ubdsrv gets the io command, it translates and handles the ubd io
-request, such as, for the ubd-loop target, ubdsrv translates the request
+After ublksrv gets the io command, it translates and handles the ublk io
+request, such as, for the ublk-loop target, ublksrv translates the request
 into same request on another file or disk, like the kernel loop block
-driver. In ubdsrv's implementation, the io is still handled by io_uring,
+driver. In ublksrv's implementation, the io is still handled by io_uring,
 and share same ring with IORING_OP_URING_CMD command. When the target io
-request is done, the same IORING_OP_URING_CMD is issued to ubd driver for
+request is done, the same IORING_OP_URING_CMD is issued to ublk driver for
 both committing io request result and getting future notification of new
 io request.
 
-So far, the ubd driver needs to copy io request pages into userspace buffer
-(pages) first for write before notifying the request to ubdsrv, and copy
-userspace buffer(pages) to the io request pages after ubdsrv handles
+So far, the ublk driver needs to copy io request pages into userspace buffer
+(pages) first for write before notifying the request to ublksrv, and copy
+userspace buffer(pages) to the io request pages after ublksrv handles
 READ. Also looks linux-mm can't support zero copy for this case yet[3].
 
-More ubd targets will be added with this framework in future even though only
-ubd-loop and ubd-null are implemented now.
+More ublk targets will be added with this framework in future even though only
+ublk-loop and ublk-null are implemented now.
 
 2 Quick start
 
-1) how to build ubdsrv:
-- cd ubdsrv
+1) how to build ublksrv:
+- cd ublksrv
 - make
 
 2) help
-- ubd help
+- ublk help
 
-3) add one ubd-null disk
-- ubd add -t null
+3) add one ublk-null disk
+- ublk add -t null
 
-4) add one ubd-loop disk
-- ubd add -t loop -f /dev/vdb
+4) add one ublk-loop disk
+- ublk add -t loop -f /dev/vdb
 or
-- ubd add -t loop -f 1.img
+- ublk add -t loop -f 1.img
 
-5) remove one ubd disk
-- ubd del -n 0		#remove /dev/ubdb0
-- ubd del -a		#remove all ubd devices
+5) remove one ublk disk
+- ublk del -n 0		#remove /dev/ublkb0
+- ublk del -a		#remove all ublk devices
 
-6) list ubd devices
-- ubd list
+6) list ublk devices
+- ublk list
 
-3 remove ubd devices before shutdown
+3 remove ublk devices before shutdown
 
 During shutdown or reboot, the distribution may call reboot syscall after
-killing application tasks. When ubdsrv daemon is killed(by SIGKILL maybe),
-both ubdsrv and ubd driver can't get notified, then the daemon may hang
-when canceling io_uring requests in do_exit(). So far ubdsrv has one builtin
-monitor for checking if ubdsrv daemon is dead, and the period is 5s. Without
+killing application tasks. When ublksrv daemon is killed(by SIGKILL maybe),
+both ublksrv and ublk driver can't get notified, then the daemon may hang
+when canceling io_uring requests in do_exit(). So far ublksrv has one builtin
+monitor for checking if ublksrv daemon is dead, and the period is 5s. Without
 the following systemd service script, system may take at most 5 seconds for
-removing ubd device during shutdown or reboot.
+removing ublk device during shutdown or reboot.
 
-So far, one approach is to delete ubd device before shutdown is started, such
+So far, one approach is to delete ublk device before shutdown is started, such
 as in case of systemd, the following approach can avoid the issue:
 
 1) write one systemd service script:
-cat /etc/systemd/system/delete-ubd-before-shutdown.service
+cat /etc/systemd/system/delete-ublk-before-shutdown.service
 
 	[Unit]
-	Description=Remove ubd device at shutdown
+	Description=Remove ublk device at shutdown
 	DefaultDependencies=no
 	Before=shutdown.target
 
 	[Service]
 	Type=oneshot
-	ExecStart=ubd del -a
+	ExecStart=ublk del -a
 	TimeoutStartSec=0
 
 	[Install]
 	WantedBy=shutdown.target
 
-2) start/enable the service of delete-ubd-before-shutdown:
+2) start/enable the service of delete-ublk-before-shutdown:
 
 systemctl daemon-reload
-systemctl enable delete-ubd-before-shutdown.service
+systemctl enable delete-ublk-before-shutdown.service
 
 4 build
 

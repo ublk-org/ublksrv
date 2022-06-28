@@ -2,9 +2,9 @@
 
 . common/fio_common
 
-echo -e "\trun fio with delete ubd-loop test"
+echo -e "\trun fio with delete ublk-loop test"
 
-DEV=/dev/ubdb0
+DEV=/dev/ublkb0
 BS=4k
 RW=rw
 JOBS=4
@@ -14,15 +14,15 @@ LOOPS=10
 
 CNT=0
 while [ $CNT -lt $LOOPS ]; do
-	__create_ubd_dev "loop" $QUEUES
-	echo -e "\trun fio on ubd with delete $CNT"
-	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+	__create_ublk_dev "loop" $QUEUES
+	echo -e "\trun fio on ublk with delete $CNT"
+	__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 	sleep 4
-	RES=`__remove_ubd_dev_return 0`
+	RES=`__remove_ublk_dev_return 0`
 	if [ $RES -ne 0 ]; then
-			echo -e "\tdelete ubd0 failed"
-			ps -eLf | grep ubd
-			(cd /sys/kernel/debug/block/ubdb0 && find . -type f -exec grep -aH . {} \;)
+			echo -e "\tdelete ublk0 failed"
+			ps -eLf | grep ublk
+			(cd /sys/kernel/debug/block/ublkb0 && find . -type f -exec grep -aH . {} \;)
 			break
 	fi
 	wait 

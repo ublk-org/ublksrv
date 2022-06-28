@@ -4,7 +4,7 @@
 
 echo -e "\trun fio with kill ubq_deamon"
 
-DEV=/dev/ubdb0
+DEV=/dev/ublkb0
 BS=4k
 RW=rw
 JOBS=4
@@ -14,24 +14,24 @@ LOOPS=10
 
 CNT=0
 while [ $CNT -lt $LOOPS ]; do
-	__create_ubd_dev "null" $QUEUES
+	__create_ublk_dev "null" $QUEUES
 	echo -e "\trun fio with killing queue daemon $CNT"
-	__run_fio_libaio "/dev/ubdb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+	__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 	sleep 2
-	queue_tid=`__ubd_get_queue_tid 0`
+	queue_tid=`__ublk_get_queue_tid 0`
 	kill -9 $queue_tid
 	sleep 2
 	secs=0
 	while [ $secs -lt 10 ]; do
-		state=`__ubd_get_dev_state 0`
+		state=`__ublk_get_dev_state 0`
 		[ "$state" == "DEAD" ] && break
 		sleep 1
 		let secs++
 	done
 	[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
-	RES=`__remove_ubd_dev_return 0`
+	RES=`__remove_ublk_dev_return 0`
 	if [ $RES -ne 0 ]; then
-			echo -e "\tdelete ubd0 failed"
+			echo -e "\tdelete ublk0 failed"
 			exit -1
 	fi
 	wait

@@ -1,5 +1,5 @@
-#ifndef UBDSRV_INC_H
-#define UBDSRV_INC_H
+#ifndef UBLKSRV_INC_H
+#define UBLKSRV_INC_H
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -42,12 +42,12 @@
 extern "C" {
 #endif
 
-#include "ubd_cmd.h"
-#include "ubdsrv_tgt.h"
+#include "ublk_cmd.h"
+#include "ublksrv_tgt.h"
 
-#define MAX_NR_UBD_DEVS	128
+#define MAX_NR_UBLK_DEVS	128
 
-#define	CTRL_DEV	"/dev/ubd-control"
+#define	CTRL_DEV	"/dev/ublk-control"
 #define	MAX_NR_HW_QUEUES 32
 #define	MAX_QD		1024
 #define	MAX_BUF_SIZE	(1024 << 10)
@@ -56,21 +56,21 @@ extern "C" {
 #define	DEF_QD		256
 #define	DEF_BUF_SIZE	(512 << 10)
 
-#define UBDSRV_PID_FILE  "/var/run/ubdsrvd"
+#define UBLKSRV_PID_FILE  "/var/run/ublksrvd"
 
-#define UBDC_DEV	"/dev/ubdc"
+#define UBLKC_DEV	"/dev/ublkc"
 
-#define UBDSRV_SHM_DIR	"ubdsrv"
+#define UBLKSRV_SHM_DIR	"ublksrv"
 
-#define UBDSRV_SHM_SIZE  1024
+#define UBLKSRV_SHM_SIZE  1024
 
-struct ubdsrv_ctrl_dev {
+struct ublksrv_ctrl_dev {
 	struct io_uring ring;
 
 	unsigned bs_shift;
-	struct ubdsrv_ctrl_dev_info  dev_info;
+	struct ublksrv_ctrl_dev_info  dev_info;
 
-	struct ubdsrv_tgt_info tgt;
+	struct ublksrv_tgt_info tgt;
 
 	int shm_fd;
 	char *shm_addr;
@@ -81,12 +81,12 @@ struct ubdsrv_ctrl_dev {
 	unsigned short *q_id;
 };
 
-struct ubd_io {
+struct ublk_io {
 	char *buf_addr;
 
-#define UBDSRV_NEED_FETCH_RQ		(1UL << 0)
-#define UBDSRV_NEED_COMMIT_RQ_COMP	(1UL << 1)
-#define UBDSRV_IO_FREE			(1UL << 2)
+#define UBLKSRV_NEED_FETCH_RQ		(1UL << 0)
+#define UBLKSRV_NEED_COMMIT_RQ_COMP	(1UL << 1)
+#define UBLKSRV_IO_FREE			(1UL << 2)
 	unsigned int flags;
 
 	union {
@@ -100,17 +100,17 @@ struct ubd_io {
 	co_handle_type co;
 };
 
-struct ubdsrv_queue {
+struct ublksrv_queue {
 	int q_id;
 	int q_depth;
 
 	/*
-	 * Read only by ubdsrv daemon, setup via mmap on /dev/ubdcN.
+	 * Read only by ublksrv daemon, setup via mmap on /dev/ublkcN.
 	 *
-	 * ubdsrv_io_desc(iod) is stored in this buffer, so iod
+	 * ublksrv_io_desc(iod) is stored in this buffer, so iod
 	 * can be retrieved by request's tag directly.
 	 * 
-	 * ubdsrv writes the iod into this array, and notify ubdsrv daemon
+	 * ublksrv writes the iod into this array, and notify ublksrv daemon
 	 * by issued io_uring command beforehand.
 	 * */
 	char *io_cmd_buf;
@@ -120,8 +120,8 @@ struct ubdsrv_queue {
 	unsigned short stopping;
 
 	/*
-	 * ring for submit io command to ubd driver, can only be issued
-	 * from ubdsrv daemon.
+	 * ring for submit io command to ublk driver, can only be issued
+	 * from ublksrv daemon.
 	 *
 	 * ring depth == dev_info->queue_depth.
 	 */
@@ -129,44 +129,44 @@ struct ubdsrv_queue {
 
 	cpu_set_t cpuset;
 	unsigned  tid;
-	struct ubdsrv_dev *dev;
+	struct ublksrv_dev *dev;
 
-	struct ubd_io ios[0];
+	struct ublk_io ios[0];
 };
 
-struct ubdsrv_dev {
-	struct ubdsrv_ctrl_dev	*ctrl_dev;
+struct ublksrv_dev {
+	struct ublksrv_ctrl_dev	*ctrl_dev;
 	void	*target_data;
 
-	struct ubdsrv_queue *__queues[MAX_NR_HW_QUEUES];
+	struct ublksrv_queue *__queues[MAX_NR_HW_QUEUES];
 	char	*io_buf_start;
 	pthread_t *thread;
 	int cdev_fd;
 };
 
-static inline struct ubdsrv_io_desc *ubdsrv_get_iod(struct ubdsrv_queue *q, int tag)
+static inline struct ublksrv_io_desc *ublksrv_get_iod(struct ublksrv_queue *q, int tag)
 {
-        return (struct ubdsrv_io_desc *)
-                &(q->io_cmd_buf[tag * sizeof(struct ubdsrv_io_desc)]);
+        return (struct ublksrv_io_desc *)
+                &(q->io_cmd_buf[tag * sizeof(struct ublksrv_io_desc)]);
 }
 
-static inline void ubdsrv_mark_io_done(struct ubd_io *io, int res)
+static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
 {
 	/*
 	 * mark io done by target, so that ->ubq_daemon can commit its
 	 * result and fetch new request via io_uring command.
 	 */
-	io->flags |= (UBDSRV_NEED_COMMIT_RQ_COMP | UBDSRV_IO_FREE);
+	io->flags |= (UBLKSRV_NEED_COMMIT_RQ_COMP | UBLKSRV_IO_FREE);
 
 	io->result = res;
 }
 
-static inline bool ubdsrv_io_done(struct ubd_io *io)
+static inline bool ublksrv_io_done(struct ublk_io *io)
 {
-	return io->flags & UBDSRV_IO_FREE;
+	return io->flags & UBLKSRV_IO_FREE;
 }
 
-static inline struct ubdsrv_queue *ubdsrv_get_queue(const struct ubdsrv_dev *dev,
+static inline struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id)
 {
 	return dev->__queues[q_id];
@@ -200,12 +200,12 @@ static inline unsigned int user_data_to_tgt_data(__u64 user_data)
 	return (user_data >> 24) & 0xffff;
 }
 
-int ubdsrv_start_io_daemon(struct ubdsrv_ctrl_dev *dev);
-int ubdsrv_stop_io_daemon(struct ubdsrv_ctrl_dev *dev);
-int ubdsrv_get_io_daemon_pid(struct ubdsrv_ctrl_dev *ctrl_dev);
+int ublksrv_start_io_daemon(struct ublksrv_ctrl_dev *dev);
+int ublksrv_stop_io_daemon(struct ublksrv_ctrl_dev *dev);
+int ublksrv_get_io_daemon_pid(struct ublksrv_ctrl_dev *ctrl_dev);
 
 /* two helpers for setting up io_uring */
-static inline int ubdsrv_setup_ring(int depth, struct io_uring *r,
+static inline int ublksrv_setup_ring(int depth, struct io_uring *r,
 		unsigned flags)
 {
 	struct io_uring_params p;
@@ -217,7 +217,7 @@ static inline int ubdsrv_setup_ring(int depth, struct io_uring *r,
         return io_uring_queue_init_params(depth, r, &p);
 }
 
-static inline struct io_uring_sqe *ubdsrv_uring_get_sqe(struct io_uring *r,
+static inline struct io_uring_sqe *ublksrv_uring_get_sqe(struct io_uring *r,
 		int idx, bool is_sqe128)
 {
 	if (is_sqe128)
@@ -225,19 +225,19 @@ static inline struct io_uring_sqe *ubdsrv_uring_get_sqe(struct io_uring *r,
 	return  &r->sq.sqes[idx];
 }
 
-static inline void *ubdsrv_get_sqe_cmd(struct io_uring_sqe *sqe)
+static inline void *ublksrv_get_sqe_cmd(struct io_uring_sqe *sqe)
 {
 	return (void *)&sqe->addr3;
 }
 
-static inline void ubdsrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op)
+static inline void ublksrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op)
 {
 	__u32 *addr = (__u32 *)&sqe->off;
 
 	*addr = cmd_op;
 }
 
-extern int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag);
+extern int ublksrv_queue_io_cmd(struct ublksrv_queue *q, unsigned tag);
 
 #ifdef __cplusplus
 }

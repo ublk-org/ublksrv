@@ -1,63 +1,63 @@
-#include "ubdsrv.h"
+#include "ublksrv.h"
 
 /*
- * /dev/ubdbN shares same lifetime with the ubd io daemon:
+ * /dev/ublkbN shares same lifetime with the ublk io daemon:
  *
- * 1) IO from /dev/ubdbN is handled by the io daemon directly
+ * 1) IO from /dev/ublkbN is handled by the io daemon directly
  *
- * 2) io cmd buffer is allocated from ubd driver, mapped to
+ * 2) io cmd buffer is allocated from ublk driver, mapped to
  * io daemon vm space via mmap, and each hw queue has its own
  * io cmd buffer
  *
  * 3) io buffers are pre-allocated from the io daemon and pass
- * to ubd driver via io command, meantime ubd driver may choose
+ * to ublk driver via io command, meantime ublk driver may choose
  * to pin these user pages before starting device
  *
- * Each /dev/ubdcN is owned by only one io daemon, and can't be
+ * Each /dev/ublkcN is owned by only one io daemon, and can't be
  * opened by other daemon. And the io daemon uses its allocated
- * io_uring to communicate with ubd driver.
+ * io_uring to communicate with ublk driver.
  *
- * For each request of /dev/ubdbN, the io daemon submits one
- * sqe for both fetching IO from ubd driver and commiting IO result
- * to ubd driver, and the io daemon has to issue all sqes
- * to /dev/ubdcN before sending START_DEV to /dev/udc-control.
+ * For each request of /dev/ublkbN, the io daemon submits one
+ * sqe for both fetching IO from ublk driver and commiting IO result
+ * to ublk driver, and the io daemon has to issue all sqes
+ * to /dev/ublkcN before sending START_DEV to /dev/udc-control.
  *
  * After STOP_DEV is sent to /dev/udc-control, udc driver needs
  * to freeze the request queue, and completes all pending sqes,
  * meantime tell the io daemon via cqe->res that don't issue seq
- * any more, also delete /dev/ubdbN.  After io daemon figures out
+ * any more, also delete /dev/ublkbN.  After io daemon figures out
  * all sqes have been free, exit itself. Then STOP_DEV returns.
  */
 
-struct ubdsrv_dev this_dev;
-static sig_atomic_t volatile ubdsrv_stop = 0;
+struct ublksrv_dev this_dev;
+static sig_atomic_t volatile ublksrv_stop = 0;
 
-static void *ubdsrv_io_handler_fn(void *data);
+static void *ublksrv_io_handler_fn(void *data);
 
-int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
+int ublksrv_queue_io_cmd(struct ublksrv_queue *q, unsigned tag)
 {
-	struct ubd_io *io = &q->ios[tag];
-	struct ubdsrv_io_cmd *cmd;
+	struct ublk_io *io = &q->ios[tag];
+	struct ublksrv_io_cmd *cmd;
 	struct io_uring_sqe *sqe;
 	unsigned int cmd_op;
 	__u64 user_data;
 
 	/* only freed io can be issued */
-	if (!(io->flags & UBDSRV_IO_FREE))
+	if (!(io->flags & UBLKSRV_IO_FREE))
 		return 0;
 
 	/* we issue because we need either fetching or committing */
 	if (!(io->flags &
-		(UBDSRV_NEED_FETCH_RQ | UBDSRV_NEED_COMMIT_RQ_COMP)))
+		(UBLKSRV_NEED_FETCH_RQ | UBLKSRV_NEED_COMMIT_RQ_COMP)))
 		return 0;
 
-	if (io->flags & UBDSRV_NEED_FETCH_RQ) {
-		if (io->flags & UBDSRV_NEED_COMMIT_RQ_COMP)
-			cmd_op = UBD_IO_COMMIT_AND_FETCH_REQ;
+	if (io->flags & UBLKSRV_NEED_FETCH_RQ) {
+		if (io->flags & UBLKSRV_NEED_COMMIT_RQ_COMP)
+			cmd_op = UBLK_IO_COMMIT_AND_FETCH_REQ;
 		else
-			cmd_op = UBD_IO_FETCH_REQ;
-	} else if (io->flags & UBDSRV_NEED_COMMIT_RQ_COMP) {
-			cmd_op = UBD_IO_COMMIT_REQ;
+			cmd_op = UBLK_IO_FETCH_REQ;
+	} else if (io->flags & UBLKSRV_NEED_COMMIT_RQ_COMP) {
+			cmd_op = UBLK_IO_COMMIT_REQ;
 	} else {
 		syslog(LOG_ERR, "io flags is zero, tag %d\n",
 				(int)cmd->tag);
@@ -71,15 +71,15 @@ int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
 		return -1;
 	}
 
-	cmd = (struct ubdsrv_io_cmd *)ubdsrv_get_sqe_cmd(sqe);
+	cmd = (struct ublksrv_io_cmd *)ublksrv_get_sqe_cmd(sqe);
 
 
-	if (cmd_op == UBD_IO_COMMIT_REQ ||
-			cmd_op == UBD_IO_COMMIT_AND_FETCH_REQ)
+	if (cmd_op == UBLK_IO_COMMIT_REQ ||
+			cmd_op == UBLK_IO_COMMIT_AND_FETCH_REQ)
 		cmd->result = io->result;
 
 	/* These fields should be written once, never change */
-	ubdsrv_set_sqe_cmd_op(sqe, cmd_op);
+	ublksrv_set_sqe_cmd_op(sqe, cmd_op);
 	sqe->fd		= 0;	/*dev->cdev_fd*/
 	sqe->opcode	=  IORING_OP_URING_CMD;
 	sqe->flags	|= IOSQE_FIXED_FILE;
@@ -90,52 +90,52 @@ int ubdsrv_queue_io_cmd(struct ubdsrv_queue *q, unsigned tag)
 	user_data = build_user_data(tag, cmd_op, 0, 0);
 	io_uring_sqe_set_data64(sqe, user_data);
 
-	io->flags &= ~(UBDSRV_IO_FREE | UBDSRV_NEED_COMMIT_RQ_COMP);
+	io->flags &= ~(UBLKSRV_IO_FREE | UBLKSRV_NEED_COMMIT_RQ_COMP);
 
 	q->cmd_inflight += 1;
 
-	ubdsrv_log(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
+	ublksrv_log(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
 			__func__, q->q_id, tag, cmd_op,
 			io->flags, q->stopping);
 	return 1;
 }
 
 /*
- * Issue all available commands to /dev/ubdcN  and the exact cmd is figured
+ * Issue all available commands to /dev/ublkcN  and the exact cmd is figured
  * out in queue_io_cmd with help of each io->status.
  *
  * todo: queue io commands with batching
  */
-static void ubdsrv_submit_fetch_commands(struct ubdsrv_queue *q)
+static void ublksrv_submit_fetch_commands(struct ublksrv_queue *q)
 {
 	unsigned cnt = 0;
 	int i = 0;
 
 	for (i = 0; i < q->q_depth; i++)
-		ubdsrv_queue_io_cmd(q, i);
+		ublksrv_queue_io_cmd(q, i);
 }
 
-static int ubdsrv_queue_is_done(struct ubdsrv_queue *q)
+static int ublksrv_queue_is_done(struct ublksrv_queue *q)
 {
 	return q->stopping && (!q->cmd_inflight && !q->tgt_io_inflight);
 }
 
-static int ubdsrv_dev_is_done(struct ubdsrv_dev *dev)
+static int ublksrv_dev_is_done(struct ublksrv_dev *dev)
 {
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
 	int i, ret = 0;
 
 	for (i = 0; i < nr_queues; i++)
-		ret += ubdsrv_queue_is_done(ubdsrv_get_queue(dev, i));
+		ret += ublksrv_queue_is_done(ublksrv_get_queue(dev, i));
 
 	return ret == nr_queues;
 }
 
 /*
- * Now STOP DEV ctrl command has been sent to /dev/ubd-control,
+ * Now STOP DEV ctrl command has been sent to /dev/ublk-control,
  * and wait until all pending fetch commands are canceled
  */
-static void ubdsrv_drain_fetch_commands(struct ubdsrv_dev *dev)
+static void ublksrv_drain_fetch_commands(struct ublksrv_dev *dev)
 {
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
 	int i;
@@ -146,7 +146,7 @@ static void ubdsrv_drain_fetch_commands(struct ubdsrv_dev *dev)
 }
 
 /* used for allocating zero copy vma space */
-static inline int ubd_queue_single_io_buf_size(struct ubdsrv_dev *dev)
+static inline int ublk_queue_single_io_buf_size(struct ublksrv_dev *dev)
 {
 	unsigned max_io_sz = dev->ctrl_dev->dev_info.block_size *
 		dev->ctrl_dev->dev_info.rq_max_blocks;
@@ -154,23 +154,23 @@ static inline int ubd_queue_single_io_buf_size(struct ubdsrv_dev *dev)
 
 	return round_up(max_io_sz, page_sz);
 }
-static inline int ubd_queue_io_buf_size(struct ubdsrv_dev *dev)
+static inline int ublk_queue_io_buf_size(struct ublksrv_dev *dev)
 {
 	unsigned depth = dev->ctrl_dev->dev_info.queue_depth;
 
-	return ubd_queue_single_io_buf_size(dev) * depth;
+	return ublk_queue_single_io_buf_size(dev) * depth;
 }
-static inline int ubd_io_buf_size(struct ubdsrv_dev *dev)
+static inline int ublk_io_buf_size(struct ublksrv_dev *dev)
 {
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
 
-	return ubd_queue_io_buf_size(dev) * nr_queues;
+	return ublk_queue_io_buf_size(dev) * nr_queues;
 }
 
 /* mmap vm space for remapping block io request pages */
-static void ubdsrv_deinit_io_bufs(struct ubdsrv_dev *dev)
+static void ublksrv_deinit_io_bufs(struct ublksrv_dev *dev)
 {
-	unsigned long sz = ubd_io_buf_size(dev);
+	unsigned long sz = ublk_io_buf_size(dev);
 
 	if (dev->io_buf_start) {
 		munmap(dev->io_buf_start, sz);
@@ -179,42 +179,42 @@ static void ubdsrv_deinit_io_bufs(struct ubdsrv_dev *dev)
 }
 
 /* mmap vm space for remapping block io request pages */
-static int ubdsrv_init_io_bufs(struct ubdsrv_dev *dev)
+static int ublksrv_init_io_bufs(struct ublksrv_dev *dev)
 {
-	unsigned long sz = ubd_io_buf_size(dev);
+	unsigned long sz = ublk_io_buf_size(dev);
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
 	int i;
 	void *addr;
 
 	dev->io_buf_start = NULL;
-	if (!(dev->ctrl_dev->dev_info.flags[0] & (1 << UBD_F_SUPPORT_ZERO_COPY)))
+	if (!(dev->ctrl_dev->dev_info.flags[0] & (1 << UBLK_F_SUPPORT_ZERO_COPY)))
 		return 0;
 
 	addr = mmap(0, sz, PROT_READ | PROT_WRITE,
 			MAP_SHARED | MAP_POPULATE, dev->cdev_fd,
-			UBDSRV_IO_BUF_OFFSET);
+			UBLKSRV_IO_BUF_OFFSET);
 	if (addr == MAP_FAILED)
 		return -1;
 
 	dev->io_buf_start = (char *)addr;
 
 	for (i = 0; i < nr_queues; i++) {
-		struct ubdsrv_queue *q = ubdsrv_get_queue(dev, i);
+		struct ublksrv_queue *q = ublksrv_get_queue(dev, i);
 
-		q->io_buf = dev->io_buf_start + i * ubd_queue_io_buf_size(dev);
+		q->io_buf = dev->io_buf_start + i * ublk_queue_io_buf_size(dev);
 	}
 
 	return 0;
 }
 
-static void ubdsrv_init_io_cmds(struct ubdsrv_dev *dev, struct ubdsrv_queue *q)
+static void ublksrv_init_io_cmds(struct ublksrv_dev *dev, struct ublksrv_queue *q)
 {
 	struct io_uring *r = &q->ring;
 	struct io_uring_sqe *sqe;
 	int i;
 
 	for (i = 0; i < q->q_depth; i++) {
-		struct io_uring_sqe *sqe = ubdsrv_uring_get_sqe(r, i, true);
+		struct io_uring_sqe *sqe = ublksrv_uring_get_sqe(r, i, true);
 
 		/* These fields should be written once, never change */
 		sqe->flags = IOSQE_FIXED_FILE;
@@ -223,15 +223,15 @@ static void ubdsrv_init_io_cmds(struct ubdsrv_dev *dev, struct ubdsrv_queue *q)
 	}
 }
 
-static int ubdsrv_queue_cmd_buf_sz(struct ubdsrv_queue *q)
+static int ublksrv_queue_cmd_buf_sz(struct ublksrv_queue *q)
 {
-	int size =  q->q_depth * sizeof(struct ubdsrv_io_desc);
+	int size =  q->q_depth * sizeof(struct ublksrv_io_desc);
 	unsigned int page_sz = getpagesize();
 
 	return round_up(size, page_sz);
 }
 
-static void ubdsrv_queue_deinit(struct ubdsrv_queue *q)
+static void ublksrv_queue_deinit(struct ublksrv_queue *q)
 {
 	int i;
 
@@ -241,7 +241,7 @@ static void ubdsrv_queue_deinit(struct ubdsrv_queue *q)
 		q->ring.ring_fd = -1;
 	}
 	if (q->io_cmd_buf) {
-		munmap(q->io_cmd_buf, ubdsrv_queue_cmd_buf_sz(q));
+		munmap(q->io_cmd_buf, ublksrv_queue_cmd_buf_sz(q));
 		q->io_cmd_buf = NULL;
 	}
 	for (i = 0; i < q->q_depth; i++) {
@@ -255,18 +255,18 @@ static void ubdsrv_queue_deinit(struct ubdsrv_queue *q)
 
 }
 
-static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
+static struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id)
 {
-	struct ubdsrv_queue *q;
-	struct ubdsrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
+	struct ublksrv_queue *q;
+	struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	int depth = ctrl_dev->dev_info.queue_depth;
 	int i, ret = -1;
 	int cmd_buf_size, io_buf_size;
 	unsigned long off;
 	int ring_depth = depth + ctrl_dev->tgt.tgt_ring_depth;
 
-	q = (struct ubdsrv_queue *)malloc(sizeof(struct ubdsrv_queue) + sizeof(struct ubd_io) *
+	q = (struct ublksrv_queue *)malloc(sizeof(struct ublksrv_queue) + sizeof(struct ublk_io) *
 		ctrl_dev->dev_info.queue_depth);
 	dev->__queues[q_id] = q;
 
@@ -282,9 +282,9 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 	memcpy(&q->cpuset, &ctrl_dev->queues_cpuset[q->q_id],
 			sizeof(q->cpuset));
 
-	cmd_buf_size = ubdsrv_queue_cmd_buf_sz(q);
-	off = UBDSRV_CMD_BUF_OFFSET +
-		q_id * (UBD_MAX_QUEUE_DEPTH * sizeof(struct ubdsrv_io_desc));
+	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
+	off = UBLKSRV_CMD_BUF_OFFSET +
+		q_id * (UBLK_MAX_QUEUE_DEPTH * sizeof(struct ublksrv_io_desc));
 	q->io_cmd_buf = (char *)mmap(0, cmd_buf_size, PROT_READ,
 			MAP_SHARED | MAP_POPULATE, dev->cdev_fd, off);
 	if (q->io_cmd_buf == MAP_FAILED)
@@ -299,10 +299,10 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 		//q->ios[i].buf_addr = malloc(io_buf_size);
 		if (!q->ios[i].buf_addr)
 			goto fail;
-		q->ios[i].flags = UBDSRV_NEED_FETCH_RQ | UBDSRV_IO_FREE;
+		q->ios[i].flags = UBLKSRV_NEED_FETCH_RQ | UBLKSRV_IO_FREE;
 	}
 
-	ret = ubdsrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128);
+	ret = ublksrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128);
 	if (ret < 0)
 		goto fail;
 
@@ -311,32 +311,32 @@ static struct ubdsrv_queue *ubdsrv_queue_init(struct ubdsrv_dev *dev,
 	if (ret)
 		goto fail;
 
-	ubdsrv_init_io_cmds(dev, q);
+	ublksrv_init_io_cmds(dev, q);
 
 	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
-		syslog(LOG_INFO, "ubd dev %d queue %d set_io_flusher failed",
+		syslog(LOG_INFO, "ublk dev %d queue %d set_io_flusher failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 
 	return q;
  fail:
-	ubdsrv_queue_deinit(q);
-	syslog(LOG_INFO, "ubd dev %d queue %d failed",
+	ublksrv_queue_deinit(q);
+	syslog(LOG_INFO, "ublk dev %d queue %d failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 	return NULL;
 }
 
-static void ubdsrv_deinit(struct ubdsrv_dev *dev)
+static void ublksrv_deinit(struct ublksrv_dev *dev)
 {
 	int i;
 
-	ubdsrv_deinit_io_bufs(dev);
+	ublksrv_deinit_io_bufs(dev);
 
 	if (dev->ctrl_dev->shm_fd >= 0) {
-		munmap(dev->ctrl_dev->shm_addr, UBDSRV_SHM_SIZE);
+		munmap(dev->ctrl_dev->shm_addr, UBLKSRV_SHM_SIZE);
 		close(dev->ctrl_dev->shm_fd);
 	}
 
-	ubdsrv_tgt_deinit(&dev->ctrl_dev->tgt, dev);
+	ublksrv_tgt_deinit(&dev->ctrl_dev->tgt, dev);
 	free(dev->thread);
 
 	if (dev->cdev_fd >= 0) {
@@ -345,35 +345,35 @@ static void ubdsrv_deinit(struct ubdsrv_dev *dev)
 	}
 }
 
-static void ubdsrv_setup_tgt_shm(struct ubdsrv_dev *dev)
+static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 {
 	int fd;
 	char buf[64];
 	unsigned pid = getpid();
 
-	//if (dev->ctrl_dev->dev_info.ubdsrv_pid <= 0)
+	//if (dev->ctrl_dev->dev_info.ublksrv_pid <= 0)
 	//	return;
 
-	mkdir(UBDSRV_SHM_DIR, S_IRUSR | S_IRUSR);
-	snprintf(buf, 64, "%s_%d", UBDSRV_SHM_DIR, pid);
+	mkdir(UBLKSRV_SHM_DIR, S_IRUSR | S_IRUSR);
+	snprintf(buf, 64, "%s_%d", UBLKSRV_SHM_DIR, pid);
 
 	fd = shm_open(buf, O_CREAT|O_RDWR, S_IRUSR | S_IWUSR);
 
-	ftruncate(fd, UBDSRV_SHM_SIZE);
+	ftruncate(fd, UBLKSRV_SHM_SIZE);
 
-	dev->ctrl_dev->shm_addr = (char *)mmap(NULL, UBDSRV_SHM_SIZE,
+	dev->ctrl_dev->shm_addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE,
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	dev->ctrl_dev->shm_offset = 0;
 	dev->ctrl_dev->shm_fd = fd;
-	ubdsrv_log(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
+	ublksrv_log(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
 				buf, fd, dev->ctrl_dev->shm_addr);
 }
 
-static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
+static int ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev, struct ublksrv_dev *dev)
 {
 	int nr_queues = ctrl_dev->dev_info.nr_hw_queues;
 	int dev_id = ctrl_dev->dev_info.dev_id;
-	struct ubdsrv_tgt_info *tgt = &ctrl_dev->tgt;
+	struct ublksrv_tgt_info *tgt = &ctrl_dev->tgt;
 	int queue_size;
 	char buf[64];
 	int ret = -1;
@@ -382,21 +382,21 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 	dev->ctrl_dev = ctrl_dev;
 	dev->cdev_fd = -1;
 
-	ubdsrv_setup_tgt_shm(dev);
+	ublksrv_setup_tgt_shm(dev);
 
-	snprintf(buf, 64, "%s%d", UBDC_DEV, dev_id);
+	snprintf(buf, 64, "%s%d", UBLKC_DEV, dev_id);
 	dev->cdev_fd = open(buf, O_RDWR);
 	if (dev->cdev_fd < 0)
 		goto fail;
 
 	tgt->fds[0] = dev->cdev_fd;
 
-	ret = ubdsrv_init_io_bufs(dev);
+	ret = ublksrv_init_io_bufs(dev);
 	if (ret)
 		goto fail;
 
 	ret = -1;
-	if (ubdsrv_prepare_target(&dev->ctrl_dev->tgt, dev) < 0)
+	if (ublksrv_prepare_target(&dev->ctrl_dev->tgt, dev) < 0)
 		goto fail;
 
 	dev->thread = (pthread_t *)calloc(sizeof(pthread_t),
@@ -405,18 +405,18 @@ static int ubdsrv_init(struct ubdsrv_ctrl_dev *ctrl_dev, struct ubdsrv_dev *dev)
 		goto fail;
 
 	for (i = 0; i < nr_queues; i++)
-		pthread_create(&dev->thread[i], NULL, ubdsrv_io_handler_fn,
+		pthread_create(&dev->thread[i], NULL, ublksrv_io_handler_fn,
 				&dev->ctrl_dev->q_id[i]);
 
 	return 0;
 fail:
-	ubdsrv_deinit(dev);
+	ublksrv_deinit(dev);
 	return ret;
 }
 
-/* Be careful, target io may not have one ubd_io associated with  */
-static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
-	struct ubdsrv_queue *q, struct io_uring_cqe *cqe)
+/* Be careful, target io may not have one ublk_io associated with  */
+static inline void ublksrv_handle_tgt_cqe(struct ublksrv_tgt_info *tgt,
+	struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
 
@@ -432,25 +432,25 @@ static inline void ubdsrv_handle_tgt_cqe(struct ubdsrv_tgt_info *tgt,
 		tgt->ops->tgt_io_done(q, cqe);
 }
 
-static void ubdsrv_handle_cqe(struct io_uring *r,
+static void ublksrv_handle_cqe(struct io_uring *r,
 		struct io_uring_cqe *cqe, void *data)
 {
-	struct ubdsrv_queue *q = container_of(r, struct ubdsrv_queue, ring);
-	struct ubdsrv_dev *dev = q->dev;
-	struct ubdsrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
-	struct ubdsrv_tgt_info *tgt = &ctrl_dev->tgt;
+	struct ublksrv_queue *q = container_of(r, struct ublksrv_queue, ring);
+	struct ublksrv_dev *dev = q->dev;
+	struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
+	struct ublksrv_tgt_info *tgt = &ctrl_dev->tgt;
 	unsigned tag = user_data_to_tag(cqe->user_data);
 	unsigned cmd_op = user_data_to_op(cqe->user_data);
-	int fetch = (cqe->res != UBD_IO_RES_ABORT) && !q->stopping;
-	struct ubd_io *io;
+	int fetch = (cqe->res != UBLK_IO_RES_ABORT) && !q->stopping;
+	struct ublk_io *io;
 
-	ubdsrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d) stopping %d\n",
+	ublksrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d) stopping %d\n",
 			__func__, cqe->res, q->q_id, tag, cmd_op,
 			is_target_io(cqe->user_data), q->stopping);
 
 	/* Don't retrieve io in case of target io */
 	if (is_target_io(cqe->user_data)) {
-		ubdsrv_handle_tgt_cqe(tgt, q, cqe);
+		ublksrv_handle_tgt_cqe(tgt, q, cqe);
 		return;
 	}
 
@@ -459,16 +459,16 @@ static void ubdsrv_handle_cqe(struct io_uring *r,
 
 	if (!fetch) {
 		q->stopping = 1;
-		io->flags &= ~UBDSRV_NEED_FETCH_RQ;
+		io->flags &= ~UBLKSRV_NEED_FETCH_RQ;
 	}
 
 	/*
 	 * So far, only sync tgt's io handling is implemented.
 	 *
-	 * todo: support async tgt io handling via io_uring, and the ubdsrv
+	 * todo: support async tgt io handling via io_uring, and the ublksrv
 	 * daemon can poll on both two rings.
 	 */
-	if (cqe->res == UBD_IO_RES_OK && cmd_op != UBD_IO_COMMIT_REQ) {
+	if (cqe->res == UBLK_IO_RES_OK && cmd_op != UBLK_IO_COMMIT_REQ) {
 		io->co = tgt->ops->handle_io_async(q, tag);
 	} else {
 		/*
@@ -476,21 +476,21 @@ static void ubdsrv_handle_cqe(struct io_uring *r,
 		 * piggyback is required.
 		 *
 		 * Marking IO_FREE only, then this io won't be issued since
-		 * we only issue io with (UBDSRV_IO_FREE | UBDSRV_NEED_*)
+		 * we only issue io with (UBLKSRV_IO_FREE | UBLKSRV_NEED_*)
 		 *
 		 * */
-		io->flags = UBDSRV_IO_FREE;
+		io->flags = UBLKSRV_IO_FREE;
 	}
 }
 
-static int ubdsrv_reap_events_uring(struct io_uring *r)
+static int ublksrv_reap_events_uring(struct io_uring *r)
 {
 	struct io_uring_cqe *cqe;
 	unsigned head;
 	int count = 0;
 
 	io_uring_for_each_cqe(r, head, cqe) {
-		ubdsrv_handle_cqe(r, cqe, NULL);
+		ublksrv_handle_cqe(r, cqe, NULL);
 		count += 1;
 	}
 	io_uring_cq_advance(r, count);
@@ -504,7 +504,7 @@ static void sig_handler(int sig)
 		syslog(LOG_INFO, "got TERM signal");
 }
 
-static void ubdsrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
+static void ublksrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
 {
 	int nr_cores = sysconf(_SC_NPROCESSORS_ONLN);
 	int i, offset = 0;
@@ -516,10 +516,10 @@ static void ubdsrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
 	}
 }
 
-static void ubdsrv_set_sched_affinity(struct ubdsrv_dev *dev,
+static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 		unsigned short q_id)
 {
-	struct ubdsrv_ctrl_dev *cdev = dev->ctrl_dev;
+	struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
 	unsigned dev_id = cdev->dev_info.dev_id;
 	cpu_set_t *cpuset = &cdev->queues_cpuset[q_id];
 	pthread_t thread = pthread_self();
@@ -528,77 +528,77 @@ static void ubdsrv_set_sched_affinity(struct ubdsrv_dev *dev,
 
 	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), cpuset);
 	if (ret)
-		syslog(LOG_INFO, "ubd dev %u queue %u set affinity failed",
+		syslog(LOG_INFO, "ublk dev %u queue %u set affinity failed",
 				dev_id, q_id);
 
-	ubdsrv_build_cpu_str(cpus, 512, cpuset);
+	ublksrv_build_cpu_str(cpus, 512, cpuset);
 
 	/* add queue info into shm buffer, be careful to add it just once */
 	pthread_mutex_lock(&cdev->lock);
 	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
-			UBDSRV_SHM_SIZE - cdev->shm_offset,
+			UBLKSRV_SHM_SIZE - cdev->shm_offset,
 			"\tqueue %u: tid %d affinity(%s)\n",
 			q_id, gettid(), cpus);
 	pthread_mutex_unlock(&cdev->lock);
 }
 
-static void *ubdsrv_io_handler_fn(void *data)
+static void *ublksrv_io_handler_fn(void *data)
 {
 	unsigned dev_id = this_dev.ctrl_dev->dev_info.dev_id;
 	unsigned short q_id = *(unsigned short *)data;
-	struct ubdsrv_queue *q;
+	struct ublksrv_queue *q;
 
-	ubdsrv_set_sched_affinity(&this_dev, q_id);
+	ublksrv_set_sched_affinity(&this_dev, q_id);
 	setpriority(PRIO_PROCESS, getpid(), -20);
 
-	q = ubdsrv_queue_init(&this_dev, q_id);
+	q = ublksrv_queue_init(&this_dev, q_id);
 	if (!q) {
-		syslog(LOG_INFO, "ubd dev %d queue %d init queue failed",
+		syslog(LOG_INFO, "ublk dev %d queue %d init queue failed",
 				this_dev.ctrl_dev->dev_info.dev_id, q_id);
 		return NULL;
 	}
 
-	syslog(LOG_INFO, "tid %d: ubd dev %d queue %d started", q->tid,
+	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", q->tid,
 			dev_id, q->q_id);
-	ubdsrv_submit_fetch_commands(q);
+	ublksrv_submit_fetch_commands(q);
 	do {
 		int submitted, reapped;
 
-		ubdsrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
+		ublksrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
 					dev_id, q->q_id, io_uring_sq_ready(&q->ring),
 					q->cmd_inflight, q->tgt_io_inflight,
 					q->stopping);
-		if (ubdsrv_queue_is_done(q))
+		if (ublksrv_queue_is_done(q))
 			break;
 
 		submitted = io_uring_submit_and_wait(&q->ring, 1);
-		reapped = ubdsrv_reap_events_uring(&q->ring);
+		reapped = ublksrv_reap_events_uring(&q->ring);
 
-		ubdsrv_log(LOG_INFO, "submitted %d, reapped %d", submitted, reapped);
+		ublksrv_log(LOG_INFO, "submitted %d, reapped %d", submitted, reapped);
 	} while (1);
 
-	syslog(LOG_INFO, "ubd dev %d queue %d exited", dev_id, q->q_id);
-	ubdsrv_queue_deinit(q);
+	syslog(LOG_INFO, "ublk dev %d queue %d exited", dev_id, q->q_id);
+	ublksrv_queue_deinit(q);
 	return NULL;
 }
 
 static sigset_t   signal_mask;
-static void ubdsrv_io_handler(void *data)
+static void ublksrv_io_handler(void *data)
 {
-	struct ubdsrv_ctrl_dev *ctrl_dev = (struct ubdsrv_ctrl_dev *)data;
-	struct ubdsrv_tgt_info *tgt = &ctrl_dev->tgt;
+	struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
+	struct ublksrv_tgt_info *tgt = &ctrl_dev->tgt;
 	int dev_id = ctrl_dev->dev_info.dev_id;
 	int ret, pid_fd;
 	char buf[32];
 	char pid_file[64];
 
-	snprintf(buf, 32, "%s-%d", "ubdsrvd", dev_id);
+	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
 
-	syslog(LOG_INFO, "start ubdsrv io daemon");
+	syslog(LOG_INFO, "start ublksrv io daemon");
 
 	/* create pid file and lock it, so that others can't */
-	snprintf(pid_file, 64, "%s-%d.pid", UBDSRV_PID_FILE, dev_id);
+	snprintf(pid_file, 64, "%s-%d.pid", UBLKSRV_PID_FILE, dev_id);
 	ret = create_pid_file(pid_file, CPF_CLOEXEC, &pid_fd);
 	if (ret < 0) {
 		/* -1 means the file is locked, and we need to remove it */
@@ -619,37 +619,37 @@ static void ubdsrv_io_handler(void *data)
 	sigaddset(&signal_mask, SIGTERM);
 	pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
 
-	ret = ubdsrv_init(ctrl_dev, &this_dev);
+	ret = ublksrv_init(ctrl_dev, &this_dev);
 	if (ret) {
 		syslog(LOG_ERR, "start ubsrv failed %d", ret);
 		goto out;
 	}
 
 	/* wait until we are terminated */
-	ubdsrv_drain_fetch_commands(&this_dev);
+	ublksrv_drain_fetch_commands(&this_dev);
 
-	ubdsrv_deinit(&this_dev);
+	ublksrv_deinit(&this_dev);
 
  out:
 	unlink(pid_file);
-	syslog(LOG_INFO, "end ubdsrv io daemon");
+	syslog(LOG_INFO, "end ublksrv io daemon");
 	closelog();
 }
 
-/* Not called from ubdsrv daemon */
-int ubdsrv_start_io_daemon(struct ubdsrv_ctrl_dev *dev)
+/* Not called from ublksrv daemon */
+int ublksrv_start_io_daemon(struct ublksrv_ctrl_dev *dev)
 {
-	start_daemon(0, ubdsrv_io_handler, dev);
+	start_daemon(0, ublksrv_io_handler, dev);
 	return 0;
 }
 
-int ubdsrv_get_io_daemon_pid(struct ubdsrv_ctrl_dev *ctrl_dev)
+int ublksrv_get_io_daemon_pid(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int ret = -1, pid_fd;
 	char buf[64];
 	int daemon_pid;
 
-	snprintf(buf, 64, "%s-%d.pid", UBDSRV_PID_FILE,
+	snprintf(buf, 64, "%s-%d.pid", UBLKSRV_PID_FILE,
 			ctrl_dev->dev_info.dev_id);
 	pid_fd = open(buf, O_RDONLY);
 	if (pid_fd < 0)
@@ -671,14 +671,14 @@ out:
 	return ret;
 }
 
-/* Not called from ubdsrv daemon */
-int ubdsrv_stop_io_daemon(struct ubdsrv_ctrl_dev *ctrl_dev)
+/* Not called from ublksrv daemon */
+int ublksrv_stop_io_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int daemon_pid, cnt = 0;
 
 	/* wait until daemon is exited, or timeout after 3 seconds */
 	do {
-		daemon_pid = ubdsrv_get_io_daemon_pid(ctrl_dev);
+		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev);
 		if (daemon_pid > 0) {
 			usleep(100000);
 			cnt++;

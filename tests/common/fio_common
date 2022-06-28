@@ -161,23 +161,23 @@ __run_fio_libaio() {
         --name=test > /dev/null 2>&1
 }
 
-__ubd_loop_backing_file() {
-	eval $UBD list > ${UBD_TMP}
-	file=`cat ${UBD_TMP} | grep "loop backing" | awk '{print $6}'`
+__ublk_loop_backing_file() {
+	eval $UBLK list > ${UBLK_TMP}
+	file=`cat ${UBLK_TMP} | grep "loop backing" | awk '{print $6}'`
 	echo $file
 }
 
-__ubd_get_queue_tid() {
+__ublk_get_queue_tid() {
 	QID=$1
-	eval $UBD list > ${UBD_TMP}
-	q_tid=`cat ${UBD_TMP} | grep "queue ${QID}" | awk '{print $4}'`
+	eval $UBLK list > ${UBLK_TMP}
+	q_tid=`cat ${UBLK_TMP} | grep "queue ${QID}" | awk '{print $4}'`
 	echo $q_tid
 }
 
-__ubd_get_dev_state() {
+__ublk_get_dev_state() {
 	DEV_ID=$1
-	eval $UBD list -n $DEV_ID > ${UBD_TMP}
-	state=`cat ${UBD_TMP} | grep "state" | awk '{print $11}'`
+	eval $UBLK list -n $DEV_ID > ${UBLK_TMP}
+	state=`cat ${UBLK_TMP} | grep "state" | awk '{print $11}'`
 	echo $state
 }
 
@@ -186,35 +186,35 @@ __run_fio_perf() {
 	_fio_perf_report
 }
 
-__remove_ubd_dev_return() {
-	file=`__ubd_loop_backing_file`
+__remove_ublk_dev_return() {
+	file=`__ublk_loop_backing_file`
 	if [ $# -eq 1 ]; then
-		eval $UBD del -n $1
+		eval $UBLK del -n $1
 	else
-		eval $UBD del -a
+		eval $UBLK del -a
 	fi
 	RES=$?
 	[ "$file" != "" ] && rm -f $file
 	echo $RES
 }
 
-__remove_ubd_dev() {
-	__remove_ubd_dev_return $@ > /dev/null 2>&1
+__remove_ublk_dev() {
+	__remove_ublk_dev_return $@ > /dev/null 2>&1
 }
 
-__create_ubd_dev()
+__create_ublk_dev()
 {
-	ubd_type=$1
+	ublk_type=$1
 	nr_queues=$2
 
 	[ "$nr_queues" = "" ] && nr_queues=1
 
-	if [ "$ubd_type" = "loop" ]; then
-		file=`mktemp -p ${UBD_TMP_DIR}  ubd_loop_XXXXX`
+	if [ "$ublk_type" = "loop" ]; then
+		file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_XXXXX`
 		truncate -s 2G $file
 	fi
 
-	eval $UBD add -t $ubd_type -q $nr_queues -f $file > /dev/null 2>&1
+	eval $UBLK add -t $ublk_type -q $nr_queues -f $file > /dev/null 2>&1
 }
 
 __remove_kernel_loop_dev() {
@@ -225,7 +225,7 @@ __remove_kernel_loop_dev() {
 
 __create_kernel_loop_dev() {
 	losetup -D
-	file=`mktemp -p ${UBD_TMP_DIR}  ubd_loop_XXXXX`
+	file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_XXXXX`
 	truncate -s 2G $file
 	losetup -f $file --direct-io=on
 	#losetup -l
@@ -263,17 +263,17 @@ __run_dev_perf()
 	TYPE=$1
 	JOBS=$2
 	QUEUES=$3
-	DEV="/dev/ubdb0"
+	DEV="/dev/ublkb0"
 
-	__remove_ubd_dev
-	__create_ubd_dev $TYPE $QUEUES
+	__remove_ublk_dev
+	__create_ublk_dev $TYPE $QUEUES
 
-	FILE=`__ubd_loop_backing_file`
+	FILE=`__ublk_loop_backing_file`
 
-	echo -e "\tfio (ubd/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	echo -e "\tfio (ublk/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
 	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
 
-	__remove_ubd_dev 0
+	__remove_ublk_dev 0
 }
 
 __run_loop_dev_perf()
