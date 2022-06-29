@@ -78,7 +78,6 @@ struct ublksrv_ctrl_dev {
 	pthread_mutex_t lock;
 
 	cpu_set_t *queues_cpuset;
-	unsigned short *q_id;
 };
 
 struct ublk_io {

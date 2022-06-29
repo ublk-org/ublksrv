@@ -29,8 +29,11 @@
  * all sqes have been free, exit itself. Then STOP_DEV returns.
  */
 
-struct ublksrv_dev this_dev;
-static sig_atomic_t volatile ublksrv_stop = 0;
+struct ublksrv_queue_info {
+	struct ublksrv_dev *dev;
+	int qid;
+	pthread_t thread;
+};
 
 static void *ublksrv_io_handler_fn(void *data);
 
@@ -135,14 +138,15 @@ static int ublksrv_dev_is_done(struct ublksrv_dev *dev)
  * Now STOP DEV ctrl command has been sent to /dev/ublk-control,
  * and wait until all pending fetch commands are canceled
  */
-static void ublksrv_drain_fetch_commands(struct ublksrv_dev *dev)
+static void ublksrv_drain_fetch_commands(struct ublksrv_dev *dev,
+		struct ublksrv_queue_info *info)
 {
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
 	int i;
 	void *ret;
 
 	for (i = 0; i < nr_queues; i++)
-		pthread_join(dev->thread[i], &ret);
+		pthread_join(info[i].thread, &ret);
 }
 
 /* used for allocating zero copy vma space */
@@ -343,6 +347,7 @@ static void ublksrv_deinit(struct ublksrv_dev *dev)
 		close(dev->cdev_fd);
 		dev->cdev_fd = -1;
 	}
+	free(dev);
 }
 
 static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
@@ -369,7 +374,8 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 				buf, fd, dev->ctrl_dev->shm_addr);
 }
 
-static int ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev, struct ublksrv_dev *dev)
+static struct ublksrv_dev *ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev,
+	struct ublksrv_queue_info *info)
 {
 	int nr_queues = ctrl_dev->dev_info.nr_hw_queues;
 	int dev_id = ctrl_dev->dev_info.dev_id;
@@ -378,6 +384,10 @@ static int ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev, struct ublksrv_dev *d
 	char buf[64];
 	int ret = -1;
 	int i;
+	struct ublksrv_dev *dev = (struct ublksrv_dev *)calloc(1, sizeof(*dev));
+
+	if (!dev)
+		return dev;
 
 	dev->ctrl_dev = ctrl_dev;
 	dev->cdev_fd = -1;
@@ -399,19 +409,17 @@ static int ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev, struct ublksrv_dev *d
 	if (ublksrv_prepare_target(&dev->ctrl_dev->tgt, dev) < 0)
 		goto fail;
 
-	dev->thread = (pthread_t *)calloc(sizeof(pthread_t),
-			ctrl_dev->dev_info.nr_hw_queues);
-	if (!dev->thread)
-		goto fail;
+	for (i = 0; i < nr_queues; i++) {
+		info[i].dev = dev;
+		info[i].qid = i;
+		pthread_create(&info[i].thread, NULL, ublksrv_io_handler_fn,
+				&info[i]);
+	}
 
-	for (i = 0; i < nr_queues; i++)
-		pthread_create(&dev->thread[i], NULL, ublksrv_io_handler_fn,
-				&dev->ctrl_dev->q_id[i]);
-
-	return 0;
+	return dev;
 fail:
 	ublksrv_deinit(dev);
-	return ret;
+	return NULL;
 }
 
 /* Be careful, target io may not have one ublk_io associated with  */
@@ -538,17 +546,19 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 
 static void *ublksrv_io_handler_fn(void *data)
 {
-	unsigned dev_id = this_dev.ctrl_dev->dev_info.dev_id;
-	unsigned short q_id = *(unsigned short *)data;
+	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
+	struct ublksrv_dev *dev = info->dev;
+	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
+	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
 
-	ublksrv_set_sched_affinity(&this_dev, q_id);
+	ublksrv_set_sched_affinity(dev, q_id);
 	setpriority(PRIO_PROCESS, getpid(), -20);
 
-	q = ublksrv_queue_init(&this_dev, q_id);
+	q = ublksrv_queue_init(dev, q_id);
 	if (!q) {
 		syslog(LOG_INFO, "ublk dev %d queue %d init queue failed",
-				this_dev.ctrl_dev->dev_info.dev_id, q_id);
+				dev->ctrl_dev->dev_info.dev_id, q_id);
 		return NULL;
 	}
 
@@ -633,6 +643,8 @@ static void ublksrv_io_handler(void *data)
 	int dev_id = ctrl_dev->dev_info.dev_id;
 	int ret;
 	char buf[32];
+	struct ublksrv_dev *dev;
+	struct ublksrv_queue_info *info_array;
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
@@ -644,16 +656,22 @@ static void ublksrv_io_handler(void *data)
 
 	setup_pthread_sigmask();
 
-	ret = ublksrv_init(ctrl_dev, &this_dev);
-	if (ret) {
-		syslog(LOG_ERR, "start ubsrv failed %d", ret);
+	info_array = (struct ublksrv_queue_info *)calloc(sizeof(
+				struct ublksrv_queue_info),
+			ctrl_dev->dev_info.nr_hw_queues);
+
+	dev = ublksrv_init(ctrl_dev, info_array);
+	if (!dev) {
+		syslog(LOG_ERR, "start ubsrv failed");
 		goto out;
 	}
 
 	/* wait until we are terminated */
-	ublksrv_drain_fetch_commands(&this_dev);
+	ublksrv_drain_fetch_commands(dev, info_array);
 
-	ublksrv_deinit(&this_dev);
+	ublksrv_deinit(dev);
+
+	free(info_array);
 
  out:
 	ublksrv_remove_pid_file(dev_id);
