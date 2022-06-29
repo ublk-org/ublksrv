@@ -498,12 +498,6 @@ static int ublksrv_reap_events_uring(struct io_uring *r)
 	return count;
 }
 
-static void sig_handler(int sig)
-{
-	if (sig == SIGTERM)
-		syslog(LOG_INFO, "got TERM signal");
-}
-
 static void ublksrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
 {
 	int nr_cores = sysconf(_SC_NPROCESSORS_ONLN);
@@ -582,42 +576,73 @@ static void *ublksrv_io_handler_fn(void *data)
 	return NULL;
 }
 
-static sigset_t   signal_mask;
-static void ublksrv_io_handler(void *data)
+static void sig_handler(int sig)
 {
-	struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
-	struct ublksrv_tgt_info *tgt = &ctrl_dev->tgt;
-	int dev_id = ctrl_dev->dev_info.dev_id;
-	int ret, pid_fd;
-	char buf[32];
-	char pid_file[64];
+	if (sig == SIGTERM)
+		syslog(LOG_INFO, "got TERM signal");
+}
 
-	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
-	openlog(buf, LOG_PID, LOG_USER);
-
-	syslog(LOG_INFO, "start ublksrv io daemon");
-
-	/* create pid file and lock it, so that others can't */
-	snprintf(pid_file, 64, "%s-%d.pid", UBLKSRV_PID_FILE, dev_id);
-	ret = create_pid_file(pid_file, CPF_CLOEXEC, &pid_fd);
-	if (ret < 0) {
-		/* -1 means the file is locked, and we need to remove it */
-		if (ret == -1) {
-			close(pid_fd);
-			goto out;
-		}
-		return;
-	}
-	close(pid_fd);
+static void setup_pthread_sigmask()
+{
+	sigset_t   signal_mask;
 
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
-		goto out;
+		return;
 
 	/* make sure SIGTERM won't be blocked */
 	sigemptyset(&signal_mask);
 	sigaddset(&signal_mask, SIGINT);
 	sigaddset(&signal_mask, SIGTERM);
 	pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
+}
+
+static int ublksrv_create_pid_file(int dev_id)
+{
+	char pid_file[64];
+	int ret, pid_fd;
+
+	/* create pid file and lock it, so that others can't */
+	snprintf(pid_file, 64, "%s-%d.pid", UBLKSRV_PID_FILE, dev_id);
+
+	ret = create_pid_file(pid_file, CPF_CLOEXEC, &pid_fd);
+	if (ret < 0) {
+		/* -1 means the file is locked, and we need to remove it */
+		if (ret == -1) {
+			close(pid_fd);
+			unlink(pid_file);
+		}
+		return ret;
+	}
+	close(pid_fd);
+	return 0;
+}
+
+static void ublksrv_remove_pid_file(int dev_id)
+{
+	char pid_file[64];
+
+	/* create pid file and lock it, so that others can't */
+	snprintf(pid_file, 64, "%s-%d.pid", UBLKSRV_PID_FILE, dev_id);
+	unlink(pid_file);
+}
+
+static void ublksrv_io_handler(void *data)
+{
+	struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
+	struct ublksrv_tgt_info *tgt = &ctrl_dev->tgt;
+	int dev_id = ctrl_dev->dev_info.dev_id;
+	int ret;
+	char buf[32];
+
+	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
+	openlog(buf, LOG_PID, LOG_USER);
+
+	syslog(LOG_INFO, "start ublksrv io daemon");
+
+	if (ublksrv_create_pid_file(dev_id))
+		return;
+
+	setup_pthread_sigmask();
 
 	ret = ublksrv_init(ctrl_dev, &this_dev);
 	if (ret) {
@@ -631,7 +656,7 @@ static void ublksrv_io_handler(void *data)
 	ublksrv_deinit(&this_dev);
 
  out:
-	unlink(pid_file);
+	ublksrv_remove_pid_file(dev_id);
 	syslog(LOG_INFO, "end ublksrv io daemon");
 	closelog();
 }
