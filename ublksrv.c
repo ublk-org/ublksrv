@@ -283,8 +283,6 @@ static struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	q->cmd_inflight = 0;
 	q->tgt_io_inflight = 0;
 	q->tid = gettid();
-	memcpy(&q->cpuset, &ctrl_dev->queues_cpuset[q->q_id],
-			sizeof(q->cpuset));
 
 	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
 	off = UBLKSRV_CMD_BUF_OFFSET +

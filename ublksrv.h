@@ -126,7 +126,6 @@ struct ublksrv_queue {
 	 */
 	struct io_uring ring;
 
-	cpu_set_t cpuset;
 	unsigned  tid;
 	struct ublksrv_dev *dev;
 

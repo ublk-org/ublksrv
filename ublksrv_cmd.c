@@ -110,6 +110,7 @@ static void setup_ctrl_dev()
 static void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev)
 {
 	close(dev->ring.ring_fd);
+	free(dev->queues_cpuset);
 	free(dev);
 }
 
@@ -229,9 +230,6 @@ static int ublksrv_start_dev(struct ublksrv_ctrl_dev *ctrl_dev)
 	ctrl_dev->dev_info.ublksrv_pid = data.data = daemon_pid;
 	ret = __ublksrv_ctrl_cmd(ctrl_dev, &data);
 
-	/* disk is added now, so queue cpusets can be freed */
-	free(ctrl_dev->queues_cpuset);
-	ctrl_dev->queues_cpuset = NULL;
 	return ret;
 }
 
