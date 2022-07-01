@@ -14,27 +14,41 @@ int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
 	return -1;
 }
 
-int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type, int argc, char
-		*argv[])
+static int __ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type_name,
+		const struct ublksrv_tgt_type *ops, int type,
+		int argc, char *argv[])
+{
+	if (strcmp(ops->name, type_name))
+		return -EINVAL;
+
+	if (!ops->init_tgt(tgt, type, argc, argv)) {
+		tgt->ops = ops;
+		return 0;
+	}
+	return -EINVAL;
+}
+
+int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type_name,
+		const struct ublksrv_tgt_type *ops,
+		int argc, char *argv[])
 {
 	int i;
 
-	if (type == NULL)
-		return -1;
+	if (type_name == NULL)
+		return -EINVAL;
+
+	if (ops)
+		return __ublksrv_tgt_init(tgt, type_name, ops,
+				ops->type, argc, argv);
 
 	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
-		const struct ublksrv_tgt_type  *ops = tgt_list[i];
+		const struct ublksrv_tgt_type  *lops = tgt_list[i];
 
-		if (strcmp(ops->name, type))
-			continue;
-
-		if (!ops->init_tgt(tgt, i, argc, argv)) {
-			tgt->ops = ops;
+		if (!__ublksrv_tgt_init(tgt, type_name, lops, i, argc, argv))
 			return 0;
-		}
 	}
 
-	return -1;
+	return -EINVAL;
 }
 
 /*

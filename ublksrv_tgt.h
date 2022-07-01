@@ -104,6 +104,7 @@ static inline unsigned ublksrv_convert_cmd_op(const struct ublksrv_io_desc *iod)
 }
 
 int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type,
+		const struct ublksrv_tgt_type *ops,
 		int argc, char *argv[]);
 int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
 int ublksrv_prepare_target(struct ublksrv_tgt_info *tgt, struct ublksrv_dev *dev);

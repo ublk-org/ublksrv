@@ -377,7 +377,7 @@ int cmd_dev_add(int argc, char *argv[])
 		dev->dev_info.queue_depth = depth;
 
 	optind = 0;	/* so that tgt code can parse their arguments */
-	if (ublksrv_tgt_init(&dev->tgt, type, argc, argv))
+	if (ublksrv_tgt_init(&dev->tgt, type, NULL, argc, argv))
 		die("usbsrv: target init failed\n");
 
 	ret = ublksrv_add_dev(dev);
