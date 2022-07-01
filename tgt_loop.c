@@ -1,5 +1,10 @@
 #include "ublksrv.h"
 
+static const char *loop_tgt_backfile(struct ublksrv_tgt_info *tgt)
+{
+	return (const char *)tgt->tgt_data;
+}
+
 static int loop_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc, char
 		*argv[])
 {
@@ -48,7 +53,7 @@ static int loop_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc, char
 		bytes = 0;
 	}
 
-	strncpy(tgt->loop.backing_file, file, 1024);
+	tgt->tgt_data = strdup(file);
 	tgt->dev_size = bytes;
 
 	tgt->tgt_ring_depth = cdev->dev_info.queue_depth;
@@ -66,7 +71,7 @@ static void loop_usage_for_add(void)
 
 static int loop_prepare_io(struct ublksrv_tgt_info *tgt)
 {
-	const char *file = tgt->loop.backing_file;
+	const char *file = (const char *)tgt->tgt_data;
 	int fd;
 
 	fd = open(file, O_RDWR | O_DIRECT);
@@ -210,8 +215,14 @@ static int loop_prepare_target(struct ublksrv_tgt_info *tgt,
 	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
 			UBLKSRV_SHM_SIZE - cdev->shm_offset,
 			"target type: %s backing file: %s\n",
-			tgt->ops->name, tgt->loop.backing_file);
+			tgt->ops->name, loop_tgt_backfile(tgt));
 	return 0;
+}
+
+static void loop_deinit_tgt(struct ublksrv_tgt_info *tgt,
+		struct ublksrv_dev *dev)
+{
+	free(tgt->tgt_data);
 }
 
 struct ublksrv_tgt_type  loop_tgt_type = {
@@ -222,6 +233,7 @@ struct ublksrv_tgt_type  loop_tgt_type = {
 	.tgt_io_done = loop_tgt_io_done,
 	.prepare_target	=  loop_prepare_target,
 	.usage_for_add	=  loop_usage_for_add,
+	.deinit_tgt	=  loop_deinit_tgt,
 };
 
 static void tgt_loop_init() __attribute__((constructor));

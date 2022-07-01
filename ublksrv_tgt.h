@@ -46,14 +46,6 @@ enum {
 	UBLKSRV_TGT_TYPE_MAX,
 };
 
-struct ublksrv_tgt_info_loop {
-	char backing_file[1024];
-};
-
-struct ublksrv_tgt_info_null {
-	int data;
-};
-
 struct ublksrv_tgt_type {
 	int  type;
 	const char *name;
@@ -87,10 +79,7 @@ struct ublksrv_tgt_info {
 	unsigned int tgt_ring_depth;	/* at most in-flight ios */
 	unsigned int nr_fds;
 	int fds[UBLKSRV_TGT_MAX_FDS];
-	union {
-		struct ublksrv_tgt_info_loop loop;
-		struct ublksrv_tgt_info_null null;
-	};
+	void *tgt_data;
 	const struct ublksrv_tgt_type *ops;
 };
 
