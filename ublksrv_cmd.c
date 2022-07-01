@@ -12,8 +12,6 @@ struct ublksrv_ctrl_cmd_data {
 	__u32 len;
 };
 
-static int ctrl_fd = -1;
-
 /********************cmd handling************************/
 static char *full_cmd;
 
@@ -41,7 +39,7 @@ static inline void ublksrv_ctrl_init_cmd(struct ublksrv_ctrl_dev *dev,
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 	struct ublksrv_ctrl_cmd *cmd = (struct ublksrv_ctrl_cmd *)ublksrv_get_sqe_cmd(sqe);
 
-	sqe->fd = ctrl_fd;
+	sqe->fd = dev->ctrl_fd;
 	sqe->opcode = IORING_OP_URING_CMD;
 	sqe->ioprio = 0;
 
@@ -98,32 +96,29 @@ static int __ublksrv_ctrl_cmd(struct ublksrv_ctrl_dev *dev,
 	return cqe->res;
 }
 
-static void setup_ctrl_dev()
-{
-	ctrl_fd = open(CTRL_DEV, O_RDWR);
-	if (ctrl_fd < 0) {
-		fprintf(stderr, "conrol dev %s can't be opened\n", CTRL_DEV);
-		exit(ctrl_fd);
-	}
-}
-
 static void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev)
 {
 	close(dev->ring.ring_fd);
+	close(dev->ctrl_fd);
 	free(dev->queues_cpuset);
 	free(dev);
 }
 
 static struct ublksrv_ctrl_dev *ublksrv_dev_init(int dev_id, bool zcopy)
 {
-	struct ublksrv_ctrl_dev *dev = (struct ublksrv_ctrl_dev *)malloc(sizeof(*dev));
+	struct ublksrv_ctrl_dev *dev = (struct ublksrv_ctrl_dev *)calloc(1, sizeof(*dev));
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 	int ret;
 
 	if (!dev)
 		die("allocate dev failed\n");
 
-	memset(dev, 0, sizeof(*dev));
+	dev->ctrl_fd = open(CTRL_DEV, O_RDWR);
+	if (dev->ctrl_fd < 0) {
+		fprintf(stderr, "conrol dev %s can't be opened\n", CTRL_DEV);
+		exit(dev->ctrl_fd);
+	}
+
 	if (zcopy)
 		dev->dev_info.flags[0] |= (1ULL << UBLK_F_SUPPORT_ZERO_COPY);
 	else
@@ -368,8 +363,6 @@ int cmd_dev_add(int argc, char *argv[])
 		}
 	}
 
-	setup_ctrl_dev();
-
 	dev = ublksrv_dev_init(number, zcopy);
 	if (queues && queues <= MAX_NR_HW_QUEUES)
 		dev->dev_info.nr_hw_queues = queues;
@@ -492,7 +485,6 @@ int cmd_dev_del(int argc, char *argv[])
 		}
 	}
 
-	setup_ctrl_dev();
 	if (number >= 0)
 		return __cmd_dev_del(number, true);
 
@@ -542,8 +534,6 @@ int cmd_list_dev_info(int argc, char *argv[])
 			break;
 		}
 	}
-
-	setup_ctrl_dev();
 
 	if (number >= 0)
 		return list_one_dev(number, true);

@@ -67,6 +67,7 @@ extern "C" {
 struct ublksrv_ctrl_dev {
 	struct io_uring ring;
 
+	int ctrl_fd;
 	unsigned bs_shift;
 	struct ublksrv_ctrl_dev_info  dev_info;
 
