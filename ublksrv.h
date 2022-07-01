@@ -96,7 +96,7 @@ struct ublk_io {
 		int queued_tgt_io;
 	};
 	struct io_uring_cqe *tgt_io_cqe;
-	co_handle_type co;
+	unsigned long io_data;
 };
 
 struct ublksrv_queue {

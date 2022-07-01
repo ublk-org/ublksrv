@@ -1,4 +1,4 @@
-#include "ublksrv.h"
+#include "ublksrv_priv.h"
 
 static const char *loop_tgt_backfile(struct ublksrv_tgt_info *tgt)
 {
@@ -152,9 +152,9 @@ static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
 	return 1;
 }
 
-static co_io_job loop_handle_io_async(struct ublksrv_queue *q, int tag)
+static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
+		struct ublk_io *io, int tag)
 {
-	struct ublk_io *io = &q->ios[tag];
 	struct io_uring_cqe *cqe;
 	int ret;
 
@@ -184,6 +184,14 @@ static co_io_job loop_handle_io_async(struct ublksrv_queue *q, int tag)
 	}
 }
 
+static int loop_handle_io_async(struct ublksrv_queue *q, int tag)
+{
+	struct ublk_io_tgt *io = (struct ublk_io_tgt *)&q->ios[tag];
+
+	io->co = __loop_handle_io_async(q, (struct ublk_io *)io, tag);
+	return 0;
+}
+
 static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 {
 	int tag = user_data_to_tag(cqe->user_data);
@@ -196,7 +204,7 @@ static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 				user_data_to_tag(cqe->user_data),
 				user_data_to_op(cqe->user_data));
 		io->tgt_io_cqe = cqe;
-		io->co.resume();
+		((struct ublk_io_tgt *)io)->co.resume();
 	}
 }
 

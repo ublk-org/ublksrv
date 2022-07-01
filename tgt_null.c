@@ -1,4 +1,4 @@
-#include "ublksrv.h"
+#include "ublksrv_priv.h"
 
 static int null_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc,
 		char *argv[])
@@ -17,10 +17,10 @@ static int null_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc,
 	return 0;
 }
 
-static co_io_job null_handle_io_async(struct ublksrv_queue *q, int tag)
+static co_io_job __null_handle_io_async(struct ublksrv_queue *q,
+		struct ublk_io *io, int tag)
 {
 	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
-	struct ublk_io *io = &q->ios[tag];
 
 	ublksrv_mark_io_done(io, iod->nr_sectors << 9);
 
@@ -28,6 +28,15 @@ static co_io_job null_handle_io_async(struct ublksrv_queue *q, int tag)
 	ublksrv_queue_io_cmd(q, tag);
 
 	co_io_job_return();
+}
+
+static int null_handle_io_async(struct ublksrv_queue *q, int tag)
+{
+	struct ublk_io_tgt *io = (struct ublk_io_tgt *)&q->ios[tag];
+
+	io->co = __null_handle_io_async(q, (struct ublk_io *)io, tag);
+
+	return 0;
 }
 
 static int null_prepare_target(struct ublksrv_tgt_info *tgt,

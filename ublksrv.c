@@ -475,7 +475,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	 * daemon can poll on both two rings.
 	 */
 	if (cqe->res == UBLK_IO_RES_OK && cmd_op != UBLK_IO_COMMIT_REQ) {
-		io->co = tgt->ops->handle_io_async(q, tag);
+		tgt->ops->handle_io_async(q, tag);
 	} else {
 		/*
 		 * COMMIT_REQ will be completed immediately since no fetching

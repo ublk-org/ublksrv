@@ -56,7 +56,7 @@ struct ublksrv_tgt_type {
 	 * functions called from ->handle_io_async can't be defined as
 	 * coroutine, and please keep it in mind.
 	 */
-	co_io_job (*handle_io_async)(struct ublksrv_queue *, int tag);
+	int (*handle_io_async)(struct ublksrv_queue *, int tag);
 
 	void (*tgt_io_done)(struct ublksrv_queue *, struct io_uring_cqe *);
 
@@ -82,26 +82,6 @@ struct ublksrv_tgt_info {
 	void *tgt_data;
 	const struct ublksrv_tgt_type *ops;
 };
-
-static inline unsigned ublksrv_convert_cmd_op(const struct ublksrv_io_desc *iod)
-{
-	unsigned ublk_op = ublksrv_get_op(iod);
-
-	switch (ublk_op) {
-	case UBLK_IO_OP_READ:
-		return IORING_OP_READ;
-	case UBLK_IO_OP_WRITE:
-		return IORING_OP_WRITE;
-	case UBLK_IO_OP_FLUSH:
-		return IORING_OP_FSYNC;
-	case UBLK_IO_OP_DISCARD:
-	case UBLK_IO_OP_WRITE_SAME:
-	case UBLK_IO_OP_WRITE_ZEROES:
-		return IORING_OP_FALLOCATE;
-	default:
-		return -1;
-	}
-}
 
 int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type,
 		const struct ublksrv_tgt_type *ops,
