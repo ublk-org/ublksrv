@@ -123,17 +123,6 @@ static int ublksrv_queue_is_done(struct ublksrv_queue *q)
 	return q->stopping && (!q->cmd_inflight && !q->tgt_io_inflight);
 }
 
-static int ublksrv_dev_is_done(struct ublksrv_dev *dev)
-{
-	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
-	int i, ret = 0;
-
-	for (i = 0; i < nr_queues; i++)
-		ret += ublksrv_queue_is_done(ublksrv_get_queue(dev, i));
-
-	return ret == nr_queues;
-}
-
 /*
  * Now STOP DEV ctrl command has been sent to /dev/ublk-control,
  * and wait until all pending fetch commands are canceled
