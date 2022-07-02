@@ -75,6 +75,9 @@ struct ublksrv_dev_data {
 	unsigned short	nr_hw_queues;
 	unsigned short	queue_depth;
 	unsigned short	block_size;
+	char		*tgt_type;
+	int		tgt_argc;
+	char		**tgt_argv;
 	unsigned long	flags[2];
 	unsigned long   reserved[8];
 };
@@ -86,7 +89,10 @@ struct ublksrv_ctrl_dev {
 	unsigned bs_shift;
 	struct ublksrv_ctrl_dev_info  dev_info;
 
-	struct ublksrv_tgt_info tgt;
+	const char *tgt_type;
+	int tgt_argc;
+	char **tgt_argv;
+
 	cpu_set_t *queues_cpuset;
 };
 
@@ -143,14 +149,15 @@ struct ublksrv_queue {
 };
 
 struct ublksrv_dev {
-	struct ublksrv_ctrl_dev	*ctrl_dev;
-	void	*target_data;
+	struct ublksrv_tgt_info tgt;
 
 	struct ublksrv_queue *__queues[MAX_NR_HW_QUEUES];
 	char	*io_buf_start;
 	pthread_t *thread;
 	int cdev_fd;
 
+	struct ublksrv_ctrl_dev	*ctrl_dev;
+	void	*target_data;
 	/*
 	 * for communication with control task which may not be in
 	 * same process with io context

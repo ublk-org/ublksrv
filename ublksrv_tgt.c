@@ -14,21 +14,23 @@ int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
 	return -1;
 }
 
-static int __ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type_name,
+static int __ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, const char *type_name,
 		const struct ublksrv_tgt_type *ops, int type,
 		int argc, char *argv[])
 {
 	if (strcmp(ops->name, type_name))
 		return -EINVAL;
 
+	optind = 0;     /* so that we can parse our arguments */
+	tgt->ops = ops;
 	if (!ops->init_tgt(tgt, type, argc, argv)) {
-		tgt->ops = ops;
 		return 0;
 	}
+	tgt->ops = NULL;
 	return -EINVAL;
 }
 
-int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type_name,
+int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, const char *type_name,
 		const struct ublksrv_tgt_type *ops,
 		int argc, char *argv[])
 {
@@ -49,27 +51,6 @@ int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type_name,
 	}
 
 	return -EINVAL;
-}
-
-/*
- * Called in ublk daemon process context, and before creating per-queue
- * thread context
- */
-int ublksrv_prepare_target(struct ublksrv_tgt_info *tgt, struct ublksrv_dev *dev)
-{
-	struct ublksrv_ctrl_dev *cdev = container_of(tgt,
-			struct ublksrv_ctrl_dev, tgt);
-
-	if (tgt->ops->prepare_target)
-		return tgt->ops->prepare_target(tgt, dev);
-
-	pthread_mutex_lock(&dev->shm_lock);
-	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
-		UBLKSRV_SHM_SIZE - dev->shm_offset,
-		"target type: %s\n", tgt->ops->name);
-	pthread_mutex_unlock(&dev->shm_lock);
-
-	return 0;
 }
 
 void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,

@@ -7,7 +7,7 @@ struct ublksrv_ctrl_cmd_data {
 	unsigned short cmd_op;
 	unsigned short flags;
 
-	__u64 data;
+	__u64 data[2];
 	__u64 addr;
 	__u32 len;
 };
@@ -49,7 +49,8 @@ static inline void ublksrv_ctrl_init_cmd(struct ublksrv_ctrl_dev *dev,
 	}
 
 	if (data->flags & CTRL_CMD_HAS_DATA) {
-		cmd->data[0] = data->data;
+		cmd->data[0] = data->data[0];
+		cmd->data[1] = data->data[1];
 	}
 
 	cmd->dev_id = info->dev_id;
@@ -130,6 +131,10 @@ static struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data)
 	info->flags[1] = data->flags[1];
 	dev->bs_shift = ilog2(info->block_size);
 
+	dev->tgt_type = data->tgt_type;
+	dev->tgt_argc = data->tgt_argc;
+	dev->tgt_argv = data->tgt_argv;
+
 	/* 32 is enough to send ctrl commands */
 	ret = ublksrv_setup_ring(32, &dev->ring, IORING_SETUP_SQE128);
 	if (ret < 0) {
@@ -156,7 +161,8 @@ static int ublksrv_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 		return -1;
 
 	for (i = 0; i < ctrl_dev->dev_info.nr_hw_queues; i++) {
-		data.data = i;
+		data.data[0] = i;
+		data.data[1] = 0;
 		data.addr = (__u64)&sets[i];
 		data.len = sizeof(cpu_set_t);
 
@@ -246,7 +252,22 @@ static int ublksrv_start_dev(struct ublksrv_ctrl_dev *ctrl_dev)
 	if (daemon_pid < 0)
 		return -1;
 
-	ctrl_dev->dev_info.ublksrv_pid = data.data = daemon_pid;
+	ctrl_dev->dev_info.ublksrv_pid = data.data[0] = daemon_pid;
+	if (ctrl_dev->dev_info.flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)) {
+		char *addr;
+		int fd = ublksrv_open_shm(ctrl_dev, &addr);
+
+		if (fd > 0) {
+			struct ublksrv_ctrl_dev_info *info =
+				(struct ublksrv_ctrl_dev_info *)addr;
+			ctrl_dev->dev_info.dev_blocks = data.data[1] =
+				info->dev_blocks;
+			ublksrv_close_shm(ctrl_dev, fd, addr);
+		}
+	} else {
+		data.data[1] = ctrl_dev->dev_info.dev_blocks;
+	}
+
 	ret = __ublksrv_ctrl_cmd(ctrl_dev, &data);
 
 	return ret;
@@ -378,7 +399,7 @@ int cmd_dev_add(int argc, char *argv[])
 			data.dev_id = strtol(optarg, NULL, 10);
 			break;
 		case 't':
-			type = optarg;
+			data.tgt_type = optarg;
 			break;
 		case 'z':
 			data.flags[0] |= 1ULL << UBLK_F_SUPPORT_ZERO_COPY;
@@ -397,18 +418,13 @@ int cmd_dev_add(int argc, char *argv[])
 		data.nr_hw_queues = MAX_NR_HW_QUEUES;
 	if (data.queue_depth > MAX_QD)
 		data.queue_depth = MAX_QD;
-
+	//optind = 0;	/* so that tgt code can parse their arguments */
+	data.tgt_argc = argc;
+	data.tgt_argv = argv;
 	dev = ublksrv_dev_init(&data);
 	if (!dev) {
 		fprintf(stderr, "can't init dev %d\n", data.dev_id);
 		return -ENODEV;
-	}
-
-	optind = 0;	/* so that tgt code can parse their arguments */
-	ret = ublksrv_tgt_init(&dev->tgt, type, NULL, argc, argv);
-	if (ret) {
-		fprintf(stderr, "can't init tgt %d, ret %d\n", data.dev_id, ret);
-		goto fail_deinit_tgt;
 	}
 
 	ret = ublksrv_add_dev(dev);
@@ -426,9 +442,6 @@ int cmd_dev_add(int argc, char *argv[])
 	}
 	ret = ublksrv_get_dev_info(dev);
 	ublksrv_dump(dev);
-
- fail_deinit_tgt:
-	ublksrv_tgt_deinit(&dev->tgt, NULL);
 
  fail:
 	ublksrv_dev_deinit(dev);

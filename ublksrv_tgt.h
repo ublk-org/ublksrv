@@ -60,15 +60,6 @@ struct ublksrv_tgt_type {
 
 	void (*tgt_io_done)(struct ublksrv_queue *, struct io_uring_cqe *);
 
-	/*
-	 * Called in daemon task context, and before starting per-queue
-	 * thread.
-	 *
-	 * Usually, tgt code can setup output for list command; meantime
-	 * prepare for handling io, or all kinds of things.
-	 */
-	int (*prepare_target)(struct ublksrv_tgt_info *, struct ublksrv_dev *);
-
 	void (*usage_for_add)(void);
 
 	void (*deinit_tgt)(struct ublksrv_tgt_info *, struct ublksrv_dev *);
@@ -83,11 +74,10 @@ struct ublksrv_tgt_info {
 	const struct ublksrv_tgt_type *ops;
 };
 
-int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, char *type,
+int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, const char *type,
 		const struct ublksrv_tgt_type *ops,
 		int argc, char *argv[]);
 int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
-int ublksrv_prepare_target(struct ublksrv_tgt_info *tgt, struct ublksrv_dev *dev);
 void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 			const struct ublksrv_tgt_type *type, void *data),
 		void *data);

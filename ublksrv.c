@@ -257,7 +257,7 @@ static struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	int i, ret = -1;
 	int cmd_buf_size, io_buf_size;
 	unsigned long off;
-	int ring_depth = depth + ctrl_dev->tgt.tgt_ring_depth;
+	int ring_depth = depth + dev->tgt.tgt_ring_depth;
 
 	q = (struct ublksrv_queue *)malloc(sizeof(struct ublksrv_queue) + sizeof(struct ublk_io) *
 		ctrl_dev->dev_info.queue_depth);
@@ -297,8 +297,8 @@ static struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	if (ret < 0)
 		goto fail;
 
-	ret = io_uring_register_files(&q->ring, ctrl_dev->tgt.fds,
-			ctrl_dev->tgt.nr_fds + 1);
+	ret = io_uring_register_files(&q->ring, dev->tgt.fds,
+			dev->tgt.nr_fds + 1);
 	if (ret)
 		goto fail;
 
@@ -327,7 +327,7 @@ static void ublksrv_deinit(struct ublksrv_dev *dev)
 		close(dev->shm_fd);
 	}
 
-	ublksrv_tgt_deinit(&dev->ctrl_dev->tgt, dev);
+	ublksrv_tgt_deinit(&dev->tgt, dev);
 	free(dev->thread);
 
 	if (dev->cdev_fd >= 0) {
@@ -360,7 +360,7 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 
 	dev->shm_addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE,
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	dev->shm_offset += sizeof(struct ublksrv_ctrl_dev_info);
+	dev->shm_offset = sizeof(struct ublksrv_ctrl_dev_info);
 	dev->shm_fd = fd;
 	ublksrv_log(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
 				buf, fd, dev->shm_addr);
@@ -371,16 +371,17 @@ static struct ublksrv_dev *ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev,
 {
 	int nr_queues = ctrl_dev->dev_info.nr_hw_queues;
 	int dev_id = ctrl_dev->dev_info.dev_id;
-	struct ublksrv_tgt_info *tgt = &ctrl_dev->tgt;
 	int queue_size;
 	char buf[64];
 	int ret = -1;
 	int i;
 	struct ublksrv_dev *dev = (struct ublksrv_dev *)calloc(1, sizeof(*dev));
+	struct ublksrv_tgt_info *tgt;
 
 	if (!dev)
 		return dev;
 
+	tgt = &dev->tgt;
 	dev->ctrl_dev = ctrl_dev;
 	dev->cdev_fd = -1;
 
@@ -397,9 +398,14 @@ static struct ublksrv_dev *ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev,
 	if (ret)
 		goto fail;
 
-	ret = -1;
-	if (ublksrv_prepare_target(&dev->ctrl_dev->tgt, dev) < 0)
+	ret = ublksrv_tgt_init(&dev->tgt, ctrl_dev->tgt_type, NULL,
+			ctrl_dev->tgt_argc, ctrl_dev->tgt_argv);
+	if (ret) {
+		syslog(LOG_ERR, "can't init tgt %d/%s/%d, ret %d\n",
+				dev_id, ctrl_dev->tgt_type, ctrl_dev->tgt_argc,
+				ret);
 		goto fail;
+	}
 
 	for (i = 0; i < nr_queues; i++) {
 		info[i].dev = dev;
@@ -438,7 +444,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	struct ublksrv_queue *q = container_of(r, struct ublksrv_queue, ring);
 	struct ublksrv_dev *dev = q->dev;
 	struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
-	struct ublksrv_tgt_info *tgt = &ctrl_dev->tgt;
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	unsigned tag = user_data_to_tag(cqe->user_data);
 	unsigned cmd_op = user_data_to_op(cqe->user_data);
 	int fetch = (cqe->res != UBLK_IO_RES_ABORT) && !q->stopping;
@@ -631,7 +637,6 @@ static void ublksrv_remove_pid_file(int dev_id)
 static void ublksrv_io_handler(void *data)
 {
 	struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
-	struct ublksrv_tgt_info *tgt = &ctrl_dev->tgt;
 	int dev_id = ctrl_dev->dev_info.dev_id;
 	int ret;
 	char buf[32];

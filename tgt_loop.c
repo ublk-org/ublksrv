@@ -8,12 +8,14 @@ static const char *loop_tgt_backfile(struct ublksrv_tgt_info *tgt)
 static int loop_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc, char
 		*argv[])
 {
+	struct ublksrv_dev *dev = container_of(tgt, struct ublksrv_dev, tgt);
+	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
+	struct ublksrv_ctrl_dev_info  *shm_info =
+		(struct ublksrv_ctrl_dev_info  *)dev->shm_addr;
 	static const struct option lo_longopts[] = {
 		{ "file",		1,	NULL, 'f' },
 		{ NULL }
 	};
-	struct ublksrv_ctrl_dev *cdev = container_of(tgt,
-			struct ublksrv_ctrl_dev, tgt);
 	unsigned long long bytes;
 	struct stat st;
 	int fd, opt;
@@ -34,7 +36,7 @@ static int loop_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc, char
 	if (!file)
 		return -1;
 
-	fd = open(file, O_RDWR);
+	fd = open(file, O_RDWR | O_DIRECT);
 	if (fd < 0) {
 		fprintf(stderr, "__func__, backing file %s can't be opened\n",
 				__func__, file);
@@ -55,11 +57,18 @@ static int loop_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc, char
 
 	tgt->tgt_data = strdup(file);
 	tgt->dev_size = bytes;
+	tgt->tgt_ring_depth = info->queue_depth;
+	tgt->nr_fds = 1;
+	tgt->fds[1] = fd;
 
-	tgt->tgt_ring_depth = cdev->dev_info.queue_depth;
-	cdev->dev_info.dev_blocks = tgt->dev_size / cdev->dev_info.block_size;
-
-	close(fd);
+	pthread_mutex_lock(&dev->shm_lock);
+	*shm_info = *info;
+	shm_info->dev_blocks = tgt->dev_size / info->block_size;
+	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
+			UBLKSRV_SHM_SIZE - dev->shm_offset,
+			"target type: %s backing file: %s\n",
+			tgt->ops->name, loop_tgt_backfile(tgt));
+	pthread_mutex_unlock(&dev->shm_lock);
 
 	return 0;
 }
@@ -67,24 +76,6 @@ static int loop_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc, char
 static void loop_usage_for_add(void)
 {
 	printf("           loop: -f backing_file\n");
-}
-
-static int loop_prepare_io(struct ublksrv_tgt_info *tgt)
-{
-	const char *file = (const char *)tgt->tgt_data;
-	int fd;
-
-	fd = open(file, O_RDWR | O_DIRECT);
-	if (fd < 0) {
-		syslog(LOG_ERR, "%s: %s backing file %s can't be opened\n",
-				__func__, file);
-		return -1;
-	}
-
-	tgt->nr_fds = 1;
-	tgt->fds[1] = fd;
-
-	return 0;
 }
 
 static void loop_handle_fallocate_async(struct io_uring_sqe *sqe,
@@ -208,27 +199,6 @@ static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 	}
 }
 
-static int loop_prepare_target(struct ublksrv_tgt_info *tgt,
-		struct ublksrv_dev *dev)
-{
-	struct ublksrv_ctrl_dev *cdev = container_of(tgt,
-			struct ublksrv_ctrl_dev, tgt);
-	int ret;
-
-	ret = loop_prepare_io(tgt);
-
-	if (ret)
-		return ret;
-
-	pthread_mutex_lock(&dev->shm_lock);
-	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
-			UBLKSRV_SHM_SIZE - dev->shm_offset,
-			"target type: %s backing file: %s\n",
-			tgt->ops->name, loop_tgt_backfile(tgt));
-	pthread_mutex_unlock(&dev->shm_lock);
-	return 0;
-}
-
 static void loop_deinit_tgt(struct ublksrv_tgt_info *tgt,
 		struct ublksrv_dev *dev)
 {
@@ -241,7 +211,6 @@ struct ublksrv_tgt_type  loop_tgt_type = {
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
 	.tgt_io_done = loop_tgt_io_done,
-	.prepare_target	=  loop_prepare_target,
 	.usage_for_add	=  loop_usage_for_add,
 	.deinit_tgt	=  loop_deinit_tgt,
 };
