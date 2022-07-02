@@ -302,7 +302,7 @@ static void ublksrv_dump(struct ublksrv_ctrl_dev *dev)
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 	int fd;
 	char buf[64];
-	void *addr;
+	char *addr;
 
 	printf("dev id %d: nr_hw_queues %d queue_depth %d block size %d dev_capacity %lld\n",
 			info->dev_id,
@@ -317,7 +317,8 @@ static void ublksrv_dump(struct ublksrv_ctrl_dev *dev)
 	fd = shm_open(buf, O_RDONLY, 0);
 	if (fd <= 0)
 		return;
-	addr = mmap(NULL, UBLKSRV_SHM_SIZE, PROT_READ, MAP_SHARED, fd, 0);
+	addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE, PROT_READ, MAP_SHARED, fd, 0);
+	addr += sizeof(struct ublksrv_ctrl_dev_info);
 	printf("\t%s\n", addr);
 }
 

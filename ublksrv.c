@@ -357,7 +357,7 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 
 	dev->shm_addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE,
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	dev->shm_offset = 0;
+	dev->shm_offset += sizeof(struct ublksrv_ctrl_dev_info);
 	dev->shm_fd = fd;
 	ublksrv_log(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
 				buf, fd, dev->shm_addr);
