@@ -1,4 +1,4 @@
-#include "ublksrv_priv.h"
+#include "ublksrv_tgt.h"
 
 static int null_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc,
 		char *argv[])
