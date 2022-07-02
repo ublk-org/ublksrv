@@ -70,13 +70,13 @@ extern "C" {
  * Target specific data is handled by ->init_tgt
  */
 struct ublksrv_dev_data {
-	int   dev_id;
-	__u16	nr_hw_queues;
-	__u16	queue_depth;
-	__u16	block_size;
-	__u32	rq_max_blocks;
-	__u64	flags[2];
-	__u64   reserved[8];
+	int		dev_id;
+	unsigned	rq_max_blocks;
+	unsigned short	nr_hw_queues;
+	unsigned short	queue_depth;
+	unsigned short	block_size;
+	unsigned long	flags[2];
+	unsigned long   reserved[8];
 };
 
 struct ublksrv_ctrl_dev {

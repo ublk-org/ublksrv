@@ -300,9 +300,6 @@ static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 static void ublksrv_dump(struct ublksrv_ctrl_dev *dev)
 {
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
-	int fd;
-	char buf[64];
-	char *addr;
 
 	printf("dev id %d: nr_hw_queues %d queue_depth %d block size %d dev_capacity %lld\n",
 			info->dev_id,
@@ -313,13 +310,20 @@ static void ublksrv_dump(struct ublksrv_ctrl_dev *dev)
 			info->ublksrv_pid, info->flags[0],
 			ublksrv_dev_state_desc(dev));
 
-	snprintf(buf, 64, "%s_%d", UBLKSRV_SHM_DIR, info->ublksrv_pid);
-	fd = shm_open(buf, O_RDONLY, 0);
-	if (fd <= 0)
-		return;
-	addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE, PROT_READ, MAP_SHARED, fd, 0);
-	addr += sizeof(struct ublksrv_ctrl_dev_info);
-	printf("\t%s\n", addr);
+        if (info->flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)) {
+		int fd;
+		char buf[64];
+		char *addr;
+
+		snprintf(buf, 64, "%s_%d", UBLKSRV_SHM_DIR, info->ublksrv_pid);
+		fd = shm_open(buf, O_RDONLY, 0);
+		if (fd <= 0)
+			return;
+		addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE, PROT_READ,
+				MAP_SHARED, fd, 0);
+		addr += sizeof(struct ublksrv_ctrl_dev_info);
+		printf("\t%s\n", addr);
+	}
 }
 
 int cmd_dev_add(int argc, char *argv[])
@@ -341,6 +345,7 @@ int cmd_dev_add(int argc, char *argv[])
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
 	data.dev_id = -1;
 	data.block_size = 512;
+	data.flags[0] |= (1 << UBLK_F_HAS_IO_DAEMON);
 
 	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:z",
 				  longopts, NULL)) != -1) {

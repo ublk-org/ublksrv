@@ -343,6 +343,9 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 	char buf[64];
 	unsigned pid = getpid();
 
+	if (!(dev->ctrl_dev->dev_info.flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)))
+		return;
+
 	pthread_mutex_init(&dev->shm_lock, NULL);
 
 	//if (dev->ctrl_dev->dev_info.ublksrv_pid <= 0)

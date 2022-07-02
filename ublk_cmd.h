@@ -52,6 +52,13 @@
  */
 #define UBLK_F_SUPPORT_ZERO_COPY	0
 
+/*
+ * HAS_IO_DAEMON means io handler has its own daemon context which isn't
+ * same with control command context, so shared memory communication is
+ * required between control task and io daemon
+ */
+#define UBLK_F_HAS_IO_DAEMON		1
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1
