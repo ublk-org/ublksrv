@@ -80,7 +80,7 @@ static int __ublksrv_ctrl_cmd(struct ublksrv_ctrl_dev *dev,
 	return cqe->res;
 }
 
-void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev)
+void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev)
 {
 	close(dev->ring.ring_fd);
 	close(dev->ctrl_fd);
@@ -88,7 +88,7 @@ void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev)
 	free(dev);
 }
 
-struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data)
+struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 {
 	struct ublksrv_ctrl_dev *dev = (struct ublksrv_ctrl_dev *)calloc(1,
 			sizeof(*dev));
@@ -127,7 +127,7 @@ struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data)
 }
 
 /* queues_cpuset is only used for setting up queue pthread daemon */
-int ublksrv_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
+int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	struct ublksrv_ctrl_cmd_data data = {
 		.cmd_op	= UBLK_CMD_GET_QUEUE_AFFINITY,
@@ -200,7 +200,7 @@ static void ublksrv_close_shm(struct ublksrv_ctrl_dev *ctrl_dev, int fd,
  * /dev/ublk-control with device id, which will cause ublk driver to
  * expose /dev/ublkbN
  */
-int ublksrv_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid)
+int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid)
 {
 	struct ublksrv_ctrl_cmd_data data = {
 		.cmd_op	= UBLK_CMD_START_DEV,
@@ -241,7 +241,7 @@ int ublksrv_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid)
  * 3) the ublk daemon figures out that all sqes are completed, and free,
  * then close /dev/ublkcN and exit itself.
  */
-int ublksrv_add_dev(struct ublksrv_ctrl_dev *dev)
+int ublksrv_ctrl_add_dev(struct ublksrv_ctrl_dev *dev)
 {
 	struct ublksrv_ctrl_cmd_data data = {
 		.cmd_op	= UBLK_CMD_ADD_DEV,
@@ -253,7 +253,7 @@ int ublksrv_add_dev(struct ublksrv_ctrl_dev *dev)
 	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
-int ublksrv_del_dev(struct ublksrv_ctrl_dev *dev)
+int ublksrv_ctrl_del_dev(struct ublksrv_ctrl_dev *dev)
 {
 	struct ublksrv_ctrl_cmd_data data = {
 		.cmd_op = UBLK_CMD_DEL_DEV,
@@ -263,7 +263,7 @@ int ublksrv_del_dev(struct ublksrv_ctrl_dev *dev)
 	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
-int ublksrv_get_dev_info(struct ublksrv_ctrl_dev *dev)
+int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev)
 {
 	struct ublksrv_ctrl_cmd_data data = {
 		.cmd_op	= UBLK_CMD_GET_DEV_INFO,
@@ -275,7 +275,7 @@ int ublksrv_get_dev_info(struct ublksrv_ctrl_dev *dev)
 	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
-int ublksrv_stop_dev(struct ublksrv_ctrl_dev *dev)
+int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev)
 {
 	struct ublksrv_ctrl_cmd_data data = {
 		.cmd_op	= UBLK_CMD_STOP_DEV,
@@ -298,7 +298,7 @@ static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 	};
 }
 
-void ublksrv_dump(struct ublksrv_ctrl_dev *dev)
+void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev)
 {
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 

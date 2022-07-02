@@ -140,7 +140,7 @@ static void ublksrv_io_handler(void *data)
 				struct ublksrv_queue_info),
 			ctrl_dev->dev_info.nr_hw_queues);
 
-	dev = ublksrv_init(ctrl_dev);
+	dev = ublksrv_dev_init(ctrl_dev);
 	if (!dev) {
 		syslog(LOG_ERR, "start ubsrv failed");
 		goto out;
@@ -157,7 +157,7 @@ static void ublksrv_io_handler(void *data)
 	/* wait until we are terminated */
 	ublksrv_drain_fetch_commands(dev, info_array);
 
-	ublksrv_deinit(dev);
+	ublksrv_dev_deinit(dev);
 
 	free(info_array);
 
@@ -227,7 +227,7 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 	int cnt = 0, daemon_pid;
 	int ret;
 
-	if (ublksrv_get_affinity(ctrl_dev) < 0)
+	if (ublksrv_ctrl_get_affinity(ctrl_dev) < 0)
 		return -1;
 
 	switch (fork()) {
@@ -301,13 +301,13 @@ static int cmd_dev_add(int argc, char *argv[])
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;
 	data.tgt_argv = argv;
-	dev = ublksrv_dev_init(&data);
+	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "can't init dev %d\n", data.dev_id);
 		return -ENODEV;
 	}
 
-	ret = ublksrv_add_dev(dev);
+	ret = ublksrv_ctrl_add_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "can't add dev %d, ret %d\n", data.dev_id, ret);
 		goto fail;
@@ -317,23 +317,23 @@ static int cmd_dev_add(int argc, char *argv[])
 	if (ret <= 0)
 		goto fail_del_dev;
 
-	ret = ublksrv_start_dev(dev, ret);
+	ret = ublksrv_ctrl_start_dev(dev, ret);
 	if (ret < 0) {
 		fprintf(stderr, "start dev failed %d, ret %d\n", data.dev_id,
 				ret);
 		goto fail_stop_daemon;
 	}
-	ret = ublksrv_get_dev_info(dev);
-	ublksrv_dump(dev);
-	ublksrv_dev_deinit(dev);
+	ret = ublksrv_ctrl_get_info(dev);
+	ublksrv_ctrl_dump(dev);
+	ublksrv_ctrl_deinit(dev);
 	return 0;
 
  fail_stop_daemon:
 	ublksrv_stop_io_daemon(dev);
  fail_del_dev:
-	ublksrv_del_dev(dev);
+	ublksrv_ctrl_del_dev(dev);
  fail:
-	ublksrv_dev_deinit(dev);
+	ublksrv_ctrl_deinit(dev);
 
 	return ret;
 }
@@ -384,16 +384,16 @@ static int __cmd_dev_del(int number, bool log)
 		.dev_id = number,
 	};
 
-	dev = ublksrv_dev_init(&data);
+	dev = ublksrv_ctrl_init(&data);
 
-	ret = ublksrv_get_dev_info(dev);
+	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
 		goto fail;
 	}
 
-	ret = ublksrv_stop_dev(dev);
+	ret = ublksrv_ctrl_stop_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "stop dev %d failed\n", number);
 		goto fail;
@@ -403,14 +403,14 @@ static int __cmd_dev_del(int number, bool log)
 	if (ret < 0)
 		fprintf(stderr, "stop daemon %d failed\n", number);
 
-	ret = ublksrv_del_dev(dev);
+	ret = ublksrv_ctrl_del_dev(dev);
 	if (ret < 0) {
 		fprintf(stderr, "delete dev %d failed\n", number);
 		goto fail;
 	}
 
 fail:
-	ublksrv_dev_deinit(dev);
+	ublksrv_ctrl_deinit(dev);
 	return ret;
 }
 
@@ -456,17 +456,17 @@ static int list_one_dev(int number, bool log)
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
 	};
-	struct ublksrv_ctrl_dev *dev = ublksrv_dev_init(&data);
+	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
 	int ret;
 
-	ret = ublksrv_get_dev_info(dev);
+	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
 	} else
-		ublksrv_dump(dev);
+		ublksrv_ctrl_dump(dev);
 
-	ublksrv_dev_deinit(dev);
+	ublksrv_ctrl_deinit(dev);
 
 	return ret;
 }

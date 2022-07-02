@@ -227,19 +227,19 @@ static inline unsigned int user_data_to_tgt_data(__u64 user_data)
 	return (user_data >> 24) & 0xffff;
 }
 
-extern void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev);
-extern struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data);
-extern int ublksrv_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev);
-extern int ublksrv_add_dev(struct ublksrv_ctrl_dev *dev);
-extern int ublksrv_del_dev(struct ublksrv_ctrl_dev *dev);
-extern int ublksrv_get_dev_info(struct ublksrv_ctrl_dev *dev);
-extern int ublksrv_stop_dev(struct ublksrv_ctrl_dev *dev);
-extern void ublksrv_dump(struct ublksrv_ctrl_dev *dev);
-extern int ublksrv_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid);
+extern void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev);
+extern struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data);
+extern int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev);
+extern int ublksrv_ctrl_add_dev(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_ctrl_del_dev(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev);
+extern void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid);
 
-extern struct ublksrv_dev *ublksrv_init(const struct ublksrv_ctrl_dev *
+extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);
-extern void ublksrv_deinit(struct ublksrv_dev *dev);
+extern void ublksrv_dev_deinit(struct ublksrv_dev *dev);
 
 extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id);

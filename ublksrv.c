@@ -241,7 +241,7 @@ static inline int ublk_io_buf_size(struct ublksrv_dev *dev)
 }
 
 /* mmap vm space for remapping block io request pages */
-static void ublksrv_deinit_io_bufs(struct ublksrv_dev *dev)
+static void ublksrv_dev_deinit_io_bufs(struct ublksrv_dev *dev)
 {
 	unsigned long sz = ublk_io_buf_size(dev);
 
@@ -252,7 +252,7 @@ static void ublksrv_deinit_io_bufs(struct ublksrv_dev *dev)
 }
 
 /* mmap vm space for remapping block io request pages */
-static int ublksrv_init_io_bufs(struct ublksrv_dev *dev)
+static int ublksrv_dev_init_io_bufs(struct ublksrv_dev *dev)
 {
 	unsigned long sz = ublk_io_buf_size(dev);
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
@@ -280,7 +280,7 @@ static int ublksrv_init_io_bufs(struct ublksrv_dev *dev)
 	return 0;
 }
 
-static void ublksrv_init_io_cmds(struct ublksrv_dev *dev, struct ublksrv_queue *q)
+static void ublksrv_dev_init_io_cmds(struct ublksrv_dev *dev, struct ublksrv_queue *q)
 {
 	struct io_uring *r = &q->ring;
 	struct io_uring_sqe *sqe;
@@ -420,7 +420,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	if (ret)
 		goto fail;
 
-	ublksrv_init_io_cmds(dev, q);
+	ublksrv_dev_init_io_cmds(dev, q);
 
 	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
 		syslog(LOG_INFO, "ublk dev %d queue %d set_io_flusher failed",
@@ -442,11 +442,11 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	return NULL;
 }
 
-void ublksrv_deinit(struct ublksrv_dev *dev)
+void ublksrv_dev_deinit(struct ublksrv_dev *dev)
 {
 	int i;
 
-	ublksrv_deinit_io_bufs(dev);
+	ublksrv_dev_deinit_io_bufs(dev);
 
 	if (dev->shm_fd >= 0) {
 		munmap(dev->shm_addr, UBLKSRV_SHM_SIZE);
@@ -492,7 +492,7 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 				buf, fd, dev->shm_addr);
 }
 
-struct ublksrv_dev *ublksrv_init(const struct ublksrv_ctrl_dev *ctrl_dev)
+struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int nr_queues = ctrl_dev->dev_info.nr_hw_queues;
 	int dev_id = ctrl_dev->dev_info.dev_id;
@@ -519,7 +519,7 @@ struct ublksrv_dev *ublksrv_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 
 	tgt->fds[0] = dev->cdev_fd;
 
-	ret = ublksrv_init_io_bufs(dev);
+	ret = ublksrv_dev_init_io_bufs(dev);
 	if (ret)
 		goto fail;
 
@@ -534,7 +534,7 @@ struct ublksrv_dev *ublksrv_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 
 	return dev;
 fail:
-	ublksrv_deinit(dev);
+	ublksrv_dev_deinit(dev);
 	return NULL;
 }
 
