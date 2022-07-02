@@ -30,9 +30,14 @@ tgt_null.o: tgt_null.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 tgt_loop.o: tgt_loop.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
+demo_null.o: demo_null.c
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 
 $(UBLKSRV_PROGS): $(UBLKSRV_OBJS) $(UBLKSRV_LIB)
 	$(CC) $(LDFLAGS) -o $@ $(UBLKSRV_OBJS) $(LIBS) -L. -lublksrv -Wl,-rpath,$(TOP_DIR)
+
+demo_null: demo_null.o
+	$(CC) $(LDFLAGS) -o $@ demo_null.o $(LIBS) -L. -lublksrv -Wl,-rpath,$(TOP_DIR)
 
 $(UBLKSRV_LIB): $(UBLKSRV_LIB_OBJS)
 	$(CC) -shared ${LDFLAGS} -o $@  $(UBLKSRV_LIB_OBJS) $(LIBS)
