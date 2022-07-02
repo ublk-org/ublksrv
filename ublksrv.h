@@ -87,12 +87,6 @@ struct ublksrv_ctrl_dev {
 	struct ublksrv_ctrl_dev_info  dev_info;
 
 	struct ublksrv_tgt_info tgt;
-
-	int shm_fd;
-	char *shm_addr;
-	unsigned int shm_offset;
-	pthread_mutex_t lock;
-
 	cpu_set_t *queues_cpuset;
 };
 
@@ -156,6 +150,15 @@ struct ublksrv_dev {
 	char	*io_buf_start;
 	pthread_t *thread;
 	int cdev_fd;
+
+	/*
+	 * for communication with control task which may not be in
+	 * same process with io context
+	 */
+	int shm_fd;
+	char *shm_addr;
+	unsigned int shm_offset;
+	pthread_mutex_t shm_lock;
 };
 
 static inline struct ublksrv_io_desc *ublksrv_get_iod(struct ublksrv_queue *q, int tag)

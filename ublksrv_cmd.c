@@ -138,8 +138,6 @@ static struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data)
 		return NULL;
 	}
 
-	pthread_mutex_init(&dev->lock, NULL);
-
 	return dev;
 }
 

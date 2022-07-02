@@ -47,9 +47,11 @@ static int null_prepare_target(struct ublksrv_tgt_info *tgt,
 
 	tgt->nr_fds = 0;
 
-	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
-			UBLKSRV_SHM_SIZE - cdev->shm_offset,
+	pthread_mutex_lock(&dev->shm_lock);
+	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
+			UBLKSRV_SHM_SIZE - dev->shm_offset,
 			"target type: %s\n", tgt->ops->name);
+	pthread_mutex_unlock(&dev->shm_lock);
 
 	return 0;
 }

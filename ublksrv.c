@@ -322,9 +322,9 @@ static void ublksrv_deinit(struct ublksrv_dev *dev)
 
 	ublksrv_deinit_io_bufs(dev);
 
-	if (dev->ctrl_dev->shm_fd >= 0) {
-		munmap(dev->ctrl_dev->shm_addr, UBLKSRV_SHM_SIZE);
-		close(dev->ctrl_dev->shm_fd);
+	if (dev->shm_fd >= 0) {
+		munmap(dev->shm_addr, UBLKSRV_SHM_SIZE);
+		close(dev->shm_fd);
 	}
 
 	ublksrv_tgt_deinit(&dev->ctrl_dev->tgt, dev);
@@ -343,6 +343,8 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 	char buf[64];
 	unsigned pid = getpid();
 
+	pthread_mutex_init(&dev->shm_lock, NULL);
+
 	//if (dev->ctrl_dev->dev_info.ublksrv_pid <= 0)
 	//	return;
 
@@ -353,12 +355,12 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 
 	ftruncate(fd, UBLKSRV_SHM_SIZE);
 
-	dev->ctrl_dev->shm_addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE,
+	dev->shm_addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE,
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	dev->ctrl_dev->shm_offset = 0;
-	dev->ctrl_dev->shm_fd = fd;
+	dev->shm_offset = 0;
+	dev->shm_fd = fd;
 	ublksrv_log(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
-				buf, fd, dev->ctrl_dev->shm_addr);
+				buf, fd, dev->shm_addr);
 }
 
 static struct ublksrv_dev *ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev,
@@ -523,12 +525,12 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 	ublksrv_build_cpu_str(cpus, 512, cpuset);
 
 	/* add queue info into shm buffer, be careful to add it just once */
-	pthread_mutex_lock(&cdev->lock);
-	cdev->shm_offset += snprintf(cdev->shm_addr + cdev->shm_offset,
-			UBLKSRV_SHM_SIZE - cdev->shm_offset,
+	pthread_mutex_lock(&dev->shm_lock);
+	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
+			UBLKSRV_SHM_SIZE - dev->shm_offset,
 			"\tqueue %u: tid %d affinity(%s)\n",
 			q_id, gettid(), cpus);
-	pthread_mutex_unlock(&cdev->lock);
+	pthread_mutex_unlock(&dev->shm_lock);
 }
 
 static void *ublksrv_io_handler_fn(void *data)
