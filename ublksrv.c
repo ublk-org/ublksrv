@@ -1,4 +1,4 @@
-#include "ublksrv.h"
+#include "ublksrv_priv.h"
 
 /*
  * /dev/ublkbN shares same lifetime with the ublk io daemon:
@@ -28,6 +28,8 @@
  * any more, also delete /dev/ublkbN.  After io daemon figures out
  * all sqes have been free, exit itself. Then STOP_DEV returns.
  */
+
+#define UBLKC_DEV	"/dev/ublkc"
 
 static void *ublksrv_io_handler_fn(void *data);
 

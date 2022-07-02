@@ -7,6 +7,9 @@
 
 #include "ublksrv.h"
 
+#define MAX_NR_UBLK_DEVS	128
+#define UBLKSRV_PID_FILE  "/var/run/ublksrvd"
+
 static inline unsigned ublksrv_convert_cmd_op(const struct ublksrv_io_desc *iod)
 {
 	unsigned ublk_op = ublksrv_get_op(iod);

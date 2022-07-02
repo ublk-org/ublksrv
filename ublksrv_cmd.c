@@ -1,4 +1,6 @@
-#include "ublksrv.h"
+#include "ublksrv_priv.h"
+
+#define	CTRL_DEV	"/dev/ublk-control"
 
 #define CTRL_CMD_HAS_DATA	1
 #define CTRL_CMD_HAS_BUF	2

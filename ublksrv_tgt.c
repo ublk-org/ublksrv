@@ -1,4 +1,5 @@
 #include "ublksrv.h"
+#include "ublksrv_tgt.h"
 
 /********************cmd handling************************/
 static char *full_cmd;
@@ -168,13 +169,13 @@ static void ublksrv_io_handler(void *data)
 }
 
 /* Not called from ublksrv daemon */
-int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev)
+static int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev)
 {
 	start_daemon(0, ublksrv_io_handler, (void *)dev);
 	return 0;
 }
 
-int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev)
+static int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int ret = -1, pid_fd;
 	char buf[64];
@@ -203,7 +204,7 @@ out:
 }
 
 /* Not called from ublksrv daemon */
-int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
+static int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int daemon_pid, cnt = 0;
 

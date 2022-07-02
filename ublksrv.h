@@ -44,10 +44,6 @@ extern "C" {
 
 #include "ublk_cmd.h"
 
-
-#define MAX_NR_UBLK_DEVS	128
-
-#define	CTRL_DEV	"/dev/ublk-control"
 #define	MAX_NR_HW_QUEUES 32
 #define	MAX_QD		1024
 #define	MAX_BUF_SIZE	(1024 << 10)
@@ -56,12 +52,7 @@ extern "C" {
 #define	DEF_QD		256
 #define	DEF_BUF_SIZE	(512 << 10)
 
-#define UBLKSRV_PID_FILE  "/var/run/ublksrvd"
-
-#define UBLKC_DEV	"/dev/ublkc"
-
 #define UBLKSRV_SHM_DIR	"ublksrv"
-
 #define UBLKSRV_SHM_SIZE  1024
 
 /*
@@ -148,7 +139,7 @@ struct ublksrv_queue {
 	struct ublk_io ios[0];
 };
 
-#define  UBLKSRV_TGT_MAX_FDS	8
+#define  UBLKSRV_TGT_MAX_FDS	32
 enum {
 	/* evaluate communication cost, ublksrv_null vs /dev/nullb0 */
 	UBLKSRV_TGT_TYPE_NULL,
@@ -231,17 +222,6 @@ static inline bool ublksrv_io_done(struct ublk_io *io)
 	return io->flags & UBLKSRV_IO_FREE;
 }
 
-static inline struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
-		int q_id)
-{
-	return dev->__queues[q_id];
-}
-
-static inline int is_target_io(__u64 user_data)
-{
-	return (user_data & (1ULL << 63)) != 0;
-}
-
 static inline __u64 build_user_data(unsigned tag, unsigned op,
 		unsigned tgt_data, unsigned is_target_io)
 {
@@ -263,43 +243,6 @@ static inline unsigned int user_data_to_op(__u64 user_data)
 static inline unsigned int user_data_to_tgt_data(__u64 user_data)
 {
 	return (user_data >> 24) & 0xffff;
-}
-
-int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev);
-int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *dev);
-int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev);
-
-/* two helpers for setting up io_uring */
-static inline int ublksrv_setup_ring(int depth, struct io_uring *r,
-		unsigned flags)
-{
-	struct io_uring_params p;
-
-	memset(&p, 0, sizeof(p));
-        p.flags = flags | IORING_SETUP_CQSIZE;
-        p.cq_entries = depth;
-
-        return io_uring_queue_init_params(depth, r, &p);
-}
-
-static inline struct io_uring_sqe *ublksrv_uring_get_sqe(struct io_uring *r,
-		int idx, bool is_sqe128)
-{
-	if (is_sqe128)
-		return  &r->sq.sqes[idx << 1];
-	return  &r->sq.sqes[idx];
-}
-
-static inline void *ublksrv_get_sqe_cmd(struct io_uring_sqe *sqe)
-{
-	return (void *)&sqe->addr3;
-}
-
-static inline void ublksrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op)
-{
-	__u32 *addr = (__u32 *)&sqe->off;
-
-	*addr = cmd_op;
 }
 
 extern int ublksrv_queue_io_cmd(struct ublksrv_queue *q, unsigned tag);
