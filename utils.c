@@ -18,18 +18,6 @@
 
 #include "utils.h"
 
-void die(const char *fmt, ...)
-{
-	va_list args;
-
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fputc('\n', stderr);
-
-	_exit(EXIT_FAILURE);
-}
-
 char *mprintf(const char *fmt, ...)
 {
 	va_list args;
@@ -39,9 +27,6 @@ char *mprintf(const char *fmt, ...)
 	va_start(args, fmt);
 	ret = vasprintf(&str, fmt, args);
 	va_end(args);
-
-	if (ret < 0)
-		die("insufficient memory");
 
 	return str;
 }

@@ -5,7 +5,8 @@
 #include <iostream>
 #include <type_traits>
 
-#include "ublksrv.h"
+//we are free to use the private definition
+#include "ublksrv_priv.h"
 
 #define MAX_NR_UBLK_DEVS	128
 #define UBLKSRV_PID_FILE  "/var/run/ublksrvd"

@@ -95,9 +95,6 @@ struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data)
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 	int ret;
 
-	if (!dev)
-		die("allocate dev failed\n");
-
 	dev->ctrl_fd = open(CTRL_DEV, O_RDWR);
 	if (dev->ctrl_fd < 0) {
 		fprintf(stderr, "conrol dev %s can't be opened\n", CTRL_DEV);

@@ -5,43 +5,6 @@
 extern "C" {
 #endif
 
-#ifdef DEBUG
-static inline void ublksrv_log(int priority, const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vsyslog(priority, fmt, ap);
-}
-
-static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stream, fmt, ap);
-}
-#else
-static inline void ublksrv_log(int priority, const char *fmt, ...) { }
-static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
-#endif
-
-static inline unsigned ilog2(unsigned x)
-{
-    return sizeof(unsigned) * 8 - 1 - __builtin_clz(x);
-}
-
-#define round_up(val, rnd) \
-	(((val) + (rnd - 1)) & ~(rnd - 1))
-
-#ifndef offsetof
-#define offsetof(TYPE, MEMBER)  ((size_t)&((TYPE *)0)->MEMBER)
-#endif
-#define container_of(ptr, type, member) ({                              \
-	unsigned long __mptr = (unsigned long)(ptr);                    \
-	((type *)(__mptr - offsetof(type, member))); })
-
-void die(const char *fmt, ...);
 char *mprintf(const char *fmt, ...);
 
 /* Bit-mask values for 'flags' argument of create_daemon() */
