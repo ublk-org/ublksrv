@@ -32,10 +32,7 @@ static co_io_job __null_handle_io_async(struct ublksrv_queue *q,
 {
 	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
 
-	ublksrv_mark_io_done(io, iod->nr_sectors << 9);
-
-	/* commit and re-fetch to ublk driver */
-	ublksrv_queue_io_cmd(q, tag);
+	ublksrv_complete_io(q, tag, iod->nr_sectors << 9);
 
 	co_io_job_return();
 }

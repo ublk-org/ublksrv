@@ -8,6 +8,17 @@
 extern "C" {
 #endif
 
+static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
+{
+	/*
+	 * mark io done by target, so that ->ubq_daemon can commit its
+	 * result and fetch new request via io_uring command.
+	 */
+	io->flags |= (UBLKSRV_NEED_COMMIT_RQ_COMP | UBLKSRV_IO_FREE);
+
+	io->result = res;
+}
+
 static inline bool ublksrv_io_done(struct ublk_io *io)
 {
 	return io->flags & UBLKSRV_IO_FREE;

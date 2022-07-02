@@ -204,17 +204,6 @@ static inline struct ublksrv_io_desc *ublksrv_get_iod(struct ublksrv_queue *q, i
                 &(q->io_cmd_buf[tag * sizeof(struct ublksrv_io_desc)]);
 }
 
-static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
-{
-	/*
-	 * mark io done by target, so that ->ubq_daemon can commit its
-	 * result and fetch new request via io_uring command.
-	 */
-	io->flags |= (UBLKSRV_NEED_COMMIT_RQ_COMP | UBLKSRV_IO_FREE);
-
-	io->result = res;
-}
-
 static inline __u64 build_user_data(unsigned tag, unsigned op,
 		unsigned tgt_data, unsigned is_target_io)
 {
@@ -238,8 +227,6 @@ static inline unsigned int user_data_to_tgt_data(__u64 user_data)
 	return (user_data >> 24) & 0xffff;
 }
 
-extern int ublksrv_queue_io_cmd(struct ublksrv_queue *q, unsigned tag);
-
 extern void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev);
 extern struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data);
 extern int ublksrv_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev);
@@ -259,6 +246,7 @@ extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
 
 extern int ublksrv_process_io(struct ublksrv_queue *q, unsigned *submitted);
+extern int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res);
 
 extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
 extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);

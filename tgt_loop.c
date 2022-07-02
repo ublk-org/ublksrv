@@ -165,11 +165,7 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 		if (cqe->res == -EAGAIN)
 			goto again;
 
-		/* all target io is done, so this io command is completed */
-		ublksrv_mark_io_done(io, cqe->res);
-
-		/* commit and re-fetch to ublk driver */
-		ublksrv_queue_io_cmd(q, tag);
+		ublksrv_complete_io(q, tag, cqe->res);
 	} else {
 		ublksrv_log(LOG_INFO, "no sqe %d\n", tag);
 	}

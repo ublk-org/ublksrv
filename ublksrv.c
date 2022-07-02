@@ -124,9 +124,9 @@ void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
 	}
 }
 
-int ublksrv_queue_io_cmd(struct ublksrv_queue *q, unsigned tag)
+static inline int ublksrv_queue_io_cmd(struct ublksrv_queue *q,
+		struct ublk_io *io, unsigned tag)
 {
-	struct ublk_io *io = &q->ios[tag];
 	struct ublksrv_io_cmd *cmd;
 	struct io_uring_sqe *sqe;
 	unsigned int cmd_op;
@@ -190,6 +190,15 @@ int ublksrv_queue_io_cmd(struct ublksrv_queue *q, unsigned tag)
 	return 1;
 }
 
+int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res)
+{
+	struct ublk_io *io = &q->ios[tag];
+
+	ublksrv_mark_io_done(io, res);
+
+	return ublksrv_queue_io_cmd(q, io, tag);
+}
+
 /*
  * Issue all available commands to /dev/ublkcN  and the exact cmd is figured
  * out in queue_io_cmd with help of each io->status.
@@ -198,11 +207,10 @@ int ublksrv_queue_io_cmd(struct ublksrv_queue *q, unsigned tag)
  */
 static void ublksrv_submit_fetch_commands(struct ublksrv_queue *q)
 {
-	unsigned cnt = 0;
 	int i = 0;
 
 	for (i = 0; i < q->q_depth; i++)
-		ublksrv_queue_io_cmd(q, i);
+		ublksrv_queue_io_cmd(q, &q->ios[i], i);
 }
 
 static int ublksrv_queue_is_done(struct ublksrv_queue *q)
