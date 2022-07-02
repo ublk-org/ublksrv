@@ -5,10 +5,10 @@ static const char *loop_tgt_backfile(struct ublksrv_tgt_info *tgt)
 	return (const char *)tgt->tgt_data;
 }
 
-static int loop_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc, char
+static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
-	struct ublksrv_dev *dev = container_of(tgt, struct ublksrv_dev, tgt);
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
 	struct ublksrv_ctrl_dev_info  *shm_info =
 		(struct ublksrv_ctrl_dev_info  *)dev->shm_addr;
@@ -193,10 +193,9 @@ static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 	((struct ublk_io_tgt *)io)->co.resume();
 }
 
-static void loop_deinit_tgt(struct ublksrv_tgt_info *tgt,
-		struct ublksrv_dev *dev)
+static void loop_deinit_tgt(struct ublksrv_dev *dev)
 {
-	free(tgt->tgt_data);
+	free(dev->tgt.tgt_data);
 }
 
 struct ublksrv_tgt_type  loop_tgt_type = {

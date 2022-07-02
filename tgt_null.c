@@ -1,10 +1,9 @@
 #include "ublksrv_tgt.h"
 
-static int null_init_tgt(struct ublksrv_tgt_info *tgt, int type, int argc,
+static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
-	struct ublksrv_dev *dev = container_of(tgt,
-			struct ublksrv_dev, tgt);
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
 	struct ublksrv_ctrl_dev_info  *shm_info =
 		(struct ublksrv_ctrl_dev_info  *)dev->shm_addr;

@@ -164,7 +164,7 @@ struct ublksrv_tgt_info {
 struct ublksrv_tgt_type {
 	int  type;
 	const char *name;
-	int (*init_tgt)(struct ublksrv_tgt_info *, int type, int argc,
+	int (*init_tgt)(struct ublksrv_dev *, int type, int argc,
 			char *argv[]);
 	/*
 	 * c++20 coroutine is stackless, and can't be nested, so any
@@ -177,7 +177,7 @@ struct ublksrv_tgt_type {
 
 	void (*usage_for_add)(void);
 
-	void (*deinit_tgt)(struct ublksrv_tgt_info *, struct ublksrv_dev *);
+	void (*deinit_tgt)(struct ublksrv_dev *);
 };
 
 struct ublksrv_dev {

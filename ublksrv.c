@@ -35,23 +35,25 @@ static void *ublksrv_io_handler_fn(void *data);
 
 static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
 
-static int __ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, const char *type_name,
+static int __ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
 		const struct ublksrv_tgt_type *ops, int type,
 		int argc, char *argv[])
 {
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+
 	if (strcmp(ops->name, type_name))
 		return -EINVAL;
 
 	optind = 0;     /* so that we can parse our arguments */
 	tgt->ops = ops;
-	if (!ops->init_tgt(tgt, type, argc, argv)) {
+	if (!ops->init_tgt(dev, type, argc, argv)) {
 		return 0;
 	}
 	tgt->ops = NULL;
 	return -EINVAL;
 }
 
-static int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, const char *type_name,
+static int ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
 		const struct ublksrv_tgt_type *ops,
 		int argc, char *argv[])
 {
@@ -61,13 +63,13 @@ static int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, const char *type_name,
 		return -EINVAL;
 
 	if (ops)
-		return __ublksrv_tgt_init(tgt, type_name, ops,
+		return __ublksrv_tgt_init(dev, type_name, ops,
 				ops->type, argc, argv);
 
 	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
 		const struct ublksrv_tgt_type  *lops = tgt_list[i];
 
-		if (!__ublksrv_tgt_init(tgt, type_name, lops, i, argc, argv))
+		if (!__ublksrv_tgt_init(dev, type_name, lops, i, argc, argv))
 			return 0;
 	}
 
@@ -82,13 +84,14 @@ static inline void ublksrv_tgt_exit(struct ublksrv_tgt_info *tgt)
 		close(tgt->fds[i]);
 }
 
-static void ublksrv_tgt_deinit(struct ublksrv_tgt_info *tgt,
-		struct ublksrv_dev *dev)
+static void ublksrv_tgt_deinit(struct ublksrv_dev *dev)
 {
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+
 	ublksrv_tgt_exit(tgt);
 
 	if (tgt->ops->deinit_tgt)
-		tgt->ops->deinit_tgt(tgt, dev);
+		tgt->ops->deinit_tgt(dev);
 }
 
 void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
@@ -453,7 +456,7 @@ void ublksrv_dev_deinit(struct ublksrv_dev *dev)
 		close(dev->shm_fd);
 	}
 
-	ublksrv_tgt_deinit(&dev->tgt, dev);
+	ublksrv_tgt_deinit(dev);
 	free(dev->thread);
 
 	if (dev->cdev_fd >= 0) {
@@ -523,7 +526,7 @@ struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 	if (ret)
 		goto fail;
 
-	ret = ublksrv_tgt_init(&dev->tgt, ctrl_dev->tgt_type, ctrl_dev->tgt_ops,
+	ret = ublksrv_tgt_init(dev, ctrl_dev->tgt_type, ctrl_dev->tgt_ops,
 			ctrl_dev->tgt_argc, ctrl_dev->tgt_argv);
 	if (ret) {
 		syslog(LOG_ERR, "can't init tgt %d/%s/%d, ret %d\n",
