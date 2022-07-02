@@ -360,6 +360,9 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 
 	ublksrv_build_cpu_str(cpus, 512, cpuset);
 
+	if (!(cdev->dev_info.flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)))
+		return;
+
 	/* add queue info into shm buffer, be careful to add it just once */
 	pthread_mutex_lock(&dev->shm_lock);
 	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
