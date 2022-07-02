@@ -263,6 +263,16 @@ static inline void ublksrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op
 
 extern int ublksrv_queue_io_cmd(struct ublksrv_queue *q, unsigned tag);
 
+extern void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev);
+extern struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data);
+extern int ublksrv_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev);
+extern int ublksrv_add_dev(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_del_dev(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_get_dev_info(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_stop_dev(struct ublksrv_ctrl_dev *dev);
+extern void ublksrv_dump(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid);
+
 #ifdef __cplusplus
 }
 #endif
