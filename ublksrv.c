@@ -343,7 +343,7 @@ static struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id)
 {
 	struct ublksrv_queue *q;
-	struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
+	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	int depth = ctrl_dev->dev_info.queue_depth;
 	int i, ret = -1;
 	int cmd_buf_size, io_buf_size;
@@ -457,7 +457,7 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 				buf, fd, dev->shm_addr);
 }
 
-static struct ublksrv_dev *ublksrv_init(struct ublksrv_ctrl_dev *ctrl_dev,
+static struct ublksrv_dev *ublksrv_init(const struct ublksrv_ctrl_dev *ctrl_dev,
 	struct ublksrv_queue_info *info)
 {
 	int nr_queues = ctrl_dev->dev_info.nr_hw_queues;
@@ -534,7 +534,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 {
 	struct ublksrv_queue *q = container_of(r, struct ublksrv_queue, ring);
 	struct ublksrv_dev *dev = q->dev;
-	struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
+	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	unsigned tag = user_data_to_tag(cqe->user_data);
 	unsigned cmd_op = user_data_to_op(cqe->user_data);
@@ -610,7 +610,7 @@ static void ublksrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
 static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 		unsigned short q_id)
 {
-	struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
+	const struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
 	unsigned dev_id = cdev->dev_info.dev_id;
 	cpu_set_t *cpuset = &cdev->queues_cpuset[q_id];
 	pthread_t thread = pthread_self();
@@ -727,7 +727,7 @@ static void ublksrv_remove_pid_file(int dev_id)
 
 static void ublksrv_io_handler(void *data)
 {
-	struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
+	const struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
 	int dev_id = ctrl_dev->dev_info.dev_id;
 	int ret;
 	char buf[32];
@@ -768,13 +768,13 @@ static void ublksrv_io_handler(void *data)
 }
 
 /* Not called from ublksrv daemon */
-int ublksrv_start_io_daemon(struct ublksrv_ctrl_dev *dev)
+int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev)
 {
-	start_daemon(0, ublksrv_io_handler, dev);
+	start_daemon(0, ublksrv_io_handler, (void *)dev);
 	return 0;
 }
 
-int ublksrv_get_io_daemon_pid(struct ublksrv_ctrl_dev *ctrl_dev)
+int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int ret = -1, pid_fd;
 	char buf[64];
@@ -803,7 +803,7 @@ out:
 }
 
 /* Not called from ublksrv daemon */
-int ublksrv_stop_io_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
+int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int daemon_pid, cnt = 0;
 

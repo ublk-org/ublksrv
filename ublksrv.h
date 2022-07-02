@@ -156,7 +156,7 @@ struct ublksrv_dev {
 	pthread_t *thread;
 	int cdev_fd;
 
-	struct ublksrv_ctrl_dev	*ctrl_dev;
+	const struct ublksrv_ctrl_dev *ctrl_dev;
 	void	*target_data;
 	/*
 	 * for communication with control task which may not be in
@@ -224,9 +224,9 @@ static inline unsigned int user_data_to_tgt_data(__u64 user_data)
 	return (user_data >> 24) & 0xffff;
 }
 
-int ublksrv_start_io_daemon(struct ublksrv_ctrl_dev *dev);
-int ublksrv_stop_io_daemon(struct ublksrv_ctrl_dev *dev);
-int ublksrv_get_io_daemon_pid(struct ublksrv_ctrl_dev *ctrl_dev);
+int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev);
+int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *dev);
+int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev);
 
 /* two helpers for setting up io_uring */
 static inline int ublksrv_setup_ring(int depth, struct io_uring *r,
