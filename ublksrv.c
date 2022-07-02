@@ -523,7 +523,7 @@ struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 	if (ret)
 		goto fail;
 
-	ret = ublksrv_tgt_init(&dev->tgt, ctrl_dev->tgt_type, NULL,
+	ret = ublksrv_tgt_init(&dev->tgt, ctrl_dev->tgt_type, ctrl_dev->tgt_ops,
 			ctrl_dev->tgt_argc, ctrl_dev->tgt_argv);
 	if (ret) {
 		syslog(LOG_ERR, "can't init tgt %d/%s/%d, ret %d\n",

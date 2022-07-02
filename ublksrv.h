@@ -65,6 +65,7 @@ struct ublksrv_dev_data {
 	unsigned short	queue_depth;
 	unsigned short	block_size;
 	char		*tgt_type;
+	const struct ublksrv_tgt_type *tgt_ops;
 	int		tgt_argc;
 	char		**tgt_argv;
 	unsigned long	flags[2];
@@ -79,6 +80,7 @@ struct ublksrv_ctrl_dev {
 	struct ublksrv_ctrl_dev_info  dev_info;
 
 	const char *tgt_type;
+	const struct ublksrv_tgt_type *tgt_ops;
 	int tgt_argc;
 	char **tgt_argv;
 
