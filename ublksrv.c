@@ -339,6 +339,44 @@ static void ublksrv_queue_deinit(struct ublksrv_queue *q)
 
 }
 
+static void ublksrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
+{
+	int nr_cores = sysconf(_SC_NPROCESSORS_ONLN);
+	int i, offset = 0;
+
+	for (i = 0; i < nr_cores; i++) {
+		if (!CPU_ISSET(i, cpuset))
+			continue;
+		offset += snprintf(&buf[offset], len - offset, "%d ", i);
+	}
+}
+
+static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
+		unsigned short q_id)
+{
+	const struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
+	unsigned dev_id = cdev->dev_info.dev_id;
+	cpu_set_t *cpuset = &cdev->queues_cpuset[q_id];
+	pthread_t thread = pthread_self();
+	int ret, cnt = 0;
+	char cpus[512];
+
+	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), cpuset);
+	if (ret)
+		syslog(LOG_INFO, "ublk dev %u queue %u set affinity failed",
+				dev_id, q_id);
+
+	ublksrv_build_cpu_str(cpus, 512, cpuset);
+
+	/* add queue info into shm buffer, be careful to add it just once */
+	pthread_mutex_lock(&dev->shm_lock);
+	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
+			UBLKSRV_SHM_SIZE - dev->shm_offset,
+			"\tqueue %u: tid %d affinity(%s)\n",
+			q_id, gettid(), cpus);
+	pthread_mutex_unlock(&dev->shm_lock);
+}
+
 static struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id)
 {
@@ -398,6 +436,14 @@ static struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
 		syslog(LOG_INFO, "ublk dev %d queue %d set_io_flusher failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
+
+	if (ctrl_dev->queues_cpuset)
+		ublksrv_set_sched_affinity(dev, q_id);
+
+	setpriority(PRIO_PROCESS, getpid(), -20);
+
+	/* submit all io commands to ublk driver */
+	ublksrv_submit_fetch_commands(q);
 
 	return q;
  fail:
@@ -595,44 +641,6 @@ static int ublksrv_reap_events_uring(struct io_uring *r)
 	return count;
 }
 
-static void ublksrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
-{
-	int nr_cores = sysconf(_SC_NPROCESSORS_ONLN);
-	int i, offset = 0;
-
-	for (i = 0; i < nr_cores; i++) {
-		if (!CPU_ISSET(i, cpuset))
-			continue;
-		offset += snprintf(&buf[offset], len - offset, "%d ", i);
-	}
-}
-
-static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
-		unsigned short q_id)
-{
-	const struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
-	unsigned dev_id = cdev->dev_info.dev_id;
-	cpu_set_t *cpuset = &cdev->queues_cpuset[q_id];
-	pthread_t thread = pthread_self();
-	int ret, cnt = 0;
-	char cpus[512];
-
-	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), cpuset);
-	if (ret)
-		syslog(LOG_INFO, "ublk dev %u queue %u set affinity failed",
-				dev_id, q_id);
-
-	ublksrv_build_cpu_str(cpus, 512, cpuset);
-
-	/* add queue info into shm buffer, be careful to add it just once */
-	pthread_mutex_lock(&dev->shm_lock);
-	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
-			UBLKSRV_SHM_SIZE - dev->shm_offset,
-			"\tqueue %u: tid %d affinity(%s)\n",
-			q_id, gettid(), cpus);
-	pthread_mutex_unlock(&dev->shm_lock);
-}
-
 static void *ublksrv_io_handler_fn(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
@@ -640,9 +648,6 @@ static void *ublksrv_io_handler_fn(void *data)
 	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
-
-	ublksrv_set_sched_affinity(dev, q_id);
-	setpriority(PRIO_PROCESS, getpid(), -20);
 
 	q = ublksrv_queue_init(dev, q_id);
 	if (!q) {
@@ -653,7 +658,6 @@ static void *ublksrv_io_handler_fn(void *data)
 
 	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", q->tid,
 			dev_id, q->q_id);
-	ublksrv_submit_fetch_commands(q);
 	do {
 		int submitted, reapped;
 
