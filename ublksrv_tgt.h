@@ -43,7 +43,7 @@ enum {
 	/* ublksrv_loop vs. /dev/loop */
 	UBLKSRV_TGT_TYPE_LOOP,
 
-	UBLKSRV_TGT_TYPE_MAX,
+	UBLKSRV_TGT_TYPE_MAX = 256,
 };
 
 struct ublksrv_tgt_type {
@@ -74,13 +74,10 @@ struct ublksrv_tgt_info {
 	const struct ublksrv_tgt_type *ops;
 };
 
-int ublksrv_tgt_init(struct ublksrv_tgt_info *tgt, const char *type,
-		const struct ublksrv_tgt_type *ops,
-		int argc, char *argv[]);
 int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
+void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);
 void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 			const struct ublksrv_tgt_type *type, void *data),
 		void *data);
-void ublksrv_tgt_deinit(struct ublksrv_tgt_info *tgt, struct ublksrv_dev *dev);
 
 #endif
