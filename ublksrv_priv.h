@@ -8,6 +8,11 @@
 extern "C" {
 #endif
 
+static inline bool ublksrv_io_done(struct ublk_io *io)
+{
+	return io->flags & UBLKSRV_IO_FREE;
+}
+
 static inline struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id)
 {

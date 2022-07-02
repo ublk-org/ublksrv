@@ -215,11 +215,6 @@ static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
 	io->result = res;
 }
 
-static inline bool ublksrv_io_done(struct ublk_io *io)
-{
-	return io->flags & UBLKSRV_IO_FREE;
-}
-
 static inline __u64 build_user_data(unsigned tag, unsigned op,
 		unsigned tgt_data, unsigned is_target_io)
 {

@@ -188,15 +188,13 @@ static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 	int tag = user_data_to_tag(cqe->user_data);
 	struct ublk_io *io = &q->ios[tag];
 
-	if (!ublksrv_io_done(io)) {
-		if (!io->queued_tgt_io)
-			syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
-				__func__, cqe->res, q->q_id,
-				user_data_to_tag(cqe->user_data),
-				user_data_to_op(cqe->user_data));
-		io->tgt_io_cqe = cqe;
-		((struct ublk_io_tgt *)io)->co.resume();
-	}
+	if (!io->queued_tgt_io)
+		syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
+			__func__, cqe->res, q->q_id,
+			user_data_to_tag(cqe->user_data),
+			user_data_to_op(cqe->user_data));
+	io->tgt_io_cqe = cqe;
+	((struct ublk_io_tgt *)io)->co.resume();
 }
 
 static void loop_deinit_tgt(struct ublksrv_tgt_info *tgt,
