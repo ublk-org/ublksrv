@@ -3,6 +3,12 @@
 /********************cmd handling************************/
 static char *full_cmd;
 
+struct ublksrv_queue_info {
+	struct ublksrv_dev *dev;
+	int qid;
+	pthread_t thread;
+};
+
 static char *pop_cmd(int *argc, char *argv[])
 {
 	char *cmd = argv[1];
@@ -16,6 +22,204 @@ static char *pop_cmd(int *argc, char *argv[])
 
 	full_cmd = mprintf("%s %s", full_cmd, cmd);
 	return cmd;
+}
+
+static void *ublksrv_io_handler_fn(void *data)
+{
+	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
+	struct ublksrv_dev *dev = info->dev;
+	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
+	unsigned short q_id = info->qid;
+	struct ublksrv_queue *q;
+
+	q = ublksrv_queue_init(dev, q_id);
+	if (!q) {
+		syslog(LOG_INFO, "ublk dev %d queue %d init queue failed",
+				dev->ctrl_dev->dev_info.dev_id, q_id);
+		return NULL;
+	}
+
+	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", q->tid,
+			dev_id, q->q_id);
+	do {
+		if (ublksrv_process_io(q, NULL) < 0)
+			break;
+	} while (1);
+
+	syslog(LOG_INFO, "ublk dev %d queue %d exited", dev_id, q->q_id);
+	ublksrv_queue_deinit(q);
+	return NULL;
+}
+
+static void sig_handler(int sig)
+{
+	if (sig == SIGTERM)
+		syslog(LOG_INFO, "got TERM signal");
+}
+
+static void setup_pthread_sigmask()
+{
+	sigset_t   signal_mask;
+
+	if (signal(SIGTERM, sig_handler) == SIG_ERR)
+		return;
+
+	/* make sure SIGTERM won't be blocked */
+	sigemptyset(&signal_mask);
+	sigaddset(&signal_mask, SIGINT);
+	sigaddset(&signal_mask, SIGTERM);
+	pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
+}
+
+static int ublksrv_create_pid_file(int dev_id)
+{
+	char pid_file[64];
+	int ret, pid_fd;
+
+	/* create pid file and lock it, so that others can't */
+	snprintf(pid_file, 64, "%s-%d.pid", UBLKSRV_PID_FILE, dev_id);
+
+	ret = create_pid_file(pid_file, CPF_CLOEXEC, &pid_fd);
+	if (ret < 0) {
+		/* -1 means the file is locked, and we need to remove it */
+		if (ret == -1) {
+			close(pid_fd);
+			unlink(pid_file);
+		}
+		return ret;
+	}
+	close(pid_fd);
+	return 0;
+}
+
+static void ublksrv_remove_pid_file(int dev_id)
+{
+	char pid_file[64];
+
+	/* create pid file and lock it, so that others can't */
+	snprintf(pid_file, 64, "%s-%d.pid", UBLKSRV_PID_FILE, dev_id);
+	unlink(pid_file);
+}
+
+/*
+ * Now STOP DEV ctrl command has been sent to /dev/ublk-control,
+ * and wait until all pending fetch commands are canceled
+ */
+static void ublksrv_drain_fetch_commands(struct ublksrv_dev *dev,
+		struct ublksrv_queue_info *info)
+{
+	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
+	int i;
+	void *ret;
+
+	for (i = 0; i < nr_queues; i++)
+		pthread_join(info[i].thread, &ret);
+}
+
+
+static void ublksrv_io_handler(void *data)
+{
+	const struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
+	int dev_id = ctrl_dev->dev_info.dev_id;
+	int ret, i;
+	char buf[32];
+	struct ublksrv_dev *dev;
+	struct ublksrv_queue_info *info_array;
+
+	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
+	openlog(buf, LOG_PID, LOG_USER);
+
+	syslog(LOG_INFO, "start ublksrv io daemon");
+
+	if (ublksrv_create_pid_file(dev_id))
+		return;
+
+	setup_pthread_sigmask();
+
+	info_array = (struct ublksrv_queue_info *)calloc(sizeof(
+				struct ublksrv_queue_info),
+			ctrl_dev->dev_info.nr_hw_queues);
+
+	dev = ublksrv_init(ctrl_dev);
+	if (!dev) {
+		syslog(LOG_ERR, "start ubsrv failed");
+		goto out;
+	}
+
+	for (i = 0; i < ctrl_dev->dev_info.nr_hw_queues; i++) {
+		info_array[i].dev = dev;
+		info_array[i].qid = i;
+		pthread_create(&info_array[i].thread, NULL,
+				ublksrv_io_handler_fn,
+				&info_array[i]);
+	}
+
+	/* wait until we are terminated */
+	ublksrv_drain_fetch_commands(dev, info_array);
+
+	ublksrv_deinit(dev);
+
+	free(info_array);
+
+ out:
+	ublksrv_remove_pid_file(dev_id);
+	syslog(LOG_INFO, "end ublksrv io daemon");
+	closelog();
+}
+
+/* Not called from ublksrv daemon */
+int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev)
+{
+	start_daemon(0, ublksrv_io_handler, (void *)dev);
+	return 0;
+}
+
+int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev)
+{
+	int ret = -1, pid_fd;
+	char buf[64];
+	int daemon_pid;
+
+	snprintf(buf, 64, "%s-%d.pid", UBLKSRV_PID_FILE,
+			ctrl_dev->dev_info.dev_id);
+	pid_fd = open(buf, O_RDONLY);
+	if (pid_fd < 0)
+		goto out;
+
+	if (read(pid_fd, buf, sizeof(buf)) <= 0)
+		goto out;
+
+	daemon_pid = strtol(buf, NULL, 10);
+	if (daemon_pid < 0)
+		goto out;
+
+	ret = kill(daemon_pid, 0);
+	if (ret)
+		goto out;
+
+	return daemon_pid;
+out:
+	return ret;
+}
+
+/* Not called from ublksrv daemon */
+int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
+{
+	int daemon_pid, cnt = 0;
+
+	/* wait until daemon is exited, or timeout after 3 seconds */
+	do {
+		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev);
+		if (daemon_pid > 0) {
+			usleep(100000);
+			cnt++;
+		}
+	} while (daemon_pid > 0 && cnt < 30);
+
+	if (daemon_pid > 0)
+		return -1;
+
+	return 0;
 }
 
 static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)

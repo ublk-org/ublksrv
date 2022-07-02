@@ -273,6 +273,16 @@ extern int ublksrv_stop_dev(struct ublksrv_ctrl_dev *dev);
 extern void ublksrv_dump(struct ublksrv_ctrl_dev *dev);
 extern int ublksrv_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid);
 
+extern struct ublksrv_dev *ublksrv_init(const struct ublksrv_ctrl_dev *
+		ctrl_dev);
+extern void ublksrv_deinit(struct ublksrv_dev *dev);
+
+extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
+		unsigned short q_id);
+extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
+
+extern int ublksrv_process_io(struct ublksrv_queue *q, unsigned *submitted);
+
 #ifdef __cplusplus
 }
 #endif
