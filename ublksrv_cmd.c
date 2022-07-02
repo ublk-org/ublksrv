@@ -104,9 +104,10 @@ static void ublksrv_dev_deinit(struct ublksrv_ctrl_dev *dev)
 	free(dev);
 }
 
-static struct ublksrv_ctrl_dev *ublksrv_dev_init(int dev_id, bool zcopy)
+static struct ublksrv_ctrl_dev *ublksrv_dev_init(struct ublksrv_dev_data *data)
 {
-	struct ublksrv_ctrl_dev *dev = (struct ublksrv_ctrl_dev *)calloc(1, sizeof(*dev));
+	struct ublksrv_ctrl_dev *dev = (struct ublksrv_ctrl_dev *)calloc(1,
+			sizeof(*dev));
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 	int ret;
 
@@ -119,18 +120,15 @@ static struct ublksrv_ctrl_dev *ublksrv_dev_init(int dev_id, bool zcopy)
 		exit(dev->ctrl_fd);
 	}
 
-	if (zcopy)
-		dev->dev_info.flags[0] |= (1ULL << UBLK_F_SUPPORT_ZERO_COPY);
-	else
-		dev->dev_info.flags[0] &= ~(1ULL << UBLK_F_SUPPORT_ZERO_COPY);
-
 	/* -1 means we ask ublk driver to allocate one free to us */
-	info->dev_id = dev_id;
-	info->nr_hw_queues = DEF_NR_HW_QUEUES;
-	info->queue_depth = DEF_QD;
-	info->block_size = zcopy ? 4096 : 512;
+	info->dev_id = data->dev_id;
+	info->nr_hw_queues = data->nr_hw_queues;
+	info->queue_depth = data->queue_depth;
+	info->block_size = data->block_size;
+	info->rq_max_blocks = data->rq_max_blocks;
+	info->flags[0] = data->flags[0];
+	info->flags[1] = data->flags[1];
 	dev->bs_shift = ilog2(info->block_size);
-	info->rq_max_blocks = DEF_BUF_SIZE / info->block_size;
 
 	/* 32 is enough to send ctrl commands */
 	ret = ublksrv_setup_ring(32, &dev->ring, IORING_SETUP_SQE128);
@@ -335,58 +333,75 @@ int cmd_dev_add(int argc, char *argv[])
 		{ "zero_copy",		1,	NULL, 'z' },
 		{ NULL }
 	};
+	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
-	int number = -1;
 	char *type = NULL;
-	unsigned int queues = 0;
-	unsigned int depth = 0;
 	int opt, ret, zcopy = 0;
+
+	data.queue_depth = DEF_QD;
+	data.nr_hw_queues = DEF_NR_HW_QUEUES;
+	data.dev_id = -1;
+	data.block_size = 512;
 
 	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
-			number = strtol(optarg, NULL, 10);
+			data.dev_id = strtol(optarg, NULL, 10);
 			break;
 		case 't':
 			type = optarg;
 			break;
 		case 'z':
-			zcopy = 1;
+			data.flags[0] |= 1ULL << UBLK_F_SUPPORT_ZERO_COPY;
+			data.block_size = 4096;
 			break;
 		case 'q':
-			queues = strtol(optarg, NULL, 10);
+			data.nr_hw_queues = strtol(optarg, NULL, 10);
 			break;
 		case 'd':
-			depth = strtol(optarg, NULL, 10);
+			data.queue_depth = strtol(optarg, NULL, 10);
 			break;
 		}
 	}
+	data.rq_max_blocks = DEF_BUF_SIZE / data.block_size;
+	if (data.nr_hw_queues > MAX_NR_HW_QUEUES)
+		data.nr_hw_queues = MAX_NR_HW_QUEUES;
+	if (data.queue_depth > MAX_QD)
+		data.queue_depth = MAX_QD;
 
-	dev = ublksrv_dev_init(number, zcopy);
-	if (queues && queues <= MAX_NR_HW_QUEUES)
-		dev->dev_info.nr_hw_queues = queues;
-	if (depth && depth <= MAX_QD)
-		dev->dev_info.queue_depth = depth;
+	dev = ublksrv_dev_init(&data);
+	if (!dev) {
+		fprintf(stderr, "can't init dev %d\n", data.dev_id);
+		return -ENODEV;
+	}
 
 	optind = 0;	/* so that tgt code can parse their arguments */
-	if (ublksrv_tgt_init(&dev->tgt, type, NULL, argc, argv))
-		die("usbsrv: target init failed\n");
+	ret = ublksrv_tgt_init(&dev->tgt, type, NULL, argc, argv);
+	if (ret) {
+		fprintf(stderr, "can't init tgt %d, ret %d\n", data.dev_id, ret);
+		goto fail_deinit_tgt;
+	}
 
 	ret = ublksrv_add_dev(dev);
 	if (ret < 0) {
-		fprintf(stderr, "can't add dev %d\n", number);
+		fprintf(stderr, "can't add dev %d, ret %d\n", data.dev_id, ret);
 		goto fail;
 	}
 
 	ret = ublksrv_start_dev(dev);
 	if (ret < 0) {
-		fprintf(stderr, "start dev failed %d\n", number);
+		fprintf(stderr, "start dev failed %d, ret %d\n", data.dev_id,
+				ret);
 		ublksrv_del_dev(dev);
 		goto fail;
 	}
 	ret = ublksrv_get_dev_info(dev);
 	ublksrv_dump(dev);
+
+ fail_deinit_tgt:
+	ublksrv_tgt_deinit(&dev->tgt, NULL);
+
  fail:
 	ublksrv_dev_deinit(dev);
 
@@ -435,8 +450,11 @@ static int __cmd_dev_del(int number, bool log)
 {
 	struct ublksrv_ctrl_dev *dev;
 	int ret;
+	struct ublksrv_dev_data data = {
+		.dev_id = number,
+	};
 
-	dev = ublksrv_dev_init(number, false);
+	dev = ublksrv_dev_init(&data);
 
 	ret = ublksrv_get_dev_info(dev);
 	if (ret < 0) {
@@ -501,7 +519,10 @@ static void cmd_dev_del_usage(char *cmd)
 
 static int list_one_dev(int number, bool log)
 {
-	struct ublksrv_ctrl_dev *dev = ublksrv_dev_init(number, false);
+	struct ublksrv_dev_data data = {
+		.dev_id = number,
+	};
+	struct ublksrv_ctrl_dev *dev = ublksrv_dev_init(&data);
 	int ret;
 
 	ret = ublksrv_get_dev_info(dev);

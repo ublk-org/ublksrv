@@ -64,6 +64,21 @@ extern "C" {
 
 #define UBLKSRV_SHM_SIZE  1024
 
+/*
+ * Generic data for creating one ublk device
+ *
+ * Target specific data is handled by ->init_tgt
+ */
+struct ublksrv_dev_data {
+	int   dev_id;
+	__u16	nr_hw_queues;
+	__u16	queue_depth;
+	__u16	block_size;
+	__u32	rq_max_blocks;
+	__u64	flags[2];
+	__u64   reserved[8];
+};
+
 struct ublksrv_ctrl_dev {
 	struct io_uring ring;
 
