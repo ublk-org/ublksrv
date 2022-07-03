@@ -1,52 +1,37 @@
-CC = g++
-LIBCFLAGS = -g -O2 -D_GNU_SOURCE -MMD -fPIC -I /root/git/liburing/src/include/
-CFLAGS = -fcoroutines -std=c++20 $(LIBCFLAGS)
-LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
 
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+CC = g++
+LIBCFLAGS = -g -O2 -D_GNU_SOURCE -MMD -I include -I /root/git/liburing/src/include/
+CFLAGS = -fcoroutines -std=c++20 $(LIBCFLAGS)
+LIBS = -lrt -lpthread -L/root/git/liburing/src -luring  -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
 
-UBLKSRV_LIB = libublksrv.so
-#UBLKSRV_LIB_STATIC = libublksrv.a
-UBLKSRV_LIB_OBJS = ublksrv_cmd.o ublksrv.o
 UBLKSRV_OBJS = utils.o ublksrv_tgt.o tgt_null.o tgt_loop.o
-UBLKSRV_PROGS = ublk
+UBLKSRV_PROG = ublk
+PROG_DEMO = demo_null
+UBLKSRV_PROGS = $(UBLKSRV_PROG) $(PROG_DEMO)
 R = 10
 
-all: $(UBLKSRV_PROGS) $(UBLKSRV_LIB)
+all: $(UBLKSRV_PROGS)
 
 -include $(UBLKSRV_OBJS:%.o=%.d)
--include $(UBLKSRV_LIB_OBJS:%.o=%.d)
 
-ublksrv_cmd.o: ublksrv_cmd.c Makefile
-	$(CC) -c $(LIBCFLAGS) $(CPPFLAGS) $< -o $@
-ublksrv.o: ublksrv.c Makefile
-	$(CC) -c $(LIBCFLAGS) $(CPPFLAGS) $< -o $@
-
-utils.o: utils.c
-	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
-ublksrv_tgt.o: ublksrv_tgt.c
-	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
-tgt_null.o: tgt_null.c
-	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
-tgt_loop.o: tgt_loop.c
-	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
-demo_null.o: demo_null.c
+%.o : %.c Makefile
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 
-$(UBLKSRV_PROGS): $(UBLKSRV_OBJS) $(UBLKSRV_LIB)
-	$(CC) $(LDFLAGS) -o $@ $(UBLKSRV_OBJS) $(LIBS) -L. -lublksrv -Wl,-rpath,$(TOP_DIR)
+$(UBLKSRV_PROG): $(UBLKSRV_OBJS)
+	make -C ${TOP_DIR}lib
+	$(CC) $(LDFLAGS) -o $@ $(UBLKSRV_OBJS) $(LIBS)
 
-demo_null: demo_null.o
-	$(CC) $(LDFLAGS) -o $@ demo_null.o $(LIBS) -L. -lublksrv -Wl,-rpath,$(TOP_DIR)
-
-$(UBLKSRV_LIB): $(UBLKSRV_LIB_OBJS)
-	$(CC) -shared ${LDFLAGS} -o $@  $(UBLKSRV_LIB_OBJS) $(LIBS)
+$(PROG_DEMO): demo_null.o
+	make -C ${TOP_DIR}lib
+	$(CC) $(LDFLAGS) -o $@ demo_null.o $(LIBS)
 
 .PHONY: clean test test_all cscope
 clean:
 	rm -f  $(UBLKSRV_PROGS) $(UBLKSRV_OBJS) $(UBLKSRV_LIB_OBJS) $(UBLKSRV_LIB)
 	rm -f *~ *.d
 	make -s -C ${TOP_DIR}tests clean
+	make -s -C ${TOP_DIR}lib clean
 	rm -f cscope.*
 
 test: $(UBLKSRV_PROGS)
