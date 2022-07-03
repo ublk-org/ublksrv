@@ -250,6 +250,27 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 	return daemon_pid;
 }
 
+static unsigned long long get_dev_blocks(struct ublksrv_ctrl_dev *ctrl_dev)
+{
+	unsigned long long dev_blocks;
+
+	if (ctrl_dev->dev_info.flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)) {
+		char *addr;
+		int fd = ublksrv_open_shm(ctrl_dev, &addr);
+
+		if (fd > 0) {
+			const struct ublksrv_ctrl_dev_info *info =
+				(struct ublksrv_ctrl_dev_info *)addr;
+			dev_blocks = info->dev_blocks;
+			ublksrv_close_shm(ctrl_dev, fd, addr);
+		}
+	} else {
+		dev_blocks = ctrl_dev->dev_info.dev_blocks;
+	}
+
+	return dev_blocks;
+}
+
 static int cmd_dev_add(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
@@ -317,7 +338,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	if (ret <= 0)
 		goto fail_del_dev;
 
-	ret = ublksrv_ctrl_start_dev(dev, ret);
+	ret = ublksrv_ctrl_start_dev(dev, ret, get_dev_blocks(dev));
 	if (ret < 0) {
 		fprintf(stderr, "start dev failed %d, ret %d\n", data.dev_id,
 				ret);

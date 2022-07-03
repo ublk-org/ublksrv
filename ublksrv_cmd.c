@@ -157,7 +157,7 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 	return 0;
 }
 
-static int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
+int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
 		**shm_addr)
 {
 	struct ublksrv_ctrl_dev_info *info = &ctrl_dev->dev_info;
@@ -178,7 +178,7 @@ static int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
 	return fd;
 }
 
-static void ublksrv_close_shm(struct ublksrv_ctrl_dev *ctrl_dev, int fd,
+void ublksrv_close_shm(struct ublksrv_ctrl_dev *ctrl_dev, int fd,
 		char *shm_addr)
 {
 	munmap(shm_addr, UBLKSRV_SHM_SIZE);
@@ -201,7 +201,8 @@ static void ublksrv_close_shm(struct ublksrv_ctrl_dev *ctrl_dev, int fd,
  * /dev/ublk-control with device id, which will cause ublk driver to
  * expose /dev/ublkbN
  */
-int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid)
+int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev,
+		int daemon_pid, unsigned long long dev_blocks)
 {
 	struct ublksrv_ctrl_cmd_data data = {
 		.cmd_op	= UBLK_CMD_START_DEV,
@@ -210,20 +211,7 @@ int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev, int daemon_pid)
 	int ret;
 
 	ctrl_dev->dev_info.ublksrv_pid = data.data[0] = daemon_pid;
-	if (ctrl_dev->dev_info.flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)) {
-		char *addr;
-		int fd = ublksrv_open_shm(ctrl_dev, &addr);
-
-		if (fd > 0) {
-			struct ublksrv_ctrl_dev_info *info =
-				(struct ublksrv_ctrl_dev_info *)addr;
-			ctrl_dev->dev_info.dev_blocks = data.data[1] =
-				info->dev_blocks;
-			ublksrv_close_shm(ctrl_dev, fd, addr);
-		}
-	} else {
-		data.data[1] = ctrl_dev->dev_info.dev_blocks;
-	}
+	ctrl_dev->dev_info.dev_blocks = data.data[1] = dev_blocks;
 
 	ret = __ublksrv_ctrl_cmd(ctrl_dev, &data);
 
