@@ -8,7 +8,8 @@ LIBS = -lrt -lpthread -luring
 UBLKSRV_OBJS = utils.o ublksrv_tgt.o tgt_null.o tgt_loop.o
 UBLKSRV_PROG = ublk
 PROG_DEMO = demo_null
-UBLKSRV_PROGS = $(UBLKSRV_PROG) $(PROG_DEMO)
+PROG_DEMO2 = demo_event
+UBLKSRV_PROGS = $(UBLKSRV_PROG) $(PROG_DEMO) $(PROG_DEMO2)
 LIBUBLKSRV = lib/libublksrv.a
 
 all: $(UBLKSRV_PROGS)
@@ -25,6 +26,9 @@ $(UBLKSRV_PROG): $(UBLKSRV_OBJS)
 $(PROG_DEMO): demo_null.o
 	make -C ${TOP_DIR}lib
 	$(CC) $(LDFLAGS) -o $@ demo_null.o $(LIBS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
+$(PROG_DEMO2): demo_event.o
+	make -C ${TOP_DIR}lib
+	$(CC) $(LDFLAGS) -o $@ demo_event.o $(LIBS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
 
 .PHONY: clean test test_all cscope
 clean:
