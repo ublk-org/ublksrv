@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 extern int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
-		**shm_addr);
+		**shm_addr, int daemon_pid);
 extern void ublksrv_close_shm(struct ublksrv_ctrl_dev *ctrl_dev, int fd,
 		char *shm_addr);
 

@@ -131,20 +131,26 @@ static void ublksrv_io_handler(void *data)
 
 	syslog(LOG_INFO, "start ublksrv io daemon");
 
-	if (ublksrv_create_pid_file(dev_id))
-		return;
+	dev = ublksrv_dev_init(ctrl_dev);
+	if (!dev) {
+		syslog(LOG_ERR, "dev-%d start ubsrv failed", dev_id);
+		goto out;
+	}
+
+	/*
+	 * has to be called after ublksrv_dev_init returns, so that
+	 * the control task can observe disk size configured
+	 */
+	if (ublksrv_create_pid_file(dev_id)) {
+		syslog(LOG_ERR, "dev-%d create pid file failed", dev_id);
+		goto out_dev_deinit;
+	}
 
 	setup_pthread_sigmask();
 
 	info_array = (struct ublksrv_queue_info *)calloc(sizeof(
 				struct ublksrv_queue_info),
 			ctrl_dev->dev_info.nr_hw_queues);
-
-	dev = ublksrv_dev_init(ctrl_dev);
-	if (!dev) {
-		syslog(LOG_ERR, "start ubsrv failed");
-		goto out;
-	}
 
 	for (i = 0; i < ctrl_dev->dev_info.nr_hw_queues; i++) {
 		info_array[i].dev = dev;
@@ -156,13 +162,12 @@ static void ublksrv_io_handler(void *data)
 
 	/* wait until we are terminated */
 	ublksrv_drain_fetch_commands(dev, info_array);
-
-	ublksrv_dev_deinit(dev);
-
 	free(info_array);
-
- out:
 	ublksrv_remove_pid_file(dev_id);
+
+out_dev_deinit:
+	ublksrv_dev_deinit(dev);
+out:
 	syslog(LOG_INFO, "end ublksrv io daemon");
 	closelog();
 }
@@ -250,19 +255,23 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 	return daemon_pid;
 }
 
-static unsigned long long get_dev_blocks(struct ublksrv_ctrl_dev *ctrl_dev)
+static unsigned long long get_dev_blocks(struct ublksrv_ctrl_dev *ctrl_dev,
+		int daemon_pid)
 {
-	unsigned long long dev_blocks;
+	unsigned long long dev_blocks = 0;
 
 	if (ctrl_dev->dev_info.flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)) {
 		char *addr;
-		int fd = ublksrv_open_shm(ctrl_dev, &addr);
+		int fd = ublksrv_open_shm(ctrl_dev, &addr, daemon_pid);
 
 		if (fd > 0) {
 			const struct ublksrv_ctrl_dev_info *info =
 				(struct ublksrv_ctrl_dev_info *)addr;
 			dev_blocks = info->dev_blocks;
 			ublksrv_close_shm(ctrl_dev, fd, addr);
+		} else {
+			fprintf(stderr, "can't open shmem %d\n",
+					ctrl_dev->dev_info.dev_id);
 		}
 	} else {
 		dev_blocks = ctrl_dev->dev_info.dev_blocks;
@@ -338,7 +347,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	if (ret <= 0)
 		goto fail_del_dev;
 
-	ret = ublksrv_ctrl_start_dev(dev, ret, get_dev_blocks(dev));
+	ret = ublksrv_ctrl_start_dev(dev, ret, get_dev_blocks(dev, ret));
 	if (ret < 0) {
 		fprintf(stderr, "start dev failed %d, ret %d\n", data.dev_id,
 				ret);

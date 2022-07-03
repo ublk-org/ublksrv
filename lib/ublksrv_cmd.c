@@ -158,17 +158,23 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 }
 
 int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
-		**shm_addr)
+		**shm_addr, int daemon_pid)
 {
 	struct ublksrv_ctrl_dev_info *info = &ctrl_dev->dev_info;
 	int fd;
 	char buf[128];
 	char *addr;
 
-	if (info->ublksrv_pid <= 0)
+        if (!(info->flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)))
 		return -EINVAL;
 
-	snprintf(buf, 128, "%s_%d", UBLKSRV_SHM_DIR, info->ublksrv_pid);
+	if (daemon_pid <= 0)
+		daemon_pid = info->ublksrv_pid;
+
+	if (daemon_pid <= 0)
+		return -EINVAL;
+
+	snprintf(buf, 128, "%s_%d", UBLKSRV_SHM_DIR, daemon_pid);
 	fd = shm_open(buf, O_RDONLY, 0);
 	if (fd <= 0)
 		return -EINVAL;
@@ -302,7 +308,7 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev)
 
         if (info->flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)) {
 		char *addr;
-		int fd = ublksrv_open_shm(dev, &addr);
+		int fd = ublksrv_open_shm(dev, &addr, 0);
 
 		if (fd > 0) {
 			addr += sizeof(struct ublksrv_ctrl_dev_info);
