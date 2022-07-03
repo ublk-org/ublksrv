@@ -3,13 +3,13 @@ TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 CC = g++
 LIBCFLAGS = -g -O2 -D_GNU_SOURCE -MMD -I include -I /root/git/liburing/src/include/
 CFLAGS = -fcoroutines -std=c++20 $(LIBCFLAGS)
-LIBS = -lrt -lpthread -L/root/git/liburing/src -luring  -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
+LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
 
 UBLKSRV_OBJS = utils.o ublksrv_tgt.o tgt_null.o tgt_loop.o
 UBLKSRV_PROG = ublk
 PROG_DEMO = demo_null
 UBLKSRV_PROGS = $(UBLKSRV_PROG) $(PROG_DEMO)
-R = 10
+LIBUBLKSRV = lib/libublksrv.a
 
 all: $(UBLKSRV_PROGS)
 
@@ -20,11 +20,11 @@ all: $(UBLKSRV_PROGS)
 
 $(UBLKSRV_PROG): $(UBLKSRV_OBJS)
 	make -C ${TOP_DIR}lib
-	$(CC) $(LDFLAGS) -o $@ $(UBLKSRV_OBJS) $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ $(UBLKSRV_OBJS) $(LIBUBLKSRV) $(LIBS)
 
 $(PROG_DEMO): demo_null.o
 	make -C ${TOP_DIR}lib
-	$(CC) $(LDFLAGS) -o $@ demo_null.o $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ demo_null.o $(LIBS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
 
 .PHONY: clean test test_all cscope
 clean:
@@ -34,6 +34,7 @@ clean:
 	make -s -C ${TOP_DIR}lib clean
 	rm -f cscope.*
 
+R = 10
 test: $(UBLKSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run T=${T} R=${R}
 
