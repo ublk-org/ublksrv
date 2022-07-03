@@ -110,6 +110,8 @@ struct ublksrv_queue {
 	int q_id;
 	int q_depth;
 
+	void *private_data;
+
 	/*
 	 * Read only by ublksrv daemon, setup via mmap on /dev/ublkcN.
 	 *
@@ -244,8 +246,13 @@ extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);
 extern void ublksrv_dev_deinit(struct ublksrv_dev *dev);
 
+static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
+{
+	return q->private_data;
+}
+
 extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
-		unsigned short q_id);
+		unsigned short q_id, void *queue_data);
 extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
 
 extern int ublksrv_process_io(struct ublksrv_queue *q, unsigned *submitted);

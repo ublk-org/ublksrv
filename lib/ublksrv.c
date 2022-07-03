@@ -373,7 +373,7 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 }
 
 struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
-		unsigned short q_id)
+		unsigned short q_id, void *queue_data)
 {
 	struct ublksrv_queue *q;
 	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
@@ -431,6 +431,8 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
 		syslog(LOG_INFO, "ublk dev %d queue %d set_io_flusher failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
+
+	q->private_data = queue_data;
 
 	if (ctrl_dev->queues_cpuset)
 		ublksrv_set_sched_affinity(dev, q_id);

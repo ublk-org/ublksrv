@@ -30,7 +30,7 @@ static void *demo_null_io_handler_fn(void *data)
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
 
-	q = ublksrv_queue_init(dev, q_id);
+	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
 		fprintf(stderr, "ublk dev %d queue %d init queue failed\n",
 				dev->ctrl_dev->dev_info.dev_id, q_id);
