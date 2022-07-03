@@ -35,11 +35,17 @@ READ. Also looks linux-mm can't support zero copy for this case yet[3].
 More ublk targets will be added with this framework in future even though only
 ublk-loop and ublk-null are implemented now.
 
+libublk is also generated, and it helps to integrate ublk into existed
+project. One example of demo_null is provided for how to make a ublk
+device over libublk.
+
 2 Quick start
 
 1) how to build ublksrv:
-- cd ublksrv
-- make
+
+- build & install liburing, and make sure IORING_SETUP_SQE128 is supported
+
+- cd ublksrv && make
 
 2) help
 - ublk help
@@ -99,6 +105,7 @@ systemctl enable delete-ublk-before-shutdown.service
 
 2) dependency
 - liburing with IORING_SETUP_SQE128 support
+
 - linux kernel 5.9(IORING_SETUP_SQE128 support)
 
 5 test
