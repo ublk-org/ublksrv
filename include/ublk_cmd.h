@@ -59,6 +59,12 @@
  */
 #define UBLK_F_HAS_IO_DAEMON		1
 
+/*
+ * target may not use io_uring for handling io, so eventfd is required
+ * for wakeup io command io_uring context
+ */
+#define UBLK_F_NEED_EVENTFD		2
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1

@@ -1,6 +1,8 @@
 #ifndef UBLKSRV_PRIVATE_INC_H
 #define UBLKSRV_PRIVATE_INC_H
 
+#include <poll.h>
+
 #include "ublksrv.h"
 #include "utils.h"
 
@@ -38,6 +40,17 @@ static inline struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *
 static inline int is_target_io(__u64 user_data)
 {
 	return (user_data & (1ULL << 63)) != 0;
+}
+
+/* bit63: target io, bit62: eventfd data */
+static inline __u64 build_eventfd_data()
+{
+	return 0x3ULL << 62;
+}
+
+static inline int is_eventfd_io(__u64 user_data)
+{
+	return (user_data & (1ULL << 62)) != 0;
 }
 
 /* two helpers for setting up io_uring */

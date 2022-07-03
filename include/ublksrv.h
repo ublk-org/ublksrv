@@ -20,6 +20,7 @@
 #include <sys/resource.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
+#include <sys/eventfd.h>
 #include <linux/fs.h>
 #include <unistd.h>
 #include <string.h>
@@ -127,6 +128,9 @@ struct ublksrv_queue {
 	unsigned cmd_inflight, tgt_io_inflight;
 	unsigned short stopping;
 
+	/* eventfd */
+	int efd;
+
 	/*
 	 * ring for submit io command to ublk driver, can only be issued
 	 * from ublksrv daemon.
@@ -168,14 +172,12 @@ struct ublksrv_tgt_type {
 	const char *name;
 	int (*init_tgt)(struct ublksrv_dev *, int type, int argc,
 			char *argv[]);
-	/*
-	 * c++20 coroutine is stackless, and can't be nested, so any
-	 * functions called from ->handle_io_async can't be defined as
-	 * coroutine, and please keep it in mind.
-	 */
 	int (*handle_io_async)(struct ublksrv_queue *, int tag);
 
 	void (*tgt_io_done)(struct ublksrv_queue *, struct io_uring_cqe *);
+
+	/* someone has written to our eventfd, so let target handle it */
+	void (*handle_event)(struct ublksrv_queue *);
 
 	void (*usage_for_add)(void);
 
@@ -254,6 +256,8 @@ static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data);
 extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
+extern int ublksrv_queue_handled_event(struct ublksrv_queue *q);
+extern int ublksrv_queue_send_event(struct ublksrv_queue *q);
 
 extern int ublksrv_process_io(struct ublksrv_queue *q, unsigned *submitted);
 extern int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res);

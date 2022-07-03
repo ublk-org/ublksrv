@@ -203,6 +203,73 @@ int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res)
 }
 
 /*
+ * eventfd is treated as special target IO which has to be queued
+ * when queue is setup
+ */
+static inline int __ublksrv_queue_event(struct ublksrv_queue *q)
+{
+	if (q->efd > 0) {
+		struct io_uring_sqe *sqe;
+		__u64 user_data = build_eventfd_data();
+
+		if (q->stopping)
+			return -EINVAL;
+
+		sqe = io_uring_get_sqe(&q->ring);
+		if (!sqe) {
+			syslog(LOG_ERR, "%s: queue %d run out of sqe\n",
+				__func__, q->q_id);
+			return -1;
+		}
+
+		io_uring_prep_poll_add(sqe, q->efd, POLLIN);
+		io_uring_sqe_set_data64(sqe, user_data);
+		q->tgt_io_inflight += 1;
+	}
+	return 0;
+}
+
+/*
+ * This API is supposed to be called in ->handle_event() after current
+ * events are handled.
+ */
+int ublksrv_queue_handled_event(struct ublksrv_queue *q)
+{
+	if (q->efd > 0) {
+		unsigned long long data;
+		const int cnt = sizeof(uint64_t);
+
+		if (read(q->efd, &data, cnt) != cnt)
+			syslog(LOG_ERR, "%s: read wrong bytes from eventfd\n",
+					__func__);
+		return __ublksrv_queue_event(q);
+	}
+	return 0;
+}
+
+/*
+ * Send event to io command uring context, so that the queue pthread
+ * can be waken up for handling io, then ->handle_event() will be
+ * called to notify target code.
+ *
+ * This API is usually called from other context.
+ */
+int ublksrv_queue_send_event(struct ublksrv_queue *q)
+{
+	if (q->efd > 0) {
+		unsigned long long data = 1;
+		const int cnt = sizeof(uint64_t);
+
+		if (write(q->efd, &data, cnt) != cnt) {
+			syslog(LOG_ERR, "%s: read wrong bytes from eventfd\n",
+					__func__);
+			return -EPIPE;
+		}
+	}
+	return 0;
+}
+
+/*
  * Issue all available commands to /dev/ublkcN  and the exact cmd is figured
  * out in queue_io_cmd with help of each io->status.
  *
@@ -214,6 +281,8 @@ static void ublksrv_submit_fetch_commands(struct ublksrv_queue *q)
 
 	for (i = 0; i < q->q_depth; i++)
 		ublksrv_queue_io_cmd(q, &q->ios[i], i);
+
+	__ublksrv_queue_event(q);
 }
 
 static int ublksrv_queue_is_done(struct ublksrv_queue *q)
@@ -311,6 +380,9 @@ void ublksrv_queue_deinit(struct ublksrv_queue *q)
 {
 	int i;
 
+	if (q->efd > 0)
+		close(q->efd);
+
 	if (q->ring.ring_fd > 0) {
 		io_uring_unregister_files(&q->ring);
 		close(q->ring.ring_fd);
@@ -370,6 +442,42 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 			"\tqueue %u: tid %d affinity(%s)\n",
 			q_id, gettid(), cpus);
 	pthread_mutex_unlock(&dev->shm_lock);
+}
+
+static void ublksrv_kill_eventfd(struct ublksrv_queue *q)
+{
+	if (q->stopping && q->efd > 0) {
+		unsigned long long data = 1;
+
+		write(q->efd, &data, 8);
+	}
+}
+
+static int ublksrv_setup_eventfd(struct ublksrv_queue *q)
+{
+	const struct ublksrv_ctrl_dev_info *info = &q->dev->ctrl_dev->dev_info;
+
+        if (!(info->flags[0] & (1 << UBLK_F_NEED_EVENTFD))) {
+		q->efd = -1;
+		return 0;
+	}
+
+	if (q->dev->tgt.tgt_ring_depth == 0) {
+		syslog(LOG_INFO, "%s ublk dev %d queue %d zero tgt queue depth",
+			info->dev_id, q->q_id);
+		return -EINVAL;
+	}
+
+	if (!q->dev->tgt.ops->handle_event) {
+		syslog(LOG_INFO, "%s ublk dev %d/%d not define ->handle_event",
+			info->dev_id, q->q_id);
+		return -EINVAL;
+	}
+
+	q->efd = eventfd(0, 0);
+	if (q->efd < 0)
+		return q->efd;
+	return 0;
 }
 
 struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
@@ -434,10 +542,17 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 
 	q->private_data = queue_data;
 
+
 	if (ctrl_dev->queues_cpuset)
 		ublksrv_set_sched_affinity(dev, q_id);
 
 	setpriority(PRIO_PROCESS, getpid(), -20);
+
+	if (ublksrv_setup_eventfd(q) < 0) {
+		syslog(LOG_INFO, "ublk dev %d queue %d setup eventfd failed",
+			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
+		goto fail;
+	}
 
 	/* submit all io commands to ublk driver */
 	ublksrv_submit_fetch_commands(q);
@@ -560,8 +675,13 @@ static inline void ublksrv_handle_tgt_cqe(struct ublksrv_tgt_info *tgt,
 			user_data_to_op(cqe->user_data));
 	}
 
-	if (tgt->ops->tgt_io_done)
-		tgt->ops->tgt_io_done(q, cqe);
+	if (is_eventfd_io(cqe->user_data)) {
+		if (tgt->ops->handle_event)
+			tgt->ops->handle_event(q);
+	} else {
+		if (tgt->ops->tgt_io_done)
+			tgt->ops->tgt_io_done(q, cqe);
+	}
 }
 
 static void ublksrv_handle_cqe(struct io_uring *r,
@@ -576,9 +696,11 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	int fetch = (cqe->res != UBLK_IO_RES_ABORT) && !q->stopping;
 	struct ublk_io *io;
 
-	ublksrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d) stopping %d\n",
+	ublksrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d event %d) stopping %d\n",
 			__func__, cqe->res, q->q_id, tag, cmd_op,
-			is_target_io(cqe->user_data), q->stopping);
+			is_target_io(cqe->user_data),
+			is_eventfd_io(cqe->user_data),
+			q->stopping);
 
 	/* Don't retrieve io in case of target io */
 	if (is_target_io(cqe->user_data)) {
@@ -650,6 +772,9 @@ int ublksrv_process_io(struct ublksrv_queue *q, unsigned *submitted)
 
 	if (submitted)
 		*submitted = nr_submit;
+
+	if (q->stopping)
+		ublksrv_kill_eventfd(q);
 
 	return reapped;
 }
