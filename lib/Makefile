@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -g -O2 -D_GNU_SOURCE -MMD -fPIC -I ../include  -I /root/git/liburing/src/include/
-LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
+CFLAGS = -g -O2 -D_GNU_SOURCE -MMD -fPIC -I ../include
+LIBS = -lrt -lpthread -luring
 AR = ar
 
 UBLKSRV_LIB = libublksrv.so

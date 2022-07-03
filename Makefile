@@ -1,9 +1,9 @@
 
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 CC = g++
-LIBCFLAGS = -g -O2 -D_GNU_SOURCE -MMD -I include -I /root/git/liburing/src/include/
+LIBCFLAGS = -g -O2 -D_GNU_SOURCE -MMD -I include
 CFLAGS = -fcoroutines -std=c++20 $(LIBCFLAGS)
-LIBS = -lrt -lpthread -L/root/git/liburing/src -luring
+LIBS = -lrt -lpthread -luring
 
 UBLKSRV_OBJS = utils.o ublksrv_tgt.o tgt_null.o tgt_loop.o
 UBLKSRV_PROG = ublk
