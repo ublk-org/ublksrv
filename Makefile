@@ -42,5 +42,6 @@ test_all: $(UBLKSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run_test_all R=${R}
 
 cscope:
-	find . -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" > cscope.files
-	cscope -q -b -f cscope.out
+	#find . -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" > cscope.files
+	#cscope -q -b -f cscope.out
+	@cscope -b -R
