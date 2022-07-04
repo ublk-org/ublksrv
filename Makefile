@@ -33,6 +33,8 @@ $(PROG_DEMO2): demo_event.o
 .PHONY: clean test test_all cscope
 clean:
 	rm -f  $(UBLKSRV_PROGS) $(UBLKSRV_OBJS) $(UBLKSRV_LIB_OBJS) $(UBLKSRV_LIB)
+	rm -f $(PROG_DEMO) $(PROG_DEMO).o
+	rm -f $(PROG_DEMO2) $(PROG_DEMO2).o
 	rm -f *~ *.d
 	make -s -C ${TOP_DIR}tests clean
 	make -s -C ${TOP_DIR}lib clean
