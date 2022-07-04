@@ -143,14 +143,14 @@ static void demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 		info_array[i].efd = eventfd(0, 0);
 		info_array[i].dev = dev;
 		info_array[i].qid = i;
+		pthread_spin_init(&info_array[i].lock,
+				PTHREAD_PROCESS_PRIVATE);
 		pthread_create(&info_array[i].thread, NULL,
 				demo_event_io_handler_fn,
 				&info_array[i]);
 		pthread_create(&info_array[i].io_thread, NULL,
 				demo_event_real_io_handler_fn,
 				&info_array[i]);
-		pthread_spin_init(&info_array[i].lock,
-				PTHREAD_PROCESS_PRIVATE);
 	}
 
 	/* everything is fine now, start us */
