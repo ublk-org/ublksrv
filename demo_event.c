@@ -92,9 +92,15 @@ static void *demo_event_real_io_handler_fn(void *data)
 		added = demo_add_list(&info->processed, &info->pending);
 		pthread_spin_unlock(&info->lock);
 
+		/*
+		 * clear internal event before sending ublksrv event which
+		 * generate new io(internal event) immediately
+		 */
+		read(info->efd, &data, 8);
+
 		/* tell ublksrv io_uring context that we have io done */
 		ublksrv_queue_send_event(info->q);
-		read(info->efd, &data, 8);
+
 		ret = epoll_wait(epoll_fd, events, EPOLL_NR_EVENTS, -1);
 	}
 
