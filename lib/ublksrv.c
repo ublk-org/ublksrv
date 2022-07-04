@@ -240,10 +240,16 @@ int ublksrv_queue_handled_event(struct ublksrv_queue *q)
 		unsigned long long data;
 		const int cnt = sizeof(uint64_t);
 
+		/* read has to be done, otherwise poll event won't be stopped */
 		if (read(q->efd, &data, cnt) != cnt)
 			syslog(LOG_ERR, "%s: read wrong bytes from eventfd\n",
 					__func__);
-		return __ublksrv_queue_event(q);
+		/*
+		 * event needs to be issued immediately, since other io may rely
+		 * it
+		 */
+		if (!__ublksrv_queue_event(q))
+			io_uring_submit_and_wait(&q->ring, 0);
 	}
 	return 0;
 }
