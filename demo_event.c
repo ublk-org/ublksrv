@@ -1,7 +1,5 @@
 #include "ublksrv.h"
 
-#include <vector>
-
 #define UBLKSRV_TGT_TYPE_DEMO  0
 
 struct demo_queue_info {
