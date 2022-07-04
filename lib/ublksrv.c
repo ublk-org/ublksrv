@@ -175,7 +175,8 @@ static inline int ublksrv_queue_io_cmd(struct ublksrv_queue *q,
 	ublksrv_set_sqe_cmd_op(sqe, cmd_op);
 	sqe->fd		= 0;	/*dev->cdev_fd*/
 	sqe->opcode	=  IORING_OP_URING_CMD;
-	sqe->flags	|= IOSQE_FIXED_FILE;
+	sqe->flags	= IOSQE_FIXED_FILE;
+	sqe->rw_flags	= 0;
 	cmd->tag	= tag;
 	cmd->addr	= (__u64)io->buf_addr;
 	cmd->q_id	= q->q_id;
@@ -363,6 +364,7 @@ static void ublksrv_dev_init_io_cmds(struct ublksrv_dev *dev, struct ublksrv_que
 
 		/* These fields should be written once, never change */
 		sqe->flags = IOSQE_FIXED_FILE;
+		sqe->rw_flags = 0;
 		sqe->ioprio = 0;
 		sqe->off = 0;
 	}
