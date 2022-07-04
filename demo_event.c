@@ -1,3 +1,4 @@
+#include <sys/epoll.h>
 #include "ublksrv.h"
 
 #define UBLKSRV_TGT_TYPE_DEMO  0
@@ -52,15 +53,36 @@ static bool demo_add_list(struct ublk_io **head, struct ublk_io **new_list)
 	return !!io;
 }
 
+#define EPOLL_NR_EVENTS 1
 static void *demo_event_real_io_handler_fn(void *data)
 {
 	struct demo_queue_info *info = (struct demo_queue_info *)data;
 	struct ublksrv_dev *dev = info->dev;
 	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
 	unsigned short q_id = info->qid;
+	struct epoll_event events[EPOLL_NR_EVENTS];
+	int epoll_fd = epoll_create(EPOLL_NR_EVENTS);
+	struct epoll_event read_event;
+	int ret;
+
+	if (epoll_fd < 0) {
+		fprintf(stderr, "ublk dev %d queue %d create epoll fd failed\n",
+				dev_id, q_id);
+		return NULL;
+	}
+
+	read_event.events = EPOLLIN;
+	read_event.data.fd = info->efd;
+	ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, info->efd, &read_event);
+	if (ret < 0) {
+		fprintf(stderr, "ublk dev %d queue %d epoll_ctl(ADD) failed\n",
+				dev_id, q_id);
+		return NULL;
+	}
 
 	/* wait until the 1st io comes */
-	read(info->efd, &data, 8);
+	//read(info->efd, &data, 8);
+	epoll_wait(epoll_fd, events, EPOLL_NR_EVENTS, -1);
 
 	while (!info->dead) {
 		int added = 0;
@@ -73,6 +95,7 @@ static void *demo_event_real_io_handler_fn(void *data)
 		/* tell ublksrv io_uring context that we have io done */
 		ublksrv_queue_send_event(info->q);
 		read(info->efd, &data, 8);
+		ret = epoll_wait(epoll_fd, events, EPOLL_NR_EVENTS, -1);
 	}
 
 	return NULL;
