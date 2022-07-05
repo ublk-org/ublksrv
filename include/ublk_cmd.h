@@ -28,13 +28,9 @@
  *      this IO request, request's handling result is committed to ublk
  *      driver, meantime FETCH_REQ is piggyback, and FETCH_REQ has to be
  *      handled before completing io request.
- *
- * COMMIT_REQ: issued via sqe(URING_CMD) after ublkserver handled this IO
- *      request, request's handling result is committed to ublk driver.
  */
 #define	UBLK_IO_FETCH_REQ		0x20
 #define	UBLK_IO_COMMIT_AND_FETCH_REQ	0x21
-#define	UBLK_IO_COMMIT_REQ		0x22
 
 /* only ABORT means that no re-fetch */
 #define UBLK_IO_RES_OK			0

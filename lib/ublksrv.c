@@ -144,18 +144,10 @@ static inline int ublksrv_queue_io_cmd(struct ublksrv_queue *q,
 		(UBLKSRV_NEED_FETCH_RQ | UBLKSRV_NEED_COMMIT_RQ_COMP)))
 		return 0;
 
-	if (io->flags & UBLKSRV_NEED_FETCH_RQ) {
-		if (io->flags & UBLKSRV_NEED_COMMIT_RQ_COMP)
-			cmd_op = UBLK_IO_COMMIT_AND_FETCH_REQ;
-		else
-			cmd_op = UBLK_IO_FETCH_REQ;
-	} else if (io->flags & UBLKSRV_NEED_COMMIT_RQ_COMP) {
-			cmd_op = UBLK_IO_COMMIT_REQ;
-	} else {
-		syslog(LOG_ERR, "io flags is zero, tag %d\n",
-				(int)cmd->tag);
-		return 0;
-	}
+	if (io->flags & UBLKSRV_NEED_COMMIT_RQ_COMP)
+		cmd_op = UBLK_IO_COMMIT_AND_FETCH_REQ;
+	else
+		cmd_op = UBLK_IO_FETCH_REQ;
 
 	sqe = io_uring_get_sqe(&q->ring);
 	if (!sqe) {
@@ -166,9 +158,7 @@ static inline int ublksrv_queue_io_cmd(struct ublksrv_queue *q,
 
 	cmd = (struct ublksrv_io_cmd *)ublksrv_get_sqe_cmd(sqe);
 
-
-	if (cmd_op == UBLK_IO_COMMIT_REQ ||
-			cmd_op == UBLK_IO_COMMIT_AND_FETCH_REQ)
+	if (cmd_op == UBLK_IO_COMMIT_AND_FETCH_REQ)
 		cmd->result = io->result;
 
 	/* These fields should be written once, never change */
@@ -730,7 +720,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	 * todo: support async tgt io handling via io_uring, and the ublksrv
 	 * daemon can poll on both two rings.
 	 */
-	if (cqe->res == UBLK_IO_RES_OK && cmd_op != UBLK_IO_COMMIT_REQ) {
+	if (cqe->res == UBLK_IO_RES_OK) {
 		tgt->ops->handle_io_async(q, tag);
 	} else {
 		/*
