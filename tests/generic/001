@@ -14,7 +14,7 @@ LOOPS=10
 
 CNT=0
 while [ $CNT -lt $LOOPS ]; do
-	__create_ublk_dev "loop" $QUEUES
+	__create_ublk_dev "loop" $QUEUES 1
 	echo -e "\trun fio on ublk with delete $CNT"
 	__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 	sleep 4

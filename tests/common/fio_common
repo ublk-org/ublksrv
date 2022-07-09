@@ -206,6 +206,7 @@ __create_ublk_dev()
 {
 	ublk_type=$1
 	nr_queues=$2
+	pin_page=$3
 
 	[ "$nr_queues" = "" ] && nr_queues=1
 
@@ -214,7 +215,7 @@ __create_ublk_dev()
 		truncate -s 2G $file
 	fi
 
-	eval $UBLK add -t $ublk_type -q $nr_queues -d 128 -f $file > /dev/null 2>&1
+	eval $UBLK add -t $ublk_type -q $nr_queues -p $pin_page -d 128 -f $file > /dev/null 2>&1
 }
 
 __remove_kernel_loop_dev() {
@@ -263,14 +264,15 @@ __run_dev_perf()
 	TYPE=$1
 	JOBS=$2
 	QUEUES=$3
+	PIN_PAGE=$4
 	DEV="/dev/ublkb0"
 
 	__remove_ublk_dev
-	__create_ublk_dev $TYPE $QUEUES
+	__create_ublk_dev $TYPE $QUEUES $PIN_PAGE
 
 	FILE=`__ublk_loop_backing_file`
 
-	echo -e "\tfio (ublk/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	echo -e "\tfio (ublk/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES, pin page: $PIN_PAGE)..."
 	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
 
 	__remove_ublk_dev 0

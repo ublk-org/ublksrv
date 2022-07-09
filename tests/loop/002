@@ -2,4 +2,4 @@
 
 . common/fio_common
 
-__run_dev_perf "loop" 2 2
+__run_dev_perf "loop" 2 2 0
