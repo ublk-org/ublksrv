@@ -30,6 +30,9 @@ static void *demo_null_io_handler_fn(void *data)
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
 
+
+	sched_setscheduler(getpid(), SCHED_RR, NULL);
+
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
 		fprintf(stderr, "ublk dev %d queue %d init queue failed\n",
@@ -132,11 +135,23 @@ static int demo_handle_io_async(struct ublksrv_queue *q, int tag)
 	return 0;
 }
 
-static const struct ublksrv_tgt_type demo_tgt_type = {
+void *null_alloc_io_buf(struct ublksrv_queue *q, int tag, int size)
+{
+	return malloc(size);
+}
+
+void null_free_io_buf(struct ublksrv_queue *q, void *buf, int tag)
+{
+	free(buf);
+}
+
+static struct ublksrv_tgt_type demo_tgt_type = {
 	.type	= UBLKSRV_TGT_TYPE_DEMO,
 	.name	=  "demo_null",
 	.init_tgt = demo_init_tgt,
 	.handle_io_async = demo_handle_io_async,
+	//.alloc_io_buf = null_alloc_io_buf,
+	//.free_io_buf = null_free_io_buf,
 };
 
 int main(int argc, char *argv[])
@@ -153,11 +168,38 @@ int main(int argc, char *argv[])
 	struct ublksrv_ctrl_dev *dev;
 	char *type = NULL;
 	int ret;
+	static const struct option longopts[] = {
+		{ "pin_page",		1,	NULL, 'p' },
+		{ "buf",		1,	NULL, 'b' },
+		{ NULL }
+	};
+	int opt;
+	bool use_buf = false;
+	bool pin_page = false;
+
+	while ((opt = getopt_long(argc, argv, ":pb",
+				  longopts, NULL)) != -1) {
+		switch (opt) {
+		case 'p':
+			pin_page = true;
+			break;
+		case 'b':
+			use_buf = true;
+			break;
+		}
+	}
 
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
 		return -1;
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		return -1;
+
+	if (pin_page)
+		data.flags[0] = (1 << UBLK_F_PIN_PAGES_FOR_IO);
+	if (use_buf) {
+		demo_tgt_type.alloc_io_buf = null_alloc_io_buf;
+		demo_tgt_type.free_io_buf = null_free_io_buf;
+	}
 
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
