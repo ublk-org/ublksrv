@@ -288,6 +288,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "queues",		1,	NULL, 'q' },
 		{ "depth",		1,	NULL, 'd' },
 		{ "zero_copy",		1,	NULL, 'z' },
+		{ "refetch",		1,	NULL, 'r' },
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -295,6 +296,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	char *type = NULL;
 	int opt, ret, zcopy = 0, pin_page = 0;
 	int daemon_pid;
+	int refetch = 0;
 
 	data.queue_depth = DEF_QD;
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
@@ -302,7 +304,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	data.block_size = 512;
 	data.ublksrv_flags |= (1 << UBLK_F_HAS_IO_DAEMON);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:p:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:p:r:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -324,6 +326,9 @@ static int cmd_dev_add(int argc, char *argv[])
 		case 'p':
 			pin_page = strtol(optarg, NULL, 10);
 			break;
+		case 'r':
+			refetch = strtol(optarg, NULL, 10);
+			break;
 		}
 	}
 	data.rq_max_blocks = DEF_BUF_SIZE / data.block_size;
@@ -333,6 +338,8 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.queue_depth = MAX_QD;
 	if (pin_page)
 		data.flags[0] |= 1ULL << UBLK_F_PIN_PAGES_FOR_IO;
+	if (refetch)
+		data.flags[0] |= 1ULL << UBLK_F_NEED_REFETCH;
 
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;
