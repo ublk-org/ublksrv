@@ -28,12 +28,19 @@
  *      this IO request, request's handling result is committed to ublk
  *      driver, meantime FETCH_REQ is piggyback, and FETCH_REQ has to be
  *      handled before completing io request.
+ *
+ * REFETCH_REQ: issued via sqe(URING_CMD) after ublk driver returns
+ * 	UBLK_IO_REFETCH_REQ, which only purpose is to fetch io request data
+ * 	from the userspace ublk server context in case that task_work_add
+ * 	isn't available because ublk driver is built as module
  */
 #define	UBLK_IO_FETCH_REQ		0x20
 #define	UBLK_IO_COMMIT_AND_FETCH_REQ	0x21
+#define	UBLK_IO_REFETCH_REQ		0x22
 
 /* only ABORT means that no re-fetch */
 #define UBLK_IO_RES_OK			0
+#define UBLK_IO_RES_REFETCH		1
 #define UBLK_IO_RES_ABORT		(-ENODEV)
 
 #define UBLKSRV_CMD_BUF_OFFSET	0
@@ -47,6 +54,16 @@
  * request into ublksrv's vm space
  */
 #define UBLK_F_SUPPORT_ZERO_COPY	0
+
+/*
+ * When NEED_REFETCH is set, ublksrv has to issue UBLK_IO_REFETCH_REQ
+ * command after ublk driver returns UBLK_IO_REFETCH_REQ.
+ *
+ * This flag is negotiated during handling UBLK_CMD_ADD_DEV. If ublksrv
+ * sets it, ublk driver can't clear it. But if ublk driver sets it back
+ * to ublksrv, ublksrv has to handle it correctly.
+ */
+#define UBLK_F_NEED_REFETCH		1
 
 /*
  * pin pages of the userspace io buffer during the whole io lifetime
