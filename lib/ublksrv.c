@@ -44,6 +44,15 @@ static int __ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
 	if (strcmp(ops->name, type_name))
 		return -EINVAL;
 
+	if (!ops)
+		return -EINVAL;
+	if (!ops->init_tgt)
+		return -EINVAL;
+	if (!ops->handle_io_async)
+		return -EINVAL;
+	if (!ops->alloc_io_buf ^ !ops->free_io_buf)
+		return -EINVAL;
+
 	optind = 0;     /* so that we can parse our arguments */
 	tgt->ops = ops;
 	if (!ops->init_tgt(dev, type, argc, argv)) {
@@ -392,7 +401,11 @@ void ublksrv_queue_deinit(struct ublksrv_queue *q)
 	}
 	for (i = 0; i < q->q_depth; i++) {
 		if (q->ios[i].buf_addr) {
-			free(q->ios[i].buf_addr);
+			if (q->dev->tgt.ops->free_io_buf)
+				q->dev->tgt.ops->free_io_buf(q,
+						q->ios[i].buf_addr, i);
+			else
+				free(q->ios[i].buf_addr);
 			q->ios[i].buf_addr = NULL;
 		}
 	}
@@ -515,8 +528,13 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		ctrl_dev->dev_info.rq_max_blocks;
 	for (i = 0; i < depth; i++) {
 		q->ios[i].buf_addr = NULL;
-		if (posix_memalign((void **)&q->ios[i].buf_addr, getpagesize(), io_buf_size))
-			goto fail;
+		if (dev->tgt.ops->alloc_io_buf)
+			q->ios[i].buf_addr = dev->tgt.ops->alloc_io_buf(q,
+					i, io_buf_size);
+		else
+			if (posix_memalign((void **)&q->ios[i].buf_addr,
+						getpagesize(), io_buf_size))
+				goto fail;
 		//q->ios[i].buf_addr = malloc(io_buf_size);
 		if (!q->ios[i].buf_addr)
 			goto fail;

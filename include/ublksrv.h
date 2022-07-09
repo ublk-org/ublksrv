@@ -209,6 +209,9 @@ struct ublksrv_tgt_type {
 
 	/* deinitialize this target */
 	void (*deinit_tgt)(struct ublksrv_dev *);
+
+	void *(*alloc_io_buf)(struct ublksrv_queue *q, int tag, int size);
+	void (*free_io_buf)(struct ublksrv_queue *q, void *buf, int tag);
 };
 
 struct ublksrv_dev {
