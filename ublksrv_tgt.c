@@ -293,7 +293,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
 	char *type = NULL;
-	int opt, ret, zcopy = 0;
+	int opt, ret, zcopy = 0, pin_page = 0;
 	int daemon_pid;
 
 	data.queue_depth = DEF_QD;
@@ -302,7 +302,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	data.block_size = 512;
 	data.flags[0] |= (1 << UBLK_F_HAS_IO_DAEMON);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:p:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -321,6 +321,9 @@ static int cmd_dev_add(int argc, char *argv[])
 		case 'd':
 			data.queue_depth = strtol(optarg, NULL, 10);
 			break;
+		case 'p':
+			pin_page = strtol(optarg, NULL, 10);
+			break;
 		}
 	}
 	data.rq_max_blocks = DEF_BUF_SIZE / data.block_size;
@@ -328,6 +331,9 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.nr_hw_queues = MAX_NR_HW_QUEUES;
 	if (data.queue_depth > MAX_QD)
 		data.queue_depth = MAX_QD;
+	if (pin_page)
+		data.flags[0] |= 1ULL << UBLK_F_PIN_PAGES_FOR_IO;
+
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;
 	data.tgt_argv = argv;
@@ -402,7 +408,7 @@ static void cmd_dev_add_usage(char *cmd)
 	ublksrv_for_each_tgt_type(collect_tgt_types, &data);
 	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "}");
 
-	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n", cmd, data.names);
+	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH -p PIN_PAGE_WHEN_HANDLING_IO \n", cmd, data.names);
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
 
