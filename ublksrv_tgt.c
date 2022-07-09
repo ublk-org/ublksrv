@@ -260,7 +260,7 @@ static unsigned long long get_dev_blocks(struct ublksrv_ctrl_dev *ctrl_dev,
 {
 	unsigned long long dev_blocks = 0;
 
-	if (ctrl_dev->dev_info.flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)) {
+	if (ctrl_dev->dev_info.ublksrv_flags & (1 << UBLK_F_HAS_IO_DAEMON)) {
 		char *addr;
 		int fd = ublksrv_open_shm(ctrl_dev, &addr, daemon_pid);
 
@@ -300,7 +300,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
 	data.dev_id = -1;
 	data.block_size = 512;
-	data.flags[0] |= (1 << UBLK_F_HAS_IO_DAEMON);
+	data.ublksrv_flags |= (1 << UBLK_F_HAS_IO_DAEMON);
 
 	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:p:z",
 				  longopts, NULL)) != -1) {

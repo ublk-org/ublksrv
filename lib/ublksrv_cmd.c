@@ -109,6 +109,7 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 	info->rq_max_blocks = data->rq_max_blocks;
 	info->flags[0] = data->flags[0];
 	info->flags[1] = data->flags[1];
+	info->ublksrv_flags = data->ublksrv_flags;
 	dev->bs_shift = ilog2(info->block_size);
 
 	dev->tgt_type = data->tgt_type;
@@ -165,7 +166,7 @@ int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
 	char buf[128];
 	char *addr;
 
-        if (!(info->flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)))
+        if (!(info->ublksrv_flags & (1 << UBLK_F_HAS_IO_DAEMON)))
 		return -EINVAL;
 
 	if (daemon_pid <= 0)
@@ -306,7 +307,7 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev)
 			info->ublksrv_pid, info->flags[0],
 			ublksrv_dev_state_desc(dev));
 
-        if (info->flags[0] & (1 << UBLK_F_HAS_IO_DAEMON)) {
+        if (info->ublksrv_flags & (1 << UBLK_F_HAS_IO_DAEMON)) {
 		char *addr;
 		int fd = ublksrv_open_shm(dev, &addr, 0);
 

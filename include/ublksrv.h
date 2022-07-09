@@ -54,6 +54,20 @@ extern "C" {
 #define UBLKSRV_SHM_DIR	"ublksrv"
 #define UBLKSRV_SHM_SIZE  1024
 
+/************ stored in ublksrv_ctrl_dev_info->ublksrv_flags *******/
+/*
+ * HAS_IO_DAEMON means io handler has its own daemon context which isn't
+ * same with control command context, so shared memory communication is
+ * required between control task and io daemon
+ */
+#define UBLK_F_HAS_IO_DAEMON		0
+
+/*
+ * target may not use io_uring for handling io, so eventfd is required
+ * for wakeup io command io_uring context
+ */
+#define UBLK_F_NEED_EVENTFD		1
+
 /*
  * Generic data for creating one ublk device
  *
@@ -70,7 +84,8 @@ struct ublksrv_dev_data {
 	int		tgt_argc;
 	char		**tgt_argv;
 	unsigned long	flags[2];
-	unsigned long   reserved[8];
+	unsigned long	ublksrv_flags;
+	unsigned long   reserved[7];
 };
 
 struct ublksrv_ctrl_dev {

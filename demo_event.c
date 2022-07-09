@@ -315,7 +315,7 @@ int main(int argc, char *argv[])
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		return -1;
 
-	data.flags[0] = 1UL << UBLK_F_NEED_EVENTFD;
+	data.ublksrv_flags = 1UL << UBLK_F_NEED_EVENTFD;
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "can't init dev %d\n", data.dev_id);

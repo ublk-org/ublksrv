@@ -49,19 +49,6 @@
 #define UBLK_F_SUPPORT_ZERO_COPY	0
 
 /*
- * HAS_IO_DAEMON means io handler has its own daemon context which isn't
- * same with control command context, so shared memory communication is
- * required between control task and io daemon
- */
-#define UBLK_F_HAS_IO_DAEMON		1
-
-/*
- * target may not use io_uring for handling io, so eventfd is required
- * for wakeup io command io_uring context
- */
-#define UBLK_F_NEED_EVENTFD		2
-
-/*
  * pin pages of the userspace io buffer during the whole io lifetime
  *
  * If this flag is set, user io buffer for each io can't be changed
@@ -110,7 +97,9 @@ struct ublksrv_ctrl_dev_info {
 	__s32	reserved0;
 	__u64	flags[2];
 
-	__u64	reserved1[10];
+	/* For ublksrv internal use, invisible to ublk driver */
+	__u64   ublksrv_flags;
+	__u64	reserved1[9];
 };
 
 #define		UBLK_IO_OP_READ		0
