@@ -251,10 +251,15 @@ __run_dev_perf_no_create()
 	__run_fio_perf $DEV 4k $RW $JOBS $RT
 	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["read iops"]}"
 
-	RW="rw"
+	RW="randrw"
 	FIO_PERF_FIELDS=("read iops" "write iops")
 	__run_fio_perf $DEV 4k $RW $JOBS $RT
 	echo -e "\t$RW: jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+
+	RW="rw"
+	FIO_PERF_FIELDS=("read iops" "write iops")
+	__run_fio_perf $DEV 512k $RW $JOBS $RT
+	echo -e "\t$RW(512k): jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
 
 	echo ""
 }
