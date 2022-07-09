@@ -170,17 +170,44 @@ struct ublksrv_tgt_info {
 struct ublksrv_tgt_type {
 	int  type;
 	const char *name;
+
+	/*
+	 * initialize this new target, argc/argv includes target specific
+	 * command line parameters
+	 */
 	int (*init_tgt)(struct ublksrv_dev *, int type, int argc,
 			char *argv[]);
+
+	/*
+	 * One IO request comes from /dev/ublkbN, so notify target code
+	 * for handling the IO. Inside target code, the IO can be handled
+	 * with our io_uring too, if this is true, ->tgt_io_done callback
+	 * has to be implemented. Otherwise, target can implement
+	 * ->handle_event() for processing io completion there.
+	 */
 	int (*handle_io_async)(struct ublksrv_queue *, int tag);
 
+	/*
+	 * target io is handled by our io_uring, and once the target io
+	 * is completed, this callback is called
+	 */
 	void (*tgt_io_done)(struct ublksrv_queue *, struct io_uring_cqe *);
 
-	/* someone has written to our eventfd, so let target handle it */
+	/*
+	 * Someone has written to our eventfd, so let target handle the
+	 * event, most of times, it is for handling io completion
+	 */
 	void (*handle_event)(struct ublksrv_queue *);
 
+	/*
+	 * show target specific command line for adding new device
+	 *
+	 * Be careful: this callback is the only one which is not run from
+	 * ublk device daemon task context.
+	 */
 	void (*usage_for_add)(void);
 
+	/* deinitialize this target */
 	void (*deinit_tgt)(struct ublksrv_dev *);
 };
 
