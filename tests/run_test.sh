@@ -25,6 +25,7 @@ run_test() {
 
 TEST=$1
 export TRUNTIME=$2
+export T_REFETCH=0
 
 if [ -d $TEST ]; then
 		for ITEM in `ls ${TEST}`; do
