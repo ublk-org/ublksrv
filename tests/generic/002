@@ -10,33 +10,31 @@ RW=rw
 JOBS=4
 QUEUES=2
 RT=$TRUNTIME
-LOOPS=16
+LOOPS=6
 PIN_PAGE=0
-HALF_LOOPS=$((LOOPS / 2))
 
-CNT=0
-while [ $CNT -lt $LOOPS ]; do
-	[ $CNT -ge $HALF_LOOPS ] && PIN_PAGE=1
-	__create_ublk_dev "null" $QUEUES $PIN_PAGE
-	echo -e "\trun fio with killing ublk(pin page: $PIN_PAGE) queue daemon $CNT"
-	__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
-	sleep 2
-	queue_tid=`__ublk_get_queue_tid 0`
-	kill -9 $queue_tid
-	sleep 2
-	secs=0
-	while [ $secs -lt 10 ]; do
-		state=`__ublk_get_dev_state 0`
-		[ "$state" == "DEAD" ] && break
-		sleep 1
-		let secs++
+for PIN_PAGE in `seq 0 1`; do
+	for CNT in `seq $LOOPS`; do
+		__create_ublk_dev "null" $QUEUES $PIN_PAGE
+		echo -e "\trun fio with killing ublk(pin page: $PIN_PAGE) queue daemon $CNT"
+		__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+		sleep 2
+		queue_tid=`__ublk_get_queue_tid 0`
+		kill -9 $queue_tid
+		sleep 2
+		secs=0
+		while [ $secs -lt 10 ]; do
+			state=`__ublk_get_dev_state 0`
+			[ "$state" == "DEAD" ] && break
+			sleep 1
+			let secs++
+		done
+		[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
+		RES=`__remove_ublk_dev_return 0`
+		if [ $RES -ne 0 ]; then
+				echo -e "\tdelete ublk0 failed"
+				exit -1
+		fi
+		wait
 	done
-	[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
-	RES=`__remove_ublk_dev_return 0`
-	if [ $RES -ne 0 ]; then
-			echo -e "\tdelete ublk0 failed"
-			exit -1
-	fi
-	wait
-	let CNT++
 done

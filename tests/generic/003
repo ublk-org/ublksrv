@@ -29,7 +29,8 @@ DEV=/dev/ublkb0
 QUEUES=2
 MNT=`mktemp -d`
 
-ublk_run_mount_test 0
-ublk_run_mount_test 1
+for PIN_PAGE in `seq 0 1`; do
+	ublk_run_mount_test $PIN_PAGE
+done
 
 rm -fr $MNT
