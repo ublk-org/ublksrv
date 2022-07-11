@@ -446,7 +446,7 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 
 	ublksrv_build_cpu_str(cpus, 512, cpuset);
 
-	if (!(cdev->dev_info.ublksrv_flags & (1 << UBLK_F_HAS_IO_DAEMON)))
+	if (!(cdev->dev_info.ublksrv_flags & (1 << UBLKSRV_F_HAS_IO_DAEMON)))
 		return;
 
 	/* add queue info into shm buffer, be careful to add it just once */
@@ -471,7 +471,7 @@ static int ublksrv_setup_eventfd(struct ublksrv_queue *q)
 {
 	const struct ublksrv_ctrl_dev_info *info = &q->dev->ctrl_dev->dev_info;
 
-        if (!(info->ublksrv_flags & (1 << UBLK_F_NEED_EVENTFD))) {
+        if (!(info->ublksrv_flags & (1 << UBLKSRV_F_NEED_EVENTFD))) {
 		q->efd = -1;
 		return 0;
 	}
@@ -612,7 +612,7 @@ static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
 	unsigned pid = getpid();
 
 	if (!(dev->ctrl_dev->dev_info.ublksrv_flags &
-				(1 << UBLK_F_HAS_IO_DAEMON)))
+				(1 << UBLKSRV_F_HAS_IO_DAEMON)))
 		return;
 
 	pthread_mutex_init(&dev->shm_lock, NULL);
