@@ -60,13 +60,13 @@ extern "C" {
  * same with control command context, so shared memory communication is
  * required between control task and io daemon
  */
-#define UBLKSRV_F_HAS_IO_DAEMON		0
+#define UBLKSRV_F_HAS_IO_DAEMON		(1UL << 0)
 
 /*
  * target may not use io_uring for handling io, so eventfd is required
  * for wakeup io command io_uring context
  */
-#define UBLKSRV_F_NEED_EVENTFD		1
+#define UBLKSRV_F_NEED_EVENTFD		(1UL << 1)
 
 /*
  * Generic data for creating one ublk device

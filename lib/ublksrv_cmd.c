@@ -166,7 +166,7 @@ int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
 	char buf[128];
 	char *addr;
 
-        if (!(info->ublksrv_flags & (1 << UBLKSRV_F_HAS_IO_DAEMON)))
+        if (!(info->ublksrv_flags & UBLKSRV_F_HAS_IO_DAEMON))
 		return -EINVAL;
 
 	if (daemon_pid <= 0)
@@ -307,7 +307,7 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev)
 			info->ublksrv_pid, info->flags[0],
 			ublksrv_dev_state_desc(dev));
 
-        if (info->ublksrv_flags & (1 << UBLKSRV_F_HAS_IO_DAEMON)) {
+        if (info->ublksrv_flags & UBLKSRV_F_HAS_IO_DAEMON) {
 		char *addr;
 		int fd = ublksrv_open_shm(dev, &addr, 0);
 
