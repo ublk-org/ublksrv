@@ -270,15 +270,14 @@ __run_dev_perf()
 	TYPE=$1
 	JOBS=$2
 	QUEUES=$3
-	PIN_PAGE=$4
 	DEV="/dev/ublkb0"
 
 	__remove_ublk_dev
-	__create_ublk_dev $TYPE $QUEUES $PIN_PAGE $T_REFETCH
+	__create_ublk_dev $TYPE $QUEUES $T_PINPAGE $T_REFETCH
 
 	FILE=`__ublk_loop_backing_file`
 
-	echo -e "\tfio (ublk/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES, pin page:$PIN_PAGE, refetch: $T_REFETCH)..."
+	echo -e "\tfio (ublk/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES, pin page:$T_PINPAGE, refetch: $T_REFETCH)..."
 	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
 
 	__remove_ublk_dev 0

@@ -2,4 +2,4 @@
 
 . common/fio_common
 
-__run_dev_perf "null" 1 1 0
+__run_dev_perf "null" 1 1
