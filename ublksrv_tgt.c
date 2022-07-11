@@ -314,7 +314,7 @@ static int cmd_dev_add(int argc, char *argv[])
 			data.tgt_type = optarg;
 			break;
 		case 'z':
-			data.flags[0] |= 1ULL << UBLK_F_SUPPORT_ZERO_COPY;
+			data.flags[0] |= UBLK_F_SUPPORT_ZERO_COPY;
 			data.block_size = 4096;
 			break;
 		case 'q':
@@ -337,9 +337,9 @@ static int cmd_dev_add(int argc, char *argv[])
 	if (data.queue_depth > MAX_QD)
 		data.queue_depth = MAX_QD;
 	if (pin_page)
-		data.flags[0] |= 1ULL << UBLK_F_PIN_PAGES_FOR_IO;
+		data.flags[0] |= UBLK_F_PIN_PAGES_FOR_IO;
 	if (refetch)
-		data.flags[0] |= 1ULL << UBLK_F_NEED_REFETCH;
+		data.flags[0] |= UBLK_F_NEED_REFETCH;
 
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;

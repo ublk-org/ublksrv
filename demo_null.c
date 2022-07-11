@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
 		return -1;
 
 	if (pin_page)
-		data.flags[0] = (1 << UBLK_F_PIN_PAGES_FOR_IO);
+		data.flags[0] = UBLK_F_PIN_PAGES_FOR_IO;
 	if (use_buf) {
 		demo_tgt_type.alloc_io_buf = null_alloc_io_buf;
 		demo_tgt_type.free_io_buf = null_free_io_buf;

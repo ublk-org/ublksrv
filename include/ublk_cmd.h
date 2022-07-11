@@ -53,7 +53,7 @@
  * zero copy requires 4k block size, and can remap ublk driver's io
  * request into ublksrv's vm space
  */
-#define UBLK_F_SUPPORT_ZERO_COPY	0
+#define UBLK_F_SUPPORT_ZERO_COPY	(1UL << 0)
 
 /*
  * When NEED_REFETCH is set, ublksrv has to issue UBLK_IO_REFETCH_REQ
@@ -63,7 +63,7 @@
  * sets it, ublk driver can't clear it. But if ublk driver sets it back
  * to ublksrv, ublksrv has to handle it correctly.
  */
-#define UBLK_F_NEED_REFETCH		1
+#define UBLK_F_NEED_REFETCH		(1UL << 1)
 
 /*
  * pin pages of the userspace io buffer during the whole io lifetime
@@ -76,7 +76,7 @@
  * to not refer to these buffer any more after the io is handled
  * completely.
  */
-#define UBLK_F_PIN_PAGES_FOR_IO		3
+#define UBLK_F_PIN_PAGES_FOR_IO		(1UL << 2)
 
 /* device state */
 #define UBLK_S_DEV_DEAD	0
