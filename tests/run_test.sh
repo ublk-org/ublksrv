@@ -29,7 +29,7 @@ export T_REFETCH=0
 export T_PINPAGE=0
 
 if [ -d $TEST ]; then
-		for ITEM in `ls ${TEST}`; do
+		for ITEM in `ls ${TEST} | grep -v "~$"`; do
 				run_test $TEST/$ITEM
 		done
 elif [ -f $TEST ]; then
