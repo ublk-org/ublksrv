@@ -2,5 +2,5 @@
 
 . common/fio_common
 
-export T_REFETCH=1
+export T_URING_COMP=1
 __run_dev_perf "loop" 1 1

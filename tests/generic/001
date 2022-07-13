@@ -11,22 +11,21 @@ JOBS=4
 QUEUES=4
 RT=$TRUNTIME
 LOOPS=4
+URING_COMP=1
 
-for REFETCH in `seq 0 1`; do
-	for PIN_PAGE in `seq 0 1`; do
-		for CNT in `seq $LOOPS`; do
-			__create_ublk_dev "loop" $QUEUES  $PIN_PAGE $REFETCH
-			echo -e "\trun fio on ublk(pin page $PIN_PAGE, refetch $REFETCH) with delete $CNT"
-			__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
-			sleep 4
-			RES=`__remove_ublk_dev_return 0`
-			if [ $RES -ne 0 ]; then
-					echo -e "\tdelete ublk0 failed"
-					ps -eLf | grep ublk
-					(cd /sys/kernel/debug/block/ublkb0 && find . -type f -exec grep -aH . {} \;)
-					break
-			fi
-			wait
-		done
+for PIN_PAGE in `seq 0 1`; do
+	for CNT in `seq $LOOPS`; do
+		__create_ublk_dev "loop" $QUEUES  $PIN_PAGE $URING_COMP
+		echo -e "\trun fio on ublk(pin page $PIN_PAGE, uring_comp $URING_COMP) with delete $CNT"
+		__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+		sleep 4
+		RES=`__remove_ublk_dev_return 0`
+		if [ $RES -ne 0 ]; then
+				echo -e "\tdelete ublk0 failed"
+				ps -eLf | grep ublk
+				(cd /sys/kernel/debug/block/ublkb0 && find . -type f -exec grep -aH . {} \;)
+				break
+		fi
+		wait
 	done
 done
