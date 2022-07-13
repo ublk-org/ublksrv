@@ -56,14 +56,10 @@
 #define UBLK_F_SUPPORT_ZERO_COPY	(1UL << 0)
 
 /*
- * When NEED_REFETCH is set, ublksrv has to issue UBLK_IO_REFETCH_REQ
- * command after ublk driver returns UBLK_IO_REFETCH_REQ.
- *
- * This flag is negotiated during handling UBLK_CMD_ADD_DEV. If ublksrv
- * sets it, ublk driver can't clear it. But if ublk driver sets it back
- * to ublksrv, ublksrv has to handle it correctly.
+ * Force to complete io cmd via io_uring_cmd_complete_in_task so that
+ * performance comparison is done easily with using task_work_add
  */
-#define UBLK_F_NEED_REFETCH		(1UL << 1)
+#define UBLK_F_URING_CMD_COMP_IN_TASK   (1UL << 1)
 
 /*
  * pin pages of the userspace io buffer during the whole io lifetime
