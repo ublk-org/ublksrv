@@ -211,7 +211,26 @@ struct ublksrv_tgt_type {
 
 	/*
 	 * Someone has written to our eventfd, so let target handle the
-	 * event, most of times, it is for handling io completion
+	 * event, most of times, it is for handling io completion by
+	 * calling ublksrv_complete_io() which has to be run in ubq_daemon
+	 * context.
+	 *
+	 * Follows the typical scenario:
+	 *
+	 * 1) one target io is completed in target pthread context, so
+	 * target code calls ublksrv_queue_send_event for notifying ubq
+	 * daemon
+	 *
+	 * 2) ubq daemon gets notified, so wakeup from io_uring_enter(),
+	 * then found eventfd is completed, so call ->handle_event()
+	 *
+	 * 3) inside ->handle_event(), if any io represented by one io
+	 * command is completed, ublksrv_complete_io() is called for
+	 * this io.
+	 *
+	 * 4) after returning from ->handle_event(), ubq_daemon will
+	 * queue & submit the eventfd io immediately for getting
+	 * notification from future event.
 	 */
 	void (*handle_event)(struct ublksrv_queue *);
 
