@@ -356,13 +356,17 @@ static int cmd_dev_add(int argc, char *argv[])
 		goto fail;
 	}
 
+	data.dev_id = dev->dev_info.dev_id;
 	ret = ublksrv_start_daemon(dev);
-	if (ret <= 0)
+	if (ret <= 0) {
+		fprintf(stderr, "start dev %d daemon failed, ret %d\n",
+				data.dev_id, ret);
 		goto fail_del_dev;
+	}
 
 	ret = ublksrv_ctrl_start_dev(dev, ret, get_dev_blocks(dev, ret));
 	if (ret < 0) {
-		fprintf(stderr, "start dev failed %d, ret %d\n", data.dev_id,
+		fprintf(stderr, "start dev %d failed, ret %d\n", data.dev_id,
 				ret);
 		goto fail_stop_daemon;
 	}

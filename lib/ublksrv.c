@@ -660,14 +660,18 @@ struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 
 	snprintf(buf, 64, "%s%d", UBLKC_DEV, dev_id);
 	dev->cdev_fd = open(buf, O_RDWR);
-	if (dev->cdev_fd < 0)
+	if (dev->cdev_fd < 0) {
+		syslog(LOG_ERR, "can't open %s, ret %d\n", buf, dev->cdev_fd);
 		goto fail;
+	}
 
 	tgt->fds[0] = dev->cdev_fd;
 
 	ret = ublksrv_dev_init_io_bufs(dev);
-	if (ret)
+	if (ret) {
+		syslog(LOG_ERR, "init buf failed\n");
 		goto fail;
+	}
 
 	ret = ublksrv_tgt_init(dev, ctrl_dev->tgt_type, ctrl_dev->tgt_ops,
 			ctrl_dev->tgt_argc, ctrl_dev->tgt_argv);
