@@ -106,7 +106,7 @@ systemctl enable delete-ublk-before-shutdown.service
 2) dependency
 - liburing with IORING_SETUP_SQE128 support
 
-- linux kernel 5.9(IORING_SETUP_SQE128 support)
+- linux kernel v5.19(IORING_SETUP_SQE128 support)
 
 5 test
 5.1 run all built tests
