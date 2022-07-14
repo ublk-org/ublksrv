@@ -40,12 +40,14 @@ static int __ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
 		int argc, char *argv[])
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	int ret;
+
+	if (!ops)
+		return -EINVAL;
 
 	if (strcmp(ops->name, type_name))
 		return -EINVAL;
 
-	if (!ops)
-		return -EINVAL;
 	if (!ops->init_tgt)
 		return -EINVAL;
 	if (!ops->handle_io_async)
@@ -55,11 +57,12 @@ static int __ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
 
 	optind = 0;     /* so that we can parse our arguments */
 	tgt->ops = ops;
-	if (!ops->init_tgt(dev, type, argc, argv)) {
-		return 0;
+	ret = ops->init_tgt(dev, type, argc, argv);
+	if (ret) {
+		tgt->ops = NULL;
+		return ret;
 	}
-	tgt->ops = NULL;
-	return -EINVAL;
+	return 0;
 }
 
 static int ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
@@ -99,7 +102,7 @@ static void ublksrv_tgt_deinit(struct ublksrv_dev *dev)
 
 	ublksrv_tgt_exit(tgt);
 
-	if (tgt->ops->deinit_tgt)
+	if (tgt->ops && tgt->ops->deinit_tgt)
 		tgt->ops->deinit_tgt(dev);
 }
 
