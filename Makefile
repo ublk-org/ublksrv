@@ -12,27 +12,27 @@ PROG_DEMO2 = demo_event
 UBLKSRV_PROGS = $(UBLKSRV_PROG) $(PROG_DEMO) $(PROG_DEMO2)
 LIBUBLKSRV = lib/libublksrv.a
 
-all: $(UBLKSRV_PROGS)
+all: $(LIBUBLKSRV) $(UBLKSRV_PROGS)
 
 -include $(UBLKSRV_OBJS:%.o=%.d)
 
 %.o : %.c Makefile
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 
-$(UBLKSRV_PROG): $(UBLKSRV_OBJS)
+$(LIBUBLKSRV):
 	make -C ${TOP_DIR}lib
+
+$(UBLKSRV_PROG): $(LIBUBLKSRV) $(UBLKSRV_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(UBLKSRV_OBJS) $(LIBUBLKSRV) $(LIBS)
 
-$(PROG_DEMO): demo_null.o
-	make -C ${TOP_DIR}lib
+$(PROG_DEMO): $(LIBUBLKSRV) demo_null.o
 	$(CC) $(LDFLAGS) -o $@ demo_null.o $(LIBS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
-$(PROG_DEMO2): demo_event.o
-	make -C ${TOP_DIR}lib
+$(PROG_DEMO2): $(LIBUBLKSRV) demo_event.o
 	$(CC) $(LDFLAGS) -o $@ demo_event.o $(LIBS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
 
 .PHONY: clean test test_all cscope
 clean:
-	rm -f  $(UBLKSRV_PROGS) $(UBLKSRV_OBJS) $(UBLKSRV_LIB_OBJS) $(UBLKSRV_LIB)
+	rm -f $(UBLKSRV_PROGS) $(UBLKSRV_OBJS) $(UBLKSRV_LIB_OBJS) $(UBLKSRV_LIB)
 	rm -f $(PROG_DEMO) $(PROG_DEMO).o
 	rm -f $(PROG_DEMO2) $(PROG_DEMO2).o
 	rm -f *~ *.d include/*~
@@ -48,6 +48,4 @@ test_all: $(UBLKSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run_test_all R=${R}
 
 cscope:
-	#find . -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" > cscope.files
-	#cscope -q -b -f cscope.out
 	@cscope -b -R
