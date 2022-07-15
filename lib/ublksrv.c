@@ -160,12 +160,12 @@ static inline int ublksrv_queue_io_cmd(struct ublksrv_queue *q,
 
 	/* we issue because we need either fetching or committing */
 	if (!(io->flags &
-		(UBLKSRV_NEED_FETCH_RQ | UBLKSRV_NEED_REFETCH_RQ |
+		(UBLKSRV_NEED_FETCH_RQ | UBLKSRV_NEED_GET_DATA |
 		 UBLKSRV_NEED_COMMIT_RQ_COMP)))
 		return 0;
 
-	if (io->flags & UBLKSRV_NEED_REFETCH_RQ)
-		cmd_op = UBLK_IO_REFETCH_REQ;
+	if (io->flags & UBLKSRV_NEED_GET_DATA)
+		cmd_op = UBLK_IO_NEED_GET_DATA;
 	else if (io->flags & UBLKSRV_NEED_COMMIT_RQ_COMP)
 		cmd_op = UBLK_IO_COMMIT_AND_FETCH_REQ;
 	else if (io->flags & UBLKSRV_NEED_FETCH_RQ)
@@ -758,8 +758,8 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	 */
 	if (cqe->res == UBLK_IO_RES_OK) {
 		tgt->ops->handle_io_async(q, tag);
-	} else if (cqe->res == UBLK_IO_RES_REFETCH) {
-		io->flags |= UBLKSRV_NEED_REFETCH_RQ | UBLKSRV_IO_FREE;
+	} else if (cqe->res == UBLK_IO_RES_NEED_GET_DATA) {
+		io->flags |= UBLKSRV_NEED_GET_DATA | UBLKSRV_IO_FREE;
 		ublksrv_queue_io_cmd(q, io, tag);
 	} else {
 		/*

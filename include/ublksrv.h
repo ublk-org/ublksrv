@@ -109,7 +109,7 @@ struct ublk_io {
 #define UBLKSRV_NEED_FETCH_RQ		(1UL << 0)
 #define UBLKSRV_NEED_COMMIT_RQ_COMP	(1UL << 1)
 #define UBLKSRV_IO_FREE			(1UL << 2)
-#define UBLKSRV_NEED_REFETCH_RQ		(1UL << 3)
+#define UBLKSRV_NEED_GET_DATA		(1UL << 3)
 	unsigned int flags;
 
 	union {

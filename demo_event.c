@@ -315,6 +315,11 @@ int main(int argc, char *argv[])
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		return -1;
 
+#ifdef NEED_GET_DATA
+	fprintf(stdout, "%s: UBLK_F_NEED_GET_DATA\n", __func__);		
+	data.flags[0] = UBLK_F_NEED_GET_DATA;
+#endif
+
 	data.ublksrv_flags = UBLKSRV_F_NEED_EVENTFD;
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {

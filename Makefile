@@ -1,7 +1,7 @@
 include Makefile.common
 
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
-override CFLAGS += -I include
+override CFLAGS += -I include -DNEED_GET_DATA
 
 UBLKSRV_OBJS = utils.o ublksrv_tgt.o tgt_null.o tgt_loop.o
 UBLKSRV_PROG = ublk

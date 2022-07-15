@@ -183,6 +183,10 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+#ifdef NEED_GET_DATA
+	fprintf(stdout, "%s: UBLK_F_NEED_GET_DATA\n", __func__);		
+	data.flags[0] = UBLK_F_NEED_GET_DATA;
+#endif
 
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
 		return -1;
