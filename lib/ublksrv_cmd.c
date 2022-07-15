@@ -302,7 +302,7 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev)
 			info->dev_id,
                         info->nr_hw_queues, info->queue_depth,
                         info->block_size, info->dev_blocks);
-	printf("\tmax rq size %d daemon pid %d flags 0x%lx state %s\n",
+	printf("\tmax rq size %d daemon pid %d flags 0x%llx state %s\n",
                         info->block_size * info->rq_max_blocks,
 			info->ublksrv_pid, info->flags[0],
 			ublksrv_dev_state_desc(dev));
