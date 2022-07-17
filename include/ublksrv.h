@@ -324,7 +324,7 @@ extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
 extern int ublksrv_queue_handled_event(struct ublksrv_queue *q);
 extern int ublksrv_queue_send_event(struct ublksrv_queue *q);
 
-extern int ublksrv_process_io(struct ublksrv_queue *q, unsigned *submitted);
+extern int ublksrv_process_io(struct ublksrv_queue *q);
 extern int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res);
 
 extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);

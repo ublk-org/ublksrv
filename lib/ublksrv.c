@@ -782,9 +782,9 @@ static int ublksrv_reap_events_uring(struct io_uring *r)
 	return count;
 }
 
-int ublksrv_process_io(struct ublksrv_queue *q, unsigned *submitted)
+int ublksrv_process_io(struct ublksrv_queue *q)
 {
-	int nr_submit, reapped;
+	int ret, reapped;
 
 	ublksrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
 				q->dev->ctrl_dev->dev_info.dev_id,
@@ -795,13 +795,10 @@ int ublksrv_process_io(struct ublksrv_queue *q, unsigned *submitted)
 	if (ublksrv_queue_is_done(q))
 		return -ENODEV;
 
-	nr_submit = io_uring_submit_and_wait(&q->ring, 1);
+	ret = io_uring_submit_and_wait(&q->ring, 1);
 	reapped = ublksrv_reap_events_uring(&q->ring);
 
-	ublksrv_log(LOG_INFO, "submitted %d, reapped %d", submitted, reapped);
-
-	if (submitted)
-		*submitted = nr_submit;
+	ublksrv_log(LOG_INFO, "submission result %d, reapped %d", ret, reapped);
 
 	if (q->stopping)
 		ublksrv_kill_eventfd(q);

@@ -42,7 +42,7 @@ static void *ublksrv_io_handler_fn(void *data)
 	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", q->tid,
 			dev_id, q->q_id);
 	do {
-		if (ublksrv_process_io(q, NULL) < 0)
+		if (ublksrv_process_io(q) < 0)
 			break;
 	} while (1);
 

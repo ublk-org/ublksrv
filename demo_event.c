@@ -134,7 +134,7 @@ static void *demo_event_io_handler_fn(void *data)
 	fprintf(stdout, "tid %d: ublk dev %d queue %d started\n", q->tid,
 			dev_id, q->q_id);
 	do {
-		if (ublksrv_process_io(q, NULL) < 0)
+		if (ublksrv_process_io(q) < 0)
 			break;
 	} while (1);
 
