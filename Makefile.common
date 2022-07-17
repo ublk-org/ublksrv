@@ -1,0 +1,6 @@
+CC  = gcc
+CPP = g++
+AR = ar
+CFLAGS = -g -O2 -D_GNU_SOURCE -MMD
+CPPFLAGS = -fcoroutines -std=c++20
+LDFLAGS = -lrt -lpthread -luring

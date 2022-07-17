@@ -1,7 +1,7 @@
-CC = gcc
-CFLAGS = -g -O2 -D_GNU_SOURCE -MMD -fPIC -I ../include
-LIBS = -lrt -lpthread -luring
-AR = ar
+
+include ../Makefile.common
+
+override CFLAGS += -fPIC -I ../include
 
 UBLKSRV_LIB = libublksrv.so
 UBLKSRV_LIB_STATIC = libublksrv.a
@@ -12,10 +12,10 @@ all: $(UBLKSRV_LIB) $(UBLKSRV_LIB_STATIC)
 -include $(UBLKSRV_LIB_OBJS:%.o=%.d)
 
 %.o : %.c Makefile
-	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $< -o $@
 
 $(UBLKSRV_LIB): $(UBLKSRV_LIB_OBJS)
-	$(CC) -shared ${LDFLAGS} -o $@  $(UBLKSRV_LIB_OBJS) $(LIBS)
+	$(CC) -shared -o $@  $(UBLKSRV_LIB_OBJS) $(LDFLAGS)
 
 $(UBLKSRV_LIB_STATIC): $(UBLKSRV_LIB_OBJS)
 	$(AR) rcs $@ $^

@@ -1,9 +1,7 @@
+include Makefile.common
 
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
-CC = g++
-LIBCFLAGS = -g -O2 -D_GNU_SOURCE -MMD -I include
-CFLAGS = -fcoroutines -std=c++20 $(LIBCFLAGS)
-LIBS = -lrt -lpthread -luring
+override CFLAGS += -I include
 
 UBLKSRV_OBJS = utils.o ublksrv_tgt.o tgt_null.o tgt_loop.o
 UBLKSRV_PROG = ublk
@@ -17,18 +15,18 @@ all: $(LIBUBLKSRV) $(UBLKSRV_PROGS)
 -include $(UBLKSRV_OBJS:%.o=%.d)
 
 %.o : %.c Makefile
-	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
+	$(CPP) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 
 $(LIBUBLKSRV):
 	make -C ${TOP_DIR}lib
 
 $(UBLKSRV_PROG): $(LIBUBLKSRV) $(UBLKSRV_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(UBLKSRV_OBJS) $(LIBUBLKSRV) $(LIBS)
+	$(CPP) -o $@ $(UBLKSRV_OBJS) $(LIBUBLKSRV) $(LDFLAGS)
 
 $(PROG_DEMO): $(LIBUBLKSRV) demo_null.o
-	$(CC) $(LDFLAGS) -o $@ demo_null.o $(LIBS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
+	$(CPP) -o $@ demo_null.o $(LDFLAGS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
 $(PROG_DEMO2): $(LIBUBLKSRV) demo_event.o
-	$(CC) $(LDFLAGS) -o $@ demo_event.o $(LIBS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
+	$(CPP) -o $@ demo_event.o $(LDFLAGS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
 
 .PHONY: clean test test_all cscope
 clean:
