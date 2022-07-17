@@ -142,7 +142,7 @@ struct ublksrv_queue {
 	char *io_buf;
 
 	unsigned cmd_inflight, tgt_io_inflight;
-	unsigned short stopping;
+	bool stopping, idle;
 
 	/* eventfd */
 	int efd;

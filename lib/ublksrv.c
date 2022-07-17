@@ -31,6 +31,13 @@
 
 #define UBLKC_DEV	"/dev/ublkc"
 
+/*
+ * If ublksrv queue is idle in the past 20 seconds, start to discard
+ * pages mapped to io buffer via madivise(MADV_DONTNEED), so these
+ * pages can be available for others without needing swap out
+ */
+#define UBLKSRV_IO_IDLE_SECS    20
+
 static void *ublksrv_io_handler_fn(void *data);
 
 static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
@@ -782,9 +789,30 @@ static int ublksrv_reap_events_uring(struct io_uring *r)
 	return count;
 }
 
+static void ublksrv_queue_discard_io_pages(struct ublksrv_queue *q)
+{
+	const struct ublksrv_ctrl_dev *cdev = q->dev->ctrl_dev;
+	unsigned int io_buf_size = cdev->dev_info.block_size *
+		cdev->dev_info.rq_max_blocks;
+	int i = 0;
+
+	if (q->idle)
+		return;
+
+	for (i = 0; i < q->q_depth; i++)
+		madvise(q->ios[i].buf_addr, io_buf_size, MADV_DONTNEED);
+	q->idle = true;
+}
+
 int ublksrv_process_io(struct ublksrv_queue *q)
 {
 	int ret, reapped;
+	struct __kernel_timespec ts = {
+		.tv_sec = UBLKSRV_IO_IDLE_SECS,
+		.tv_nsec = 0
+        };
+	struct __kernel_timespec *tsp = q->idle ? NULL : &ts;
+	struct io_uring_cqe *cqe;
 
 	ublksrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
 				q->dev->ctrl_dev->dev_info.dev_id,
@@ -795,13 +823,20 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 	if (ublksrv_queue_is_done(q))
 		return -ENODEV;
 
-	ret = io_uring_submit_and_wait(&q->ring, 1);
+	ret = io_uring_submit_and_wait_timeout(&q->ring, &cqe, 1, tsp, NULL);
 	reapped = ublksrv_reap_events_uring(&q->ring);
 
-	ublksrv_log(LOG_INFO, "submission result %d, reapped %d", ret, reapped);
+	ublksrv_log(LOG_INFO, "submit result %d, reapped %d stop %d idle %d",
+			ret, reapped, q->stopping, q->idle);
 
 	if (q->stopping)
 		ublksrv_kill_eventfd(q);
+	else {
+		if (ret == -ETIME && reapped == 0)
+			ublksrv_queue_discard_io_pages(q);
+		else if (q->idle)
+			q->idle = false;
+	}
 
 	return reapped;
 }
