@@ -61,19 +61,6 @@
  */
 #define UBLK_F_URING_CMD_COMP_IN_TASK   (1UL << 1)
 
-/*
- * pin pages of the userspace io buffer during the whole io lifetime
- *
- * If this flag is set, user io buffer for each io can't be changed
- * runtime.
- *
- * Given pages may be reclaimed after io is done, and there won't be
- * swapout for these pages. It is userspace target code's responsibility
- * to not refer to these buffer any more after the io is handled
- * completely.
- */
-#define UBLK_F_PIN_PAGES_FOR_IO		(1UL << 2)
-
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1

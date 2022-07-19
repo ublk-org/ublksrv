@@ -169,20 +169,15 @@ int main(int argc, char *argv[])
 	char *type = NULL;
 	int ret;
 	static const struct option longopts[] = {
-		{ "pin_page",		1,	NULL, 'p' },
 		{ "buf",		1,	NULL, 'b' },
 		{ NULL }
 	};
 	int opt;
 	bool use_buf = false;
-	bool pin_page = false;
 
-	while ((opt = getopt_long(argc, argv, ":pb",
+	while ((opt = getopt_long(argc, argv, ":b",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
-		case 'p':
-			pin_page = true;
-			break;
 		case 'b':
 			use_buf = true;
 			break;
@@ -194,8 +189,6 @@ int main(int argc, char *argv[])
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		return -1;
 
-	if (pin_page)
-		data.flags[0] = UBLK_F_PIN_PAGES_FOR_IO;
 	if (use_buf) {
 		demo_tgt_type.alloc_io_buf = null_alloc_io_buf;
 		demo_tgt_type.free_io_buf = null_free_io_buf;

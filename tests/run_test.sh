@@ -26,7 +26,6 @@ run_test() {
 TEST=$1
 export TRUNTIME=$2
 export T_URING_COMP=0
-export T_PINPAGE=0
 
 if [ -d $TEST ]; then
 		for ITEM in `ls ${TEST} | grep -v "~$"`; do

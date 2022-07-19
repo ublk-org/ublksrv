@@ -1,6 +1,0 @@
-#!/bin/bash
-
-. common/fio_common
-
-export T_PINPAGE=1
-__run_dev_perf "null" 1 1
