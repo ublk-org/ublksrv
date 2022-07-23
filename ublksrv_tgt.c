@@ -314,7 +314,7 @@ static int cmd_dev_add(int argc, char *argv[])
 			data.tgt_type = optarg;
 			break;
 		case 'z':
-			data.flags[0] |= UBLK_F_SUPPORT_ZERO_COPY;
+			data.flags |= UBLK_F_SUPPORT_ZERO_COPY;
 			data.block_size = 4096;
 			break;
 		case 'q':
@@ -334,7 +334,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	if (data.queue_depth > MAX_QD)
 		data.queue_depth = MAX_QD;
 	if (uring_comp)
-		data.flags[0] |= UBLK_F_URING_CMD_COMP_IN_TASK;
+		data.flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
 
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;

@@ -83,7 +83,7 @@ struct ublksrv_dev_data {
 	const struct ublksrv_tgt_type *tgt_ops;
 	int		tgt_argc;
 	char		**tgt_argv;
-	unsigned long	flags[2];
+	unsigned long	flags;
 	unsigned long	ublksrv_flags;
 	unsigned long   reserved[7];
 };

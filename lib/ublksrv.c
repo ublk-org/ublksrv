@@ -351,7 +351,7 @@ static int ublksrv_dev_init_io_bufs(struct ublksrv_dev *dev)
 	void *addr;
 
 	dev->io_buf_start = NULL;
-	if (!(dev->ctrl_dev->dev_info.flags[0] & UBLK_F_SUPPORT_ZERO_COPY))
+	if (!(dev->ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY))
 		return 0;
 
 	addr = mmap(0, sz, PROT_READ | PROT_WRITE,

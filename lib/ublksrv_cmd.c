@@ -107,8 +107,7 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 	info->queue_depth = data->queue_depth;
 	info->block_size = data->block_size;
 	info->rq_max_blocks = data->rq_max_blocks;
-	info->flags[0] = data->flags[0];
-	info->flags[1] = data->flags[1];
+	info->flags = data->flags;
 	info->ublksrv_flags = data->ublksrv_flags;
 	dev->bs_shift = ilog2(info->block_size);
 
@@ -304,7 +303,7 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev)
                         info->block_size, info->dev_blocks);
 	printf("\tmax rq size %d daemon pid %d flags 0x%llx state %s\n",
                         info->block_size * info->rq_max_blocks,
-			info->ublksrv_pid, info->flags[0],
+			info->ublksrv_pid, info->flags,
 			ublksrv_dev_state_desc(dev));
 
         if (info->ublksrv_flags & UBLKSRV_F_HAS_IO_DAEMON) {
