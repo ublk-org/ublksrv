@@ -157,6 +157,32 @@ static void *demo_event_io_handler_fn(void *data)
 	return NULL;
 }
 
+static void demo_event_set_parameters(struct ublksrv_ctrl_dev *cdev,
+		const struct ublksrv_dev *dev)
+ {
+	struct ublksrv_ctrl_dev_info *info = &cdev->dev_info;
+	struct ublk_params p = {
+		.types = UBLK_PARAM_TYPE_BASIC,
+		.basic = {
+			.logical_bs_shift	= 9,
+			.physical_bs_shift	= 12,
+			.max_sectors		= info->max_io_buf_bytes >> 9,
+			.dev_sectors		= dev->tgt.dev_size >> 9,
+		},
+	};
+	int ret;
+
+	pthread_mutex_lock(&jbuf_lock);
+	ublksrv_json_write_params(&p, jbuf, jbuf_size);
+	pthread_mutex_unlock(&jbuf_lock);
+
+	ret = ublksrv_ctrl_set_params(cdev, &p);
+	if (ret)
+		fprintf(stderr, "dev %d set basic parameter failed %d\n",
+				info->dev_id, ret);
+}
+
+
 static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int dev_id = ctrl_dev->dev_info.dev_id;
@@ -188,6 +214,8 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 				demo_event_real_io_handler_fn,
 				&info_array[i]);
 	}
+
+	demo_event_set_parameters(ctrl_dev, dev);
 
 	/* everything is fine now, start us */
 	ret = ublksrv_ctrl_start_dev(ctrl_dev, getpid(), 0);
