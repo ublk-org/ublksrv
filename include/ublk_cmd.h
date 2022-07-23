@@ -15,6 +15,8 @@
 #define	UBLK_CMD_DEL_DEV		0x05
 #define	UBLK_CMD_START_DEV	0x06
 #define	UBLK_CMD_STOP_DEV	0x07
+#define	UBLK_CMD_SET_PARAM	0x08
+#define	UBLK_CMD_GET_PARAM	0x09
 
 /*
  * IO commands, issued by ublk server, and handled by ublk driver.
@@ -163,6 +165,51 @@ struct ublksrv_io_cmd {
 	 * FETCH* command only
 	 */
 	__u64	addr;
+};
+
+/* 512 is big enough for single parameter */
+#define UBLK_MAX_PARAM_LEN	512
+
+struct ublk_param_header {
+	__u16 type;
+	__u16 len;
+};
+
+enum {
+	UBLK_PARAM_TYPE_BASIC,
+	UBLK_PARAM_TYPE_DISCARD,
+	UBLK_PARAM_TYPE_LAST,
+};
+
+struct ublk_basic_param {
+	struct ublk_param_header  header;
+#define UBLK_ATTR_READ_ONLY            (1 << 0)
+#define UBLK_ATTR_ROTATIONAL           (1 << 1)
+#define UBLK_ATTR_VOLATILE_CACHE       (1 << 2)
+#define UBLK_ATTR_FUA                  (1 << 3)
+	__u32	attrs;
+	__u8	logical_bs_shift;
+	__u8	physical_bs_shift;
+	__u8	io_opt_shift;
+	__u8	io_min_shift;
+
+	__u32	max_sectors;
+	__u32	chunk_sectors;
+
+	__u64   dev_sectors;
+	__u64   virt_boundary_mask;
+};
+
+struct ublk_discard_param {
+	struct ublk_param_header  header;
+	__u32	discard_alignment;
+
+	__u32	discard_granularity;
+	__u32	max_discard_sectors;
+
+	__u32	max_write_zeroes_sectors;
+	__u16	max_discard_segments;
+	__u16	reserved0;
 };
 
 #endif
