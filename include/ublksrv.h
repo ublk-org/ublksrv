@@ -311,6 +311,10 @@ extern int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev);
 extern void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *buf);
 extern int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev,
 		int daemon_pid, unsigned long long dev_blocks);
+extern int ublksrv_ctrl_set_params(struct ublksrv_ctrl_dev *dev,
+		struct ublk_params *params);
+extern int ublksrv_ctrl_get_params(struct ublksrv_ctrl_dev *dev,
+		struct ublk_params *params);
 
 extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);
