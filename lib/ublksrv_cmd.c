@@ -289,3 +289,29 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 		printf("\ttarget %s\n", buf);
 	}
 }
+
+int ublksrv_ctrl_set_param(struct ublksrv_ctrl_dev *dev,
+		const struct ublk_param_header *param)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_SET_PARAM,
+		.flags	= CTRL_CMD_HAS_BUF,
+		.addr = (__u64)param,
+		.len = param->len,
+	};
+
+	return __ublksrv_ctrl_cmd(dev, &data);
+}
+
+int ublksrv_ctrl_get_param(struct ublksrv_ctrl_dev *dev,
+		struct ublk_param_header *param)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_GET_PARAM,
+		.flags	= CTRL_CMD_HAS_BUF,
+		.addr = (__u64)param,
+		.len = param->len,
+	};
+
+	return __ublksrv_ctrl_cmd(dev, &data);
+}
