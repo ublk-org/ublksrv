@@ -5,8 +5,6 @@
 extern "C" {
 #endif
 
-char *mprintf(const char *fmt, ...);
-
 /* Bit-mask values for 'flags' argument of create_daemon() */
 #define BD_NO_CHDIR           01    /* Don't chdir("/") */
 #define BD_NO_CLOSE_FILES     02    /* Don't close all open files */

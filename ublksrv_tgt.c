@@ -9,6 +9,19 @@ struct ublksrv_queue_info {
 	pthread_t thread;
 };
 
+static char *mprintf(const char *fmt, ...)
+{
+	va_list args;
+	char *str;
+	int ret;
+
+	va_start(args, fmt);
+	ret = vasprintf(&str, fmt, args);
+	va_end(args);
+
+	return str;
+}
+
 static char *pop_cmd(int *argc, char *argv[])
 {
 	char *cmd = argv[1];

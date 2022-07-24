@@ -18,19 +18,6 @@
 
 #include "utils.h"
 
-char *mprintf(const char *fmt, ...)
-{
-	va_list args;
-	char *str;
-	int ret;
-
-	va_start(args, fmt);
-	ret = vasprintf(&str, fmt, args);
-	va_end(args);
-
-	return str;
-}
-
 /* Lock a file region (private; public interfaces below) */
 static int lockReg(int fd, int cmd, int type, int whence, int start, off_t len)
 {
