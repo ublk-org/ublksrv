@@ -427,7 +427,7 @@ void ublksrv_queue_deinit(struct ublksrv_queue *q)
 
 }
 
-static void ublksrv_build_cpu_str(char *buf, int len, cpu_set_t *cpuset)
+void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset)
 {
 	int nr_cores = sysconf(_SC_NPROCESSORS_ONLN);
 	int i, offset = 0;

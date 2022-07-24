@@ -322,6 +322,24 @@ extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);
 extern void ublksrv_dev_deinit(struct ublksrv_dev *dev);
 
+extern int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *dev,
+		char *buf, int len);
+extern int ublksrv_json_read_dev_info(char *json_buf,
+		struct ublksrv_ctrl_dev_info *info);
+extern int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
+		char *jbuf, int len, int qid, int ubq_daemon_tid);
+extern int ublksrv_json_read_queue_info(const char *jbuf, int qid,
+		unsigned *tid, char *affinity_buf, int len);
+extern int ublksrv_json_read_target_info(const char *jbuf, char *tgt_buf,
+		int len);
+extern int ublksrv_json_write_target_str_info(char *jbuf, int len,
+		const char *name, const char *val);
+extern int ublksrv_json_write_target_long_info(char *jbuf, int len,
+		const char *name, long val);
+extern int ublksrv_json_write_target_ulong_info(char *jbuf, int len,
+		const char *name, unsigned long val);
+extern void ublksrv_json_dump(const char *jbuf);
+
 static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 {
 	return q->private_data;
