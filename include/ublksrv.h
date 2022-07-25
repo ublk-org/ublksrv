@@ -322,6 +322,14 @@ extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);
 extern void ublksrv_dev_deinit(struct ublksrv_dev *dev);
 
+/* target json has to include the following key/value */
+#define UBLKSRV_TGT_NAME_MAX_LEN 32
+struct ublksrv_tgt_base_json {
+	char name[UBLKSRV_TGT_NAME_MAX_LEN];
+	int type;
+	unsigned long long dev_size;
+};
+
 extern int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *dev,
 		char *buf, int len);
 extern int ublksrv_json_read_dev_info(char *json_buf,
@@ -339,6 +347,10 @@ extern int ublksrv_json_write_target_long_info(char *jbuf, int len,
 extern int ublksrv_json_write_target_ulong_info(char *jbuf, int len,
 		const char *name, unsigned long val);
 extern void ublksrv_json_dump(const char *jbuf);
+extern int ublksrv_json_read_target_base_info(const char *jbuf,
+		struct ublksrv_tgt_base_json *tgt);
+extern int ublksrv_json_write_target_base_info(char *jbuf, int len,
+		const struct ublksrv_tgt_base_json *tgt);
 
 static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 {

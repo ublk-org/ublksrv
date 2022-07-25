@@ -134,6 +134,50 @@ int ublksrv_json_write_target_ulong_info(char *jbuf, int len, const char *name,
 	return dump_json_to_buf(j, jbuf, len);
 }
 
+int ublksrv_json_write_target_base_info(char *jbuf, int len,
+		const struct ublksrv_tgt_base_json *tgt)
+{
+	json j;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	j["target"]["name"] = tgt->name;
+	j["target"]["type"] = tgt->type;
+	j["target"]["dev_size"] = tgt->dev_size;
+
+	return dump_json_to_buf(j, jbuf, len);
+}
+
+int ublksrv_json_read_target_base_info(const char *jbuf,
+		struct ublksrv_tgt_base_json *tgt)
+{
+	json j;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	if (!j.contains("target"))
+		return -EINVAL;
+
+	auto tj = j["target"];
+
+	if (!tj.contains("name") || !tj.contains("type") ||
+			!tj.contains("dev_size"))
+		return -EINVAL;
+
+	std::string str = tj["name"];
+	if (str.length() >= UBLKSRV_TGT_NAME_MAX_LEN)
+		return -EINVAL;
+	strcpy(tgt->name, str.c_str());
+	tgt->type = tj["type"];
+	tgt->dev_size = tj["dev_size"];
+
+	return 0;
+}
+
 int ublksrv_json_read_target_info(const char *jbuf, char *tgt_buf, int len)
 {
 	json j;
