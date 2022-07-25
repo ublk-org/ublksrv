@@ -9,21 +9,20 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		(struct ublksrv_ctrl_dev_info  *)dev->shm_addr;
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
+	struct ublksrv_tgt_base_json tgt_json = {
+		.name = "null",
+		.type = type,
+	};
 
 	if (type != UBLKSRV_TGT_TYPE_NULL)
 		return -1;
 
-	tgt->dev_size = 250UL * 1024 * 1024 * 1024;
+	tgt_json.dev_size = tgt->dev_size = 250UL * 1024 * 1024 * 1024;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
 	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, jbuf_size);
-	ublksrv_json_write_target_str_info(jbuf, jbuf_size, "name",
-			"null");
-	ublksrv_json_write_target_long_info(jbuf, jbuf_size, "type",
-			type);
-	ublksrv_json_write_target_ulong_info(jbuf, jbuf_size, "size",
-			tgt->dev_size);
+	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
 
 	pthread_mutex_lock(&dev->shm_lock);
 	*shm_info = *info;
@@ -32,7 +31,6 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			UBLKSRV_SHM_SIZE - dev->shm_offset,
 			"target type: %s\n", tgt->ops->name);
 	pthread_mutex_unlock(&dev->shm_lock);
-
 	return 0;
 }
 

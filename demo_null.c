@@ -125,21 +125,20 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 {
 	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	struct ublksrv_tgt_base_json tgt_json = {
+		.name = "null",
+		.type = type,
+	};
 
 	if (type != UBLKSRV_TGT_TYPE_DEMO)
 		return -1;
 
-	tgt->dev_size = 250UL * 1024 * 1024 * 1024;
+	tgt_json.dev_size = tgt->dev_size = 250UL * 1024 * 1024 * 1024;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
 	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, jbuf_size);
-	ublksrv_json_write_target_str_info(jbuf, jbuf_size, "name",
-			"null");
-	ublksrv_json_write_target_long_info(jbuf, jbuf_size, "type",
-			type);
-	ublksrv_json_write_target_ulong_info(jbuf, jbuf_size, "size",
-			tgt->dev_size);
+	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
 
 	return 0;
 }
