@@ -418,24 +418,14 @@ static unsigned long long get_dev_blocks(struct ublksrv_ctrl_dev *ctrl_dev,
 		int daemon_pid)
 {
 	unsigned long long dev_blocks = 0;
+	struct ublksrv_tgt_base_json tgt_json;
+	char *buf = ublksrv_tgt_get_dev_data(ctrl_dev);
+	int ret = ublksrv_json_read_target_base_info(buf, &tgt_json);
 
-	if (ctrl_dev->dev_info.ublksrv_flags & UBLKSRV_F_HAS_IO_DAEMON) {
-		char *addr;
-		int fd = ublksrv_open_shm(ctrl_dev, &addr, daemon_pid);
+	if (ret >= 0)
+		dev_blocks = tgt_json.dev_size >> ctrl_dev->bs_shift;
 
-		if (fd > 0) {
-			const struct ublksrv_ctrl_dev_info *info =
-				(struct ublksrv_ctrl_dev_info *)addr;
-			dev_blocks = info->dev_blocks;
-			ublksrv_close_shm(ctrl_dev, fd, addr);
-		} else {
-			fprintf(stderr, "can't open shmem %d\n",
-					ctrl_dev->dev_info.dev_id);
-		}
-	} else {
-		dev_blocks = ctrl_dev->dev_info.dev_blocks;
-	}
-
+	free(buf);
 	return dev_blocks;
 }
 
