@@ -23,6 +23,11 @@ struct demo_queue_info {
 
 static struct ublksrv_ctrl_dev *this_ctrl_dev;
 static struct ublksrv_dev *this_dev;
+
+static pthread_mutex_t jbuf_lock;
+static const int jbuf_size = 1024;
+static char jbuf[jbuf_size];
+
 static void sig_handler(int sig)
 {
 	struct ublksrv_queue *q = this_dev->__queues[0];
@@ -123,6 +128,11 @@ static void *demo_event_io_handler_fn(void *data)
 	struct ublksrv_queue *q;
 	unsigned long long ev_data = 1;
 
+	pthread_mutex_lock(&jbuf_lock);
+	ublksrv_json_write_queue_info(dev->ctrl_dev, jbuf, jbuf_size,
+			q_id, gettid());
+	pthread_mutex_unlock(&jbuf_lock);
+
 	q = ublksrv_queue_init(dev, q_id, info);
 	if (!q) {
 		fprintf(stderr, "ublk dev %d queue %d init queue failed\n",
@@ -186,7 +196,7 @@ static void demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 	ublksrv_ctrl_start_dev(ctrl_dev, getpid(), demo_get_dev_blocks(dev));
 
 	ublksrv_ctrl_get_info(ctrl_dev);
-	ublksrv_ctrl_dump(ctrl_dev);
+	ublksrv_ctrl_dump(ctrl_dev, jbuf);
 
 	/* wait until we are terminated */
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
@@ -227,6 +237,14 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt->dev_size = 250UL * 1024 * 1024 * 1024;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
+
+	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, jbuf_size);
+	ublksrv_json_write_target_str_info(jbuf, jbuf_size, "name",
+			"null_event");
+	ublksrv_json_write_target_long_info(jbuf, jbuf_size, "type",
+			type);
+	ublksrv_json_write_target_ulong_info(jbuf, jbuf_size, "size",
+			tgt->dev_size);
 
 	return 0;
 }
@@ -314,6 +332,8 @@ int main(int argc, char *argv[])
 		return -1;
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		return -1;
+
+	pthread_mutex_init(&jbuf_lock, NULL);
 
 	data.ublksrv_flags = UBLKSRV_F_NEED_EVENTFD;
 	dev = ublksrv_ctrl_init(&data);

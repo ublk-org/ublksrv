@@ -424,7 +424,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		goto fail_stop_daemon;
 	}
 	ret = ublksrv_ctrl_get_info(dev);
-	ublksrv_ctrl_dump(dev);
+	ublksrv_ctrl_dump(dev, NULL);
 	ublksrv_ctrl_deinit(dev);
 	return 0;
 
@@ -565,7 +565,7 @@ static int list_one_dev(int number, bool log)
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
 	} else
-		ublksrv_ctrl_dump(dev);
+		ublksrv_ctrl_dump(dev, NULL);
 
 	ublksrv_ctrl_deinit(dev);
 

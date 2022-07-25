@@ -294,9 +294,10 @@ static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 	};
 }
 
-void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev)
+void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 {
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
+	int i;
 
 	printf("dev id %d: nr_hw_queues %d queue_depth %d block size %d dev_capacity %lld\n",
 			info->dev_id,
@@ -306,6 +307,23 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev)
                         info->block_size * info->rq_max_blocks,
 			info->ublksrv_pid, info->flags,
 			ublksrv_dev_state_desc(dev));
+
+	if (jbuf) {
+		char buf[512];
+
+		for(i = 0; i < info->nr_hw_queues; i++) {
+			unsigned tid;
+
+			ublksrv_json_read_queue_info(jbuf, i, &tid, buf, 512);
+			printf("\tqueue %u: tid %d affinity(%s)\n",
+					i, tid, buf);
+		}
+
+		ublksrv_json_read_target_info(jbuf, buf, 512);
+		printf("\ttarget %s\n", buf);
+
+		return;
+	}
 
         if (info->ublksrv_flags & UBLKSRV_F_HAS_IO_DAEMON) {
 		char *addr;
