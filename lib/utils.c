@@ -16,7 +16,7 @@
 #include <fcntl.h>
 #include <string.h>
 
-#include "utils.h"
+#include "ublksrv_priv.h"
 
 /* Lock a file region (private; public interfaces below) */
 static int lockReg(int fd, int cmd, int type, int whence, int start, off_t len)

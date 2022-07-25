@@ -83,6 +83,7 @@ struct ublksrv_dev_data {
 	const struct ublksrv_tgt_type *tgt_ops;
 	int		tgt_argc;
 	char		**tgt_argv;
+	const char	*run_dir;
 	unsigned long	flags;
 	unsigned long	ublksrv_flags;
 	unsigned long   reserved[7];
@@ -97,6 +98,13 @@ struct ublksrv_ctrl_dev {
 
 	const char *tgt_type;
 	const struct ublksrv_tgt_type *tgt_ops;
+
+	/*
+	 * default is UBLKSRV_RUN_DIR but can be specified via command line,
+	 * pid file will be saved there
+	 */
+	const char *run_dir;
+
 	int tgt_argc;
 	char **tgt_argv;
 

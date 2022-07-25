@@ -145,36 +145,6 @@ static void setup_pthread_sigmask()
 	pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
 }
 
-static int ublksrv_create_pid_file(int dev_id)
-{
-	char pid_file[64];
-	int ret, pid_fd;
-
-	/* create pid file and lock it, so that others can't */
-	snprintf(pid_file, 64, "%s-%d.pid", UBLKSRV_PID_FILE, dev_id);
-
-	ret = create_pid_file(pid_file, CPF_CLOEXEC, &pid_fd);
-	if (ret < 0) {
-		/* -1 means the file is locked, and we need to remove it */
-		if (ret == -1) {
-			close(pid_fd);
-			unlink(pid_file);
-		}
-		return ret;
-	}
-	close(pid_fd);
-	return 0;
-}
-
-static void ublksrv_remove_pid_file(int dev_id)
-{
-	char pid_file[64];
-
-	/* create pid file and lock it, so that others can't */
-	snprintf(pid_file, 64, "%s-%d.pid", UBLKSRV_PID_FILE, dev_id);
-	unlink(pid_file);
-}
-
 /*
  * Now STOP DEV ctrl command has been sent to /dev/ublk-control,
  * and wait until all pending fetch commands are canceled
@@ -211,15 +181,6 @@ static void ublksrv_io_handler(void *data)
 		goto out;
 	}
 
-	/*
-	 * has to be called after ublksrv_dev_init returns, so that
-	 * the control task can observe disk size configured
-	 */
-	if (ublksrv_create_pid_file(dev_id)) {
-		syslog(LOG_ERR, "dev-%d create pid file failed", dev_id);
-		goto out_dev_deinit;
-	}
-
 	setup_pthread_sigmask();
 
 	info_array = (struct ublksrv_queue_info *)calloc(sizeof(
@@ -237,7 +198,6 @@ static void ublksrv_io_handler(void *data)
 	/* wait until we are terminated */
 	ublksrv_drain_fetch_commands(dev, info_array);
 	free(info_array);
-	ublksrv_remove_pid_file(dev_id);
 
 out_dev_deinit:
 	ublksrv_dev_deinit(dev);
@@ -259,8 +219,9 @@ static int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev)
 	char buf[64];
 	int daemon_pid;
 
-	snprintf(buf, 64, "%s-%d.pid", UBLKSRV_PID_FILE,
+	snprintf(buf, 64, "%s/%d.pid", ctrl_dev->run_dir,
 			ctrl_dev->dev_info.dev_id);
+
 	pid_fd = open(buf, O_RDONLY);
 	if (pid_fd < 0)
 		goto out;
@@ -354,6 +315,26 @@ static unsigned long long get_dev_blocks(struct ublksrv_ctrl_dev *ctrl_dev,
 	return dev_blocks;
 }
 
+static int __mkpath(char *dir, mode_t mode)
+{
+	struct stat sb;
+
+	if (!dir)
+		return -EINVAL;
+
+	if (!stat(dir, &sb))
+		return 0;
+
+	__mkpath(dirname(strdupa(dir)), mode);
+
+	return mkdir(dir, mode);
+}
+
+static int mkpath(const char *dir)
+{
+	return __mkpath(strdupa(dir), 0700);
+}
+
 static int cmd_dev_add(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
@@ -377,6 +358,9 @@ static int cmd_dev_add(int argc, char *argv[])
 	data.dev_id = -1;
 	data.block_size = 512;
 	data.ublksrv_flags |= UBLKSRV_F_HAS_IO_DAEMON;
+	data.run_dir = UBLKSRV_PID_DIR;
+
+	mkpath(data.run_dir);
 
 	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:z",
 				  longopts, NULL)) != -1) {

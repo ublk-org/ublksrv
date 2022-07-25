@@ -111,6 +111,7 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 	info->ublksrv_flags = data->ublksrv_flags;
 	dev->bs_shift = ilog2(info->block_size);
 
+	dev->run_dir = data->run_dir;
 	dev->tgt_type = data->tgt_type;
 	dev->tgt_ops = data->tgt_ops;
 	dev->tgt_argc = data->tgt_argc;

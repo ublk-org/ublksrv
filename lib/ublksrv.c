@@ -594,9 +594,49 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	return NULL;
 }
 
+static int ublksrv_create_pid_file(struct ublksrv_dev *dev)
+{
+	int dev_id = dev->ctrl_dev->dev_info.dev_id;
+	char pid_file[64];
+	int ret, pid_fd;
+
+	if (!dev->ctrl_dev->run_dir)
+		return 0;
+
+	/* create pid file and lock it, so that others can't */
+	snprintf(pid_file, 64, "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
+
+	ret = create_pid_file(pid_file, CPF_CLOEXEC, &pid_fd);
+	if (ret < 0) {
+		/* -1 means the file is locked, and we need to remove it */
+		if (ret == -1) {
+			close(pid_fd);
+			unlink(pid_file);
+		}
+		return ret;
+	}
+	close(pid_fd);
+	return 0;
+}
+
+static void ublksrv_remove_pid_file(const struct ublksrv_dev *dev)
+{
+	int dev_id = dev->ctrl_dev->dev_info.dev_id;
+	char pid_file[64];
+
+	if (!dev->ctrl_dev->run_dir)
+		return;
+
+	snprintf(pid_file, 64, "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
+	unlink(pid_file);
+}
+
 void ublksrv_dev_deinit(struct ublksrv_dev *dev)
 {
+	int dev_id = dev->ctrl_dev->dev_info.dev_id;
 	int i;
+
+	ublksrv_remove_pid_file(dev);
 
 	ublksrv_dev_deinit_io_bufs(dev);
 
@@ -686,6 +726,13 @@ struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 		syslog(LOG_ERR, "can't init tgt %d/%s/%d, ret %d\n",
 				dev_id, ctrl_dev->tgt_type, ctrl_dev->tgt_argc,
 				ret);
+		goto fail;
+	}
+
+	ret = ublksrv_create_pid_file(dev);
+	if (ret) {
+		syslog(LOG_ERR, "can't create pid file for dev %d, ret %d\n",
+				dev_id, ret);
 		goto fail;
 	}
 

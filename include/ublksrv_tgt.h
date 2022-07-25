@@ -1,6 +1,7 @@
 #ifndef UBLKSRV_TGT_INC_H
 #define UBLKSRV_TGT_INC_H
 
+#include <libgen.h>
 #include <coroutine>
 #include <iostream>
 #include <type_traits>
@@ -9,7 +10,7 @@
 #include "ublksrv_priv.h"
 
 #define MAX_NR_UBLK_DEVS	128
-#define UBLKSRV_PID_FILE  "/var/run/ublksrvd"
+#define UBLKSRV_PID_DIR  "/var/run/ublksrvd"
 
 static inline unsigned ublksrv_convert_cmd_op(const struct ublksrv_io_desc *iod)
 {

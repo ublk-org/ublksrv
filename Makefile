@@ -3,7 +3,7 @@ include Makefile.common
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 override CFLAGS += -I include
 
-UBLKSRV_OBJS = utils.o ublksrv_tgt.o tgt_null.o tgt_loop.o
+UBLKSRV_OBJS = ublksrv_tgt.o tgt_null.o tgt_loop.o
 UBLKSRV_PROG = ublk
 PROG_DEMO = demo_null
 PROG_DEMO2 = demo_event
