@@ -615,7 +615,7 @@ static int ublksrv_create_pid_file(struct ublksrv_dev *dev)
 		}
 		return ret;
 	}
-	close(pid_fd);
+	dev->pid_file_fd = pid_fd;
 	return 0;
 }
 
@@ -627,6 +627,7 @@ static void ublksrv_remove_pid_file(const struct ublksrv_dev *dev)
 	if (!dev->ctrl_dev->run_dir)
 		return;
 
+	close(dev->pid_file_fd);
 	snprintf(pid_file, 64, "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
 	unlink(pid_file);
 }

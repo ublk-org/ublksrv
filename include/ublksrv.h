@@ -264,6 +264,7 @@ struct ublksrv_dev {
 	char	*io_buf_start;
 	pthread_t *thread;
 	int cdev_fd;
+	int pid_file_fd;
 
 	const struct ublksrv_ctrl_dev *ctrl_dev;
 	void	*target_data;
