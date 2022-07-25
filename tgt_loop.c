@@ -20,6 +20,8 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	struct stat st;
 	int fd, opt;
 	char *file = NULL;
+	int jbuf_size, ret;
+	char *jbuf;
 
 	if (type != UBLKSRV_TGT_TYPE_LOOP)
 		return -1;
@@ -69,6 +71,21 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 			"target type: %s backing file: %s\n",
 			tgt->ops->name, loop_tgt_backfile(tgt));
 	pthread_mutex_unlock(&dev->shm_lock);
+
+	jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
+	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, jbuf_size);
+	ublksrv_json_write_target_str_info(jbuf, jbuf_size, "name",
+			"loop");
+	ublksrv_json_write_target_long_info(jbuf, jbuf_size, "type",
+			type);
+	ublksrv_json_write_target_ulong_info(jbuf, jbuf_size, "size",
+			tgt->dev_size);
+	do {
+		ret = ublksrv_json_write_target_str_info(jbuf, jbuf_size,
+				"backing_file", file);
+		if (ret < 0)
+			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
+	} while (ret < 0);
 
 	return 0;
 }

@@ -1,5 +1,12 @@
 #include "ublksrv_tgt.h"
 
+/* per-task variable */
+static pthread_mutex_t jbuf_lock;
+static int jbuf_size = 0;
+static int jdata_size = 0;
+static int queues_stored = 0;
+static char *jbuf = NULL;
+
 /********************cmd handling************************/
 static char *full_cmd;
 
@@ -98,6 +105,99 @@ int start_daemon(int flags, void (*child_entry)(void *), void *data)
     return 0;
 }
 
+char *__ublksrv_tgt_return_json_buf(struct ublksrv_dev *dev, int *size)
+{
+	if (jbuf == NULL) {
+		jbuf_size = 1024;
+		jbuf = (char *)realloc((void *)jbuf, jbuf_size);
+	}
+	*size = jbuf_size;
+
+	return jbuf;
+}
+
+char *ublksrv_tgt_return_json_buf(struct ublksrv_dev *dev, int *size)
+{
+	char *buf;
+
+	pthread_mutex_lock(&jbuf_lock);
+	buf = __ublksrv_tgt_return_json_buf(dev, size);
+	pthread_mutex_unlock(&jbuf_lock);
+
+	return buf;
+}
+
+static char *__ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size)
+{
+	if (jbuf == NULL)
+		jbuf_size = 1024;
+	else
+		jbuf_size += 1024;
+
+	jbuf = (char *)realloc((void *)jbuf, jbuf_size);
+	*size = jbuf_size;
+
+	return jbuf;
+}
+
+char *ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size)
+{
+	char *buf;
+
+	pthread_mutex_lock(&jbuf_lock);
+	buf = __ublksrv_tgt_realloc_json_buf(dev, size);
+	pthread_mutex_unlock(&jbuf_lock);
+
+	return buf;
+}
+
+static int ublksrv_tgt_store_dev_data(struct ublksrv_dev *dev,
+		const char *buf, int size)
+{
+	int ret;
+
+	ret = pwrite(dev->pid_file_fd, buf, size, JSON_OFFSET);
+	if (ret <= 0)
+		syslog(LOG_ERR, "fail to write json data to pid file, ret %d\n",
+				ret);
+
+	return ret;
+}
+
+static char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev)
+{
+	int dev_id = cdev->dev_info.dev_id;
+	struct stat st;
+	char pid_file[256];
+	char *buf;
+	int size, fd, ret;
+
+	if (!cdev->run_dir)
+		return 0;
+
+	snprintf(pid_file, 256, "%s/%d.pid", cdev->run_dir, dev_id);
+	fd = open(pid_file, O_RDONLY);
+
+	if (fd <= 0)
+		return NULL;
+
+	if (fstat(fd, &st) < 0)
+		return NULL;
+
+	if (st.st_size <=  JSON_OFFSET)
+		return NULL;
+
+	size = st.st_size - JSON_OFFSET;
+	buf = (char *)malloc(size);
+	ret = pread(fd, buf, size, JSON_OFFSET);
+	if (ret <= 0)
+		fprintf(stderr, "fail to read json from %s ret %d\n",
+				pid_file, ret);
+	close(fd);
+
+	return buf;
+}
+
 static void *ublksrv_io_handler_fn(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
@@ -105,6 +205,27 @@ static void *ublksrv_io_handler_fn(void *data)
 	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
+	int ret;
+	int buf_size;
+	char *buf;
+
+	pthread_mutex_lock(&jbuf_lock);
+	do {
+		buf = __ublksrv_tgt_realloc_json_buf(dev, &buf_size);
+		ret = ublksrv_json_write_queue_info(dev->ctrl_dev, buf, buf_size,
+				q_id, gettid());
+	} while (ret < 0);
+	if (ret > jdata_size)
+		jdata_size = ret;
+	queues_stored++;
+
+	/*
+	 * A bit ugly to store json buffer to pid file here, but no easy
+	 * way to do it in control task side, so far, so good
+	 */
+	if (queues_stored == dev->ctrl_dev->dev_info.nr_hw_queues)
+		ublksrv_tgt_store_dev_data(dev, buf, jdata_size);
+	pthread_mutex_unlock(&jbuf_lock);
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
@@ -175,6 +296,8 @@ static void ublksrv_io_handler(void *data)
 
 	syslog(LOG_INFO, "start ublksrv io daemon");
 
+	pthread_mutex_init(&jbuf_lock, NULL);
+
 	dev = ublksrv_dev_init(ctrl_dev);
 	if (!dev) {
 		syslog(LOG_ERR, "dev-%d start ubsrv failed", dev_id);
@@ -198,6 +321,7 @@ static void ublksrv_io_handler(void *data)
 	/* wait until we are terminated */
 	ublksrv_drain_fetch_commands(dev, info_array);
 	free(info_array);
+	free(jbuf);
 
 out_dev_deinit:
 	ublksrv_dev_deinit(dev);
@@ -352,6 +476,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	int opt, ret, zcopy = 0;
 	int daemon_pid;
 	int uring_comp = 0;
+	const char *dump_buf;
 
 	data.queue_depth = DEF_QD;
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
@@ -424,7 +549,8 @@ static int cmd_dev_add(int argc, char *argv[])
 		goto fail_stop_daemon;
 	}
 	ret = ublksrv_ctrl_get_info(dev);
-	ublksrv_ctrl_dump(dev, NULL);
+	dump_buf = ublksrv_tgt_get_dev_data(dev);
+	ublksrv_ctrl_dump(dev, dump_buf);
 	ublksrv_ctrl_deinit(dev);
 	return 0;
 
@@ -556,6 +682,7 @@ static int list_one_dev(int number, bool log)
 {
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
+		.run_dir = UBLKSRV_PID_DIR,
 	};
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
 	int ret;
@@ -564,8 +691,11 @@ static int list_one_dev(int number, bool log)
 	if (ret < 0) {
 		if (log)
 			fprintf(stderr, "can't get dev info from %d\n", number);
-	} else
-		ublksrv_ctrl_dump(dev, NULL);
+	} else {
+		const char *buf = ublksrv_tgt_get_dev_data(dev);
+
+		ublksrv_ctrl_dump(dev, buf);
+	}
 
 	ublksrv_ctrl_deinit(dev);
 

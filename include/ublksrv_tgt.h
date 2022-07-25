@@ -12,6 +12,12 @@
 #define MAX_NR_UBLK_DEVS	128
 #define UBLKSRV_PID_DIR  "/var/run/ublksrvd"
 
+/* json device data is stored at this offset of pid file */
+#define JSON_OFFSET   32
+
+char *ublksrv_tgt_return_json_buf(struct ublksrv_dev *dev, int *size);
+char *ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size);
+
 static inline unsigned ublksrv_convert_cmd_op(const struct ublksrv_io_desc *iod)
 {
 	unsigned ublk_op = ublksrv_get_op(iod);
