@@ -158,40 +158,6 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 	return 0;
 }
 
-int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
-		**shm_addr, int daemon_pid)
-{
-	struct ublksrv_ctrl_dev_info *info = &ctrl_dev->dev_info;
-	int fd;
-	char buf[128];
-	char *addr;
-
-        if (!(info->ublksrv_flags & UBLKSRV_F_HAS_IO_DAEMON))
-		return -EINVAL;
-
-	if (daemon_pid <= 0)
-		daemon_pid = info->ublksrv_pid;
-
-	if (daemon_pid <= 0)
-		return -EINVAL;
-
-	snprintf(buf, 128, "%s_%d", UBLKSRV_SHM_DIR, daemon_pid);
-	fd = shm_open(buf, O_RDONLY, 0);
-	if (fd <= 0)
-		return -EINVAL;
-	addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE, PROT_READ,
-			MAP_SHARED, fd, 0);
-	*shm_addr = addr;
-	return fd;
-}
-
-void ublksrv_close_shm(struct ublksrv_ctrl_dev *ctrl_dev, int fd,
-		char *shm_addr)
-{
-	munmap(shm_addr, UBLKSRV_SHM_SIZE);
-	close(fd);
-}
-
 /*
  * Start the ublksrv device:
  *
@@ -321,18 +287,5 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 
 		ublksrv_json_read_target_info(jbuf, buf, 512);
 		printf("\ttarget %s\n", buf);
-
-		return;
-	}
-
-        if (info->ublksrv_flags & UBLKSRV_F_HAS_IO_DAEMON) {
-		char *addr;
-		int fd = ublksrv_open_shm(dev, &addr, 0);
-
-		if (fd > 0) {
-			addr += sizeof(struct ublksrv_ctrl_dev_info);
-			printf("\t%s\n", addr);
-			ublksrv_close_shm(dev, fd, addr);
-		}
 	}
 }

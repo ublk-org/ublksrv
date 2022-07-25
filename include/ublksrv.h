@@ -268,14 +268,6 @@ struct ublksrv_dev {
 
 	const struct ublksrv_ctrl_dev *ctrl_dev;
 	void	*target_data;
-	/*
-	 * for communication with control task which may not be in
-	 * same process with io context
-	 */
-	int shm_fd;
-	char *shm_addr;
-	unsigned int shm_offset;
-	pthread_mutex_t shm_lock;
 };
 
 static inline struct ublksrv_io_desc *ublksrv_get_iod(struct ublksrv_queue *q, int tag)

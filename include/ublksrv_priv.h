@@ -15,11 +15,6 @@ int create_pid_file(const char *pidFile, int flags, int *pid_fd);
 
 extern void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset);
 
-extern int ublksrv_open_shm(struct ublksrv_ctrl_dev *ctrl_dev, char
-		**shm_addr, int daemon_pid);
-extern void ublksrv_close_shm(struct ublksrv_ctrl_dev *ctrl_dev, int fd,
-		char *shm_addr);
-
 static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
 {
 	/*

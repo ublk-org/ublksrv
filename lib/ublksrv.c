@@ -446,26 +446,12 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 	unsigned dev_id = cdev->dev_info.dev_id;
 	cpu_set_t *cpuset = &cdev->queues_cpuset[q_id];
 	pthread_t thread = pthread_self();
-	int ret, cnt = 0;
-	char cpus[512];
+	int ret;
 
 	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), cpuset);
 	if (ret)
 		syslog(LOG_INFO, "ublk dev %u queue %u set affinity failed",
 				dev_id, q_id);
-
-	ublksrv_build_cpu_str(cpus, 512, cpuset);
-
-	if (!(cdev->dev_info.ublksrv_flags & UBLKSRV_F_HAS_IO_DAEMON))
-		return;
-
-	/* add queue info into shm buffer, be careful to add it just once */
-	pthread_mutex_lock(&dev->shm_lock);
-	dev->shm_offset += snprintf(dev->shm_addr + dev->shm_offset,
-			UBLKSRV_SHM_SIZE - dev->shm_offset,
-			"\tqueue %u: tid %d affinity(%s)\n",
-			q_id, gettid(), cpus);
-	pthread_mutex_unlock(&dev->shm_lock);
 }
 
 static void ublksrv_kill_eventfd(struct ublksrv_queue *q)
@@ -641,11 +627,6 @@ void ublksrv_dev_deinit(struct ublksrv_dev *dev)
 
 	ublksrv_dev_deinit_io_bufs(dev);
 
-	if (dev->shm_fd >= 0) {
-		munmap(dev->shm_addr, UBLKSRV_SHM_SIZE);
-		close(dev->shm_fd);
-	}
-
 	ublksrv_tgt_deinit(dev);
 	free(dev->thread);
 
@@ -654,36 +635,6 @@ void ublksrv_dev_deinit(struct ublksrv_dev *dev)
 		dev->cdev_fd = -1;
 	}
 	free(dev);
-}
-
-static void ublksrv_setup_tgt_shm(struct ublksrv_dev *dev)
-{
-	int fd;
-	char buf[64];
-	unsigned pid = getpid();
-
-	if (!(dev->ctrl_dev->dev_info.ublksrv_flags &
-				UBLKSRV_F_HAS_IO_DAEMON))
-		return;
-
-	pthread_mutex_init(&dev->shm_lock, NULL);
-
-	//if (dev->ctrl_dev->dev_info.ublksrv_pid <= 0)
-	//	return;
-
-	mkdir(UBLKSRV_SHM_DIR, S_IRUSR | S_IRUSR);
-	snprintf(buf, 64, "%s_%d", UBLKSRV_SHM_DIR, pid);
-
-	fd = shm_open(buf, O_CREAT|O_RDWR, S_IRUSR | S_IWUSR);
-
-	ftruncate(fd, UBLKSRV_SHM_SIZE);
-
-	dev->shm_addr = (char *)mmap(NULL, UBLKSRV_SHM_SIZE,
-		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	dev->shm_offset = sizeof(struct ublksrv_ctrl_dev_info);
-	dev->shm_fd = fd;
-	ublksrv_log(LOG_INFO, "%s create tgt posix shm %s %d %p", __func__,
-				buf, fd, dev->shm_addr);
 }
 
 struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
@@ -703,8 +654,6 @@ struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 	tgt = &dev->tgt;
 	dev->ctrl_dev = ctrl_dev;
 	dev->cdev_fd = -1;
-
-	ublksrv_setup_tgt_shm(dev);
 
 	snprintf(buf, 64, "%s%d", UBLKC_DEV, dev_id);
 	dev->cdev_fd = open(buf, O_RDWR);
