@@ -200,6 +200,10 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+	if (argc == 2 && strcmp("need_get_data", argv[1]) == 0) {
+		fprintf(stdout, "%s: UBLK_F_NEED_GET_DATA\n", __func__);		
+		data.flags = UBLK_F_NEED_GET_DATA;
+	}
 
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
 		return -1;
