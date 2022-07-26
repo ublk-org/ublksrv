@@ -126,9 +126,10 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	struct ublksrv_tgt_base_json tgt_json = {
-		.name = "null",
 		.type = type,
 	};
+        strcpy(tgt_json.name, "null");
+
 
 	if (type != UBLKSRV_TGT_TYPE_DEMO)
 		return -1;

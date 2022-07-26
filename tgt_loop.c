@@ -21,9 +21,10 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	int jbuf_size, ret;
 	char *jbuf;
 	struct ublksrv_tgt_base_json tgt_json = {
-		.name = "loop",
 		.type = type,
 	};
+
+	strcpy(tgt_json.name, "loop");
 
 	if (type != UBLKSRV_TGT_TYPE_LOOP)
 		return -1;

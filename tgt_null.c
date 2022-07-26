@@ -8,9 +8,9 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
 	struct ublksrv_tgt_base_json tgt_json = {
-		.name = "null",
 		.type = type,
 	};
+	strcpy(tgt_json.name, "null");
 
 	if (type != UBLKSRV_TGT_TYPE_NULL)
 		return -1;
