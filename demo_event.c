@@ -160,7 +160,7 @@ static unsigned long long demo_get_dev_blocks(const struct ublksrv_dev *dev)
 	return dev->tgt.dev_size / dev->ctrl_dev->dev_info.block_size;
 }
 
-static void demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
+static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int dev_id = ctrl_dev->dev_info.dev_id;
 	int ret, i;
@@ -175,7 +175,7 @@ static void demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 
 	dev = ublksrv_dev_init(ctrl_dev);
 	if (!dev)
-		return;
+		return -ENOMEM;
 	this_dev = dev;
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
 		int j;
@@ -193,7 +193,10 @@ static void demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 	}
 
 	/* everything is fine now, start us */
-	ublksrv_ctrl_start_dev(ctrl_dev, getpid(), demo_get_dev_blocks(dev));
+	ret = ublksrv_ctrl_start_dev(ctrl_dev, getpid(),
+			demo_get_dev_blocks(dev));
+	if (ret < 0)
+		goto fail;
 
 	ublksrv_ctrl_get_info(ctrl_dev);
 	ublksrv_ctrl_dump(ctrl_dev, jbuf);
@@ -207,9 +210,12 @@ static void demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 		close(info_array[i].efd);
 	}
 
+fail:
 	ublksrv_dev_deinit(dev);
 
 	free(info_array);
+
+	return ret;
 }
 
 static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
@@ -220,9 +226,7 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 	if (ublksrv_ctrl_get_affinity(ctrl_dev) < 0)
 		return -1;
 
-	demo_event_io_handler(ctrl_dev);
-
-	return 0;
+	return demo_event_io_handler(ctrl_dev);
 }
 
 static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
@@ -350,7 +354,7 @@ int main(int argc, char *argv[])
 	}
 
 	ret = ublksrv_start_daemon(dev);
-	if (ret <= 0)
+	if (ret < 0)
 		goto fail_del_dev;
 
 	ublksrv_ctrl_deinit(dev);
