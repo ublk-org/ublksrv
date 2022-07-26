@@ -332,8 +332,13 @@ int main(int argc, char *argv[])
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		return -1;
 
-	pthread_mutex_init(&jbuf_lock, NULL);
+	if (argc == 2 && strcmp("need_get_data", argv[1]) == 0) {
+		fprintf(stdout, "%s: UBLK_F_NEED_GET_DATA\n", __func__);		
+		data.flags = UBLK_F_NEED_GET_DATA;
+	}
 
+	pthread_mutex_init(&jbuf_lock, NULL);
+	
 	data.ublksrv_flags = UBLKSRV_F_NEED_EVENTFD;
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
