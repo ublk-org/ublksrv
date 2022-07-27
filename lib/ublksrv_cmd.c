@@ -173,7 +173,7 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
  * expose /dev/ublkbN
  */
 int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev,
-		int daemon_pid, unsigned long long dev_blocks)
+		int daemon_pid)
 {
 	struct ublksrv_ctrl_cmd_data data = {
 		.cmd_op	= UBLK_CMD_START_DEV,
