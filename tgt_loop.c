@@ -25,6 +25,21 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,
 	};
+	struct ublk_params p = {
+		.types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD,
+		.basic = {
+			.logical_bs_shift	= 9,
+			.physical_bs_shift	= 12,
+			.io_opt_shift	= 12,
+			.io_min_shift	= 9,
+			.max_sectors		= info->max_io_buf_bytes >> 9,
+		},
+
+		.discard = {
+			.max_discard_sectors	= UINT_MAX >> 9,
+			.max_discard_segments	= 1,
+		},
+	};
 
 	strcpy(tgt_json.name, "loop");
 
@@ -67,6 +82,12 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 1;
 	tgt->fds[1] = fd;
+	p.basic.dev_sectors = bytes >> 9;
+
+	if (st.st_blksize)
+		p.discard.discard_granularity = st.st_blksize;
+	else
+		p.types &= ~UBLK_PARAM_TYPE_DISCARD;
 
 	jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
 	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, jbuf_size);
@@ -74,6 +95,12 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	do {
 		ret = ublksrv_json_write_target_str_info(jbuf, jbuf_size,
 				"backing_file", file);
+		if (ret < 0)
+			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
+	} while (ret < 0);
+
+	do {
+		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
 		if (ret < 0)
 			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
 	} while (ret < 0);

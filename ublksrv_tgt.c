@@ -415,21 +415,6 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 	return daemon_pid;
 }
 
-static unsigned long long get_dev_blocks(struct ublksrv_ctrl_dev *ctrl_dev,
-		int daemon_pid)
-{
-	unsigned long long dev_blocks = 0;
-	struct ublksrv_tgt_base_json tgt_json;
-	char *buf = ublksrv_tgt_get_dev_data(ctrl_dev);
-	int ret = ublksrv_json_read_target_base_info(buf, &tgt_json);
-
-	if (ret >= 0)
-		dev_blocks = tgt_json.dev_size >> ctrl_dev->bs_shift;
-
-	free(buf);
-	return dev_blocks;
-}
-
 static int __mkpath(char *dir, mode_t mode)
 {
 	struct stat sb;
@@ -448,6 +433,25 @@ static int __mkpath(char *dir, mode_t mode)
 static int mkpath(const char *dir)
 {
 	return __mkpath(strdupa(dir), 0700);
+}
+
+static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
+		const char *jbuf)
+{
+	int dev_id = cdev->dev_info.dev_id;
+	struct ublk_params p;
+	int ret;
+
+	ret = ublksrv_json_read_params(&p, jbuf);
+	if (ret >= 0) {
+		ret = ublksrv_ctrl_set_params(cdev, &p);
+		if (ret)
+			fprintf(stderr, "set param for dev %d failed %d\n",
+					dev_id, ret);
+	} else {
+		fprintf(stderr, "params not found for dev %d failed %d\n",
+				dev_id, ret);
+	}
 }
 
 static int cmd_dev_add(int argc, char *argv[])
@@ -531,14 +535,16 @@ static int cmd_dev_add(int argc, char *argv[])
 		goto fail_del_dev;
 	}
 
-	ret = ublksrv_ctrl_start_dev(dev, ret, get_dev_blocks(dev, ret));
+	dump_buf = ublksrv_tgt_get_dev_data(dev);
+	ublksrv_tgt_set_params(dev, dump_buf);
+
+	ret = ublksrv_ctrl_start_dev(dev, ret, 0);
 	if (ret < 0) {
 		fprintf(stderr, "start dev %d failed, ret %d\n", data.dev_id,
 				ret);
 		goto fail_stop_daemon;
 	}
 	ret = ublksrv_ctrl_get_info(dev);
-	dump_buf = ublksrv_tgt_get_dev_data(dev);
 	ublksrv_ctrl_dump(dev, dump_buf);
 	ublksrv_ctrl_deinit(dev);
 	return 0;
