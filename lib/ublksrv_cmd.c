@@ -261,11 +261,20 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 {
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
 	int i;
+	struct ublk_basic_param p = {
+		.header = {
+			.type = UBLK_PARAM_TYPE_BASIC,
+			.len = sizeof(p),
+		},
+	};
+
+	if (jbuf)
+		ublksrv_json_read_param(&p.header, jbuf);
 
 	printf("dev id %d: nr_hw_queues %d queue_depth %d block size %d dev_capacity %lld\n",
 			info->dev_id,
                         info->nr_hw_queues, info->queue_depth,
-                        0, 0);
+                        1 << p.logical_bs_shift, p.dev_sectors);
 	printf("\tmax rq size %d daemon pid %d flags 0x%llx state %s\n",
                         info->max_io_buf_bytes,
 			info->ublksrv_pid, info->flags,
