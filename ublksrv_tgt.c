@@ -5,7 +5,6 @@
 /* per-task variable */
 static pthread_mutex_t jbuf_lock;
 static int jbuf_size = 0;
-static int jdata_size = 0;
 static int queues_stored = 0;
 static char *jbuf = NULL;
 
@@ -124,11 +123,12 @@ char *ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size)
 }
 
 static int ublksrv_tgt_store_dev_data(struct ublksrv_dev *dev,
-		const char *buf, int size)
+		const char *buf)
 {
 	int ret;
+	int len = ublksrv_json_get_length(buf);
 
-	ret = pwrite(dev->pid_file_fd, buf, size, JSON_OFFSET);
+	ret = pwrite(dev->pid_file_fd, buf, len, JSON_OFFSET);
 	if (ret <= 0)
 		syslog(LOG_ERR, "fail to write json data to pid file, ret %d\n",
 				ret);
@@ -187,8 +187,6 @@ static void *ublksrv_io_handler_fn(void *data)
 		ret = ublksrv_json_write_queue_info(dev->ctrl_dev, buf, buf_size,
 				q_id, gettid());
 	} while (ret < 0);
-	if (ret > jdata_size)
-		jdata_size = ret;
 	queues_stored++;
 
 	/*
@@ -196,7 +194,7 @@ static void *ublksrv_io_handler_fn(void *data)
 	 * way to do it in control task side, so far, so good
 	 */
 	if (queues_stored == dev->ctrl_dev->dev_info.nr_hw_queues)
-		ublksrv_tgt_store_dev_data(dev, buf, jdata_size);
+		ublksrv_tgt_store_dev_data(dev, buf);
 	pthread_mutex_unlock(&jbuf_lock);
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
