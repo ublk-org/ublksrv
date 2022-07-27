@@ -538,7 +538,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	dump_buf = ublksrv_tgt_get_dev_data(dev);
 	ublksrv_tgt_set_params(dev, dump_buf);
 
-	ret = ublksrv_ctrl_start_dev(dev, ret, 0);
+	ret = ublksrv_ctrl_start_dev(dev, ret);
 	if (ret < 0) {
 		fprintf(stderr, "start dev %d failed, ret %d\n", data.dev_id,
 				ret);

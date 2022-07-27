@@ -218,7 +218,7 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 	demo_event_set_parameters(ctrl_dev, dev);
 
 	/* everything is fine now, start us */
-	ret = ublksrv_ctrl_start_dev(ctrl_dev, getpid(), 0);
+	ret = ublksrv_ctrl_start_dev(ctrl_dev, getpid());
 	if (ret < 0)
 		goto fail;
 
