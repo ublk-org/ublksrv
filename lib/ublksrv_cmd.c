@@ -105,11 +105,9 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 	info->dev_id = data->dev_id;
 	info->nr_hw_queues = data->nr_hw_queues;
 	info->queue_depth = data->queue_depth;
-	info->block_size = data->block_size;
-	info->rq_max_blocks = data->rq_max_blocks;
+	info->max_io_buf_bytes = data->max_io_buf_bytes;
 	info->flags = data->flags;
 	info->ublksrv_flags = data->ublksrv_flags;
-	dev->bs_shift = ilog2(info->block_size);
 
 	dev->run_dir = data->run_dir;
 	dev->tgt_type = data->tgt_type;
@@ -184,7 +182,6 @@ int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev,
 	int ret;
 
 	ctrl_dev->dev_info.ublksrv_pid = data.data[0] = daemon_pid;
-	ctrl_dev->dev_info.dev_blocks = data.data[1] = dev_blocks;
 
 	ret = __ublksrv_ctrl_cmd(ctrl_dev, &data);
 
@@ -268,9 +265,9 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 	printf("dev id %d: nr_hw_queues %d queue_depth %d block size %d dev_capacity %lld\n",
 			info->dev_id,
                         info->nr_hw_queues, info->queue_depth,
-                        info->block_size, info->dev_blocks);
+                        0, 0);
 	printf("\tmax rq size %d daemon pid %d flags 0x%llx state %s\n",
-                        info->block_size * info->rq_max_blocks,
+                        info->max_io_buf_bytes,
 			info->ublksrv_pid, info->flags,
 			ublksrv_dev_state_desc(dev));
 

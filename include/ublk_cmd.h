@@ -87,22 +87,22 @@ struct ublksrv_ctrl_cmd {
 struct ublksrv_ctrl_dev_info {
 	__u16	nr_hw_queues;
 	__u16	queue_depth;
-	__u16	block_size;
+	__u16	reserved0;
 	__u16	state;
 
-	__u32	rq_max_blocks;
+	__u32	max_io_buf_bytes;
 	__u32	dev_id;
 
-	__u64   dev_blocks;
+	__u64   reserved1;
 
 	__s32	ublksrv_pid;
-	__s32	reserved0;
+	__s32	reserved2;
 	__u64	flags;
 	__u64	flags_reserved;
 
 	/* For ublksrv internal use, invisible to ublk driver */
 	__u64	ublksrv_flags;
-	__u64	reserved1[9];
+	__u64	reserved3;
 };
 
 #define		UBLK_IO_OP_READ		0
