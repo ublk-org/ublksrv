@@ -443,7 +443,6 @@ static int cmd_dev_add(int argc, char *argv[])
 	data.queue_depth = DEF_QD;
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
 	data.dev_id = -1;
-	data.block_size = 512;
 	data.ublksrv_flags |= UBLKSRV_F_HAS_IO_DAEMON;
 	data.run_dir = UBLKSRV_PID_DIR;
 
@@ -460,7 +459,6 @@ static int cmd_dev_add(int argc, char *argv[])
 			break;
 		case 'z':
 			data.flags |= UBLK_F_SUPPORT_ZERO_COPY;
-			data.block_size = 4096;
 			break;
 		case 'q':
 			data.nr_hw_queues = strtol(optarg, NULL, 10);
@@ -473,7 +471,7 @@ static int cmd_dev_add(int argc, char *argv[])
 			break;
 		}
 	}
-	data.rq_max_blocks = DEF_BUF_SIZE / data.block_size;
+	data.max_io_buf_bytes = DEF_BUF_SIZE;
 	if (data.nr_hw_queues > MAX_NR_HW_QUEUES)
 		data.nr_hw_queues = MAX_NR_HW_QUEUES;
 	if (data.queue_depth > MAX_QD)

@@ -62,11 +62,6 @@ static void *demo_null_io_handler_fn(void *data)
 	return NULL;
 }
 
-static unsigned long long demo_get_dev_blocks(const struct ublksrv_dev *dev)
-{
-	return dev->tgt.dev_size / dev->ctrl_dev->dev_info.block_size;
-}
-
 static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int dev_id = ctrl_dev->dev_info.dev_id;
@@ -93,7 +88,7 @@ static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 	}
 
 	/* everything is fine now, start us */
-	ret = ublksrv_ctrl_start_dev(ctrl_dev, getpid(), demo_get_dev_blocks(dev));
+	ret = ublksrv_ctrl_start_dev(ctrl_dev, getpid(), 0);
 	if (ret < 0)
 		goto fail;
 
@@ -182,10 +177,9 @@ int main(int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {
 		.dev_id = -1,
-		.rq_max_blocks = DEF_BUF_SIZE / 512,
+		.max_io_buf_bytes = DEF_BUF_SIZE,
 		.nr_hw_queues = DEF_NR_HW_QUEUES,
 		.queue_depth = DEF_QD,
-		.block_size = 512,
 		.tgt_type = "demo_null",
 		.tgt_ops = &demo_tgt_type,
 	};

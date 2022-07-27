@@ -314,8 +314,7 @@ static int ublksrv_queue_is_done(struct ublksrv_queue *q)
 /* used for allocating zero copy vma space */
 static inline int ublk_queue_single_io_buf_size(struct ublksrv_dev *dev)
 {
-	unsigned max_io_sz = dev->ctrl_dev->dev_info.block_size *
-		dev->ctrl_dev->dev_info.rq_max_blocks;
+	unsigned max_io_sz = dev->ctrl_dev->dev_info.max_io_buf_bytes;
 	unsigned int page_sz = getpagesize();
 
 	return round_up(max_io_sz, page_sz);
@@ -525,8 +524,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	if (q->io_cmd_buf == MAP_FAILED)
 		goto fail;
 
-	io_buf_size = ctrl_dev->dev_info.block_size *
-		ctrl_dev->dev_info.rq_max_blocks;
+	io_buf_size = ctrl_dev->dev_info.max_io_buf_bytes;
 	for (i = 0; i < depth; i++) {
 		q->ios[i].buf_addr = NULL;
 		if (dev->tgt.ops->alloc_io_buf)
@@ -791,8 +789,7 @@ static int ublksrv_reap_events_uring(struct io_uring *r)
 static void ublksrv_queue_discard_io_pages(struct ublksrv_queue *q)
 {
 	const struct ublksrv_ctrl_dev *cdev = q->dev->ctrl_dev;
-	unsigned int io_buf_size = cdev->dev_info.block_size *
-		cdev->dev_info.rq_max_blocks;
+	unsigned int io_buf_size = cdev->dev_info.max_io_buf_bytes;
 	int i = 0;
 
 	if (q->idle)

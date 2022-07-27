@@ -77,10 +77,9 @@ extern "C" {
  */
 struct ublksrv_dev_data {
 	int		dev_id;
-	unsigned	rq_max_blocks;
+	unsigned	max_io_buf_bytes;
 	unsigned short	nr_hw_queues;
 	unsigned short	queue_depth;
-	unsigned short	block_size;
 	const char	*tgt_type;
 	const struct ublksrv_tgt_type *tgt_ops;
 	int		tgt_argc;
