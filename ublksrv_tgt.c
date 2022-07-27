@@ -716,7 +716,7 @@ static void cmd_dev_del_usage(char *cmd)
 	printf("%s del -n DEV_ID [-a | --all]\n", cmd);
 }
 
-static int list_one_dev(int number, bool log)
+static int list_one_dev(int number, bool log, bool verbose)
 {
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
@@ -732,7 +732,10 @@ static int list_one_dev(int number, bool log)
 	} else {
 		const char *buf = ublksrv_tgt_get_dev_data(dev);
 
-		ublksrv_ctrl_dump(dev, buf);
+		if (verbose)
+			ublksrv_json_dump(buf);
+		else
+			ublksrv_ctrl_dump(dev, buf);
 	}
 
 	ublksrv_ctrl_deinit(dev);
@@ -744,26 +747,31 @@ static int cmd_list_dev_info(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
 		{ "number",		0,	NULL, 'n' },
+		{ "verbose",		0,	NULL, 'v' },
 		{ NULL }
 	};
 	struct ublksrv_ctrl_dev *dev;
 	int number = -1;
 	int opt, ret, i;
+	bool verbose = false;
 
-	while ((opt = getopt_long(argc, argv, "n:",
+	while ((opt = getopt_long(argc, argv, "n:v",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
 			number = strtol(optarg, NULL, 10);
 			break;
+		case 'v':
+			verbose = 1;
+			break;
 		}
 	}
 
 	if (number >= 0)
-		return list_one_dev(number, true);
+		return list_one_dev(number, true, verbose);
 
 	for (i = 0; i < MAX_NR_UBLK_DEVS; i++)
-		list_one_dev(i, false);
+		list_one_dev(i, false, verbose);
 
 	return ret;
 }
