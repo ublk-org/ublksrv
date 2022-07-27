@@ -75,6 +75,119 @@ int ublksrv_json_read_dev_info(const char *jbuf,
 	return 0;
 }
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_header,
+		type, len)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_basic_param,
+	header,
+	attrs,
+	logical_bs_shift,
+	physical_bs_shift,
+	io_opt_shift,
+	io_min_shift,
+	max_sectors,
+	chunk_sectors,
+	dev_sectors,
+	virt_boundary_mask)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_discard_param,
+	header,
+	discard_alignment,
+
+	discard_granularity,
+	max_discard_sectors,
+
+	max_write_zeroes_sectors,
+	max_discard_segments,
+	reserved0)
+
+
+int ublksrv_json_write_param(const struct ublk_param_header *p,
+		char *jbuf, int len)
+{
+	json j;
+	std::string s;
+	int j_len;
+	json j_param;
+
+	parse_json(j, jbuf);
+
+	switch (p->type) {
+	case UBLK_PARAM_TYPE_BASIC:
+		j_param = *(const struct ublk_basic_param *)p;
+		j["params"]["basic"] = j_param;
+		break;
+	case UBLK_PARAM_TYPE_DISCARD:
+		j_param = *(const struct ublk_discard_param *)p;
+		j["params"]["discard"] = j_param;
+		break;
+	default:
+		return -EINVAL;
+	};
+	return dump_json_to_buf(j, jbuf, len);
+}
+
+int ublksrv_json_read_param(struct ublk_param_header *p,
+		const char *jbuf)
+{
+	json j, sj;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	if (!j.contains("params"))
+		return -EINVAL;
+
+	switch (p->type) {
+	case UBLK_PARAM_TYPE_BASIC:
+		if (!j["params"].contains("basic"))
+			return -EINVAL;
+		sj = j["params"]["basic"];
+
+		*(struct ublk_basic_param *)p = sj;
+		break;
+	case UBLK_PARAM_TYPE_DISCARD:
+		if (!j["params"].contains("discard"))
+			return -EINVAL;
+		sj = j["params"]["discard"];
+
+		*(struct ublk_discard_param *)p = sj;
+		break;
+	default:
+		return -EINVAL;
+	};
+
+	return 0;
+}
+
+int ublksrv_json_dump_param(struct ublk_param_header *p,
+		const char *jbuf)
+{
+	json j;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	if (!j.contains("params"))
+		return -EINVAL;
+
+	switch (p->type) {
+	case UBLK_PARAM_TYPE_BASIC:
+		if (j["params"].contains("basic"))
+			std::cout << std::setw(4) << j["params"]["basic"] << '\n';
+		break;
+	case UBLK_PARAM_TYPE_DISCARD:
+		if (j["params"].contains("discard"))
+			std::cout << std::setw(4) << j["params"]["discard"] << '\n';
+		break;
+	default:
+		return -EINVAL;
+	};
+
+	return 0;
+}
+
 int ublksrv_json_write_target_str_info(char *jbuf, int len,
 		const char *name, const char *val)
 {
