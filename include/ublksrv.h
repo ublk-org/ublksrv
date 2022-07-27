@@ -324,7 +324,7 @@ struct ublksrv_tgt_base_json {
 
 extern int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *dev,
 		char *buf, int len);
-extern int ublksrv_json_read_dev_info(char *json_buf,
+extern int ublksrv_json_read_dev_info(const char *json_buf,
 		struct ublksrv_ctrl_dev_info *info);
 extern int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
 		char *jbuf, int len, int qid, int ubq_daemon_tid);
