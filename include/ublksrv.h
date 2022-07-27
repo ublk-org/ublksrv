@@ -348,6 +348,11 @@ extern int ublksrv_json_read_target_base_info(const char *jbuf,
 		struct ublksrv_tgt_base_json *tgt);
 extern int ublksrv_json_write_target_base_info(char *jbuf, int len,
 		const struct ublksrv_tgt_base_json *tgt);
+extern int ublksrv_json_read_params(struct ublk_params *p,
+		const char *jbuf);
+extern int ublksrv_json_write_params(const struct ublk_params *p,
+		char *jbuf, int len);
+extern int ublksrv_json_dump_params(const char *jbuf);
 
 static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 {

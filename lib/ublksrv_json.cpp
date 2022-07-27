@@ -77,6 +77,74 @@ int ublksrv_json_read_dev_info(const char *jbuf,
 	return 0;
 }
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_basic,
+	attrs,
+	logical_bs_shift,
+	physical_bs_shift,
+	io_opt_shift,
+	io_min_shift,
+	max_sectors,
+	chunk_sectors,
+	dev_sectors,
+	virt_boundary_mask)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_discard,
+	discard_alignment,
+	discard_granularity,
+	max_discard_sectors,
+	max_write_zeroes_sectors,
+	max_discard_segments,
+	reserved0)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
+	len, types, basic, discard)
+
+int ublksrv_json_write_params(const struct ublk_params *p,
+		char *jbuf, int len)
+{
+	json j;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	j["params"] = *p;
+
+	return dump_json_to_buf(j, jbuf, len);
+}
+
+int ublksrv_json_read_params(struct ublk_params *p,
+		const char *jbuf)
+{
+	json j, sj;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	if (!j.contains("params"))
+		return -EINVAL;
+
+	*p = j["params"];
+
+	return 0;
+}
+
+int ublksrv_json_dump_params(const char *jbuf)
+{
+	json j;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	if (!j.contains("params"))
+		return -EINVAL;
+
+	std::cout << std::setw(4) << j["params"] << '\n';
+
+	return 0;
+}
+
 int ublksrv_json_write_target_str_info(char *jbuf, int len,
 		const char *name, const char *val)
 {
