@@ -26,6 +26,21 @@ static inline int dump_json_to_buf(json &j, char *jbuf, int len)
 	return -EINVAL;
 }
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ublksrv_ctrl_dev_info,
+	nr_hw_queues,
+	queue_depth,
+	reserved0,
+	state,
+	max_io_buf_bytes,
+	dev_id,
+	reserved1,
+	ublksrv_pid,
+	reserved2,
+	flags,
+	flags_reserved,
+	ublksrv_flags,
+	reserved3)
+
 /*
  * build one json string with dev_info head, and result is stored
  * in 'buf'.
@@ -34,14 +49,10 @@ int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *cdev,
 		char *jbuf, int len)
 {
 	const struct ublksrv_ctrl_dev_info *info = &cdev->dev_info;
+	json j_info = *info;
 	json j;
 
-	j["dev_info"]["dev_id"] = info->dev_id;
-	j["dev_info"]["nr_hw_queues"] = info->nr_hw_queues;
-	j["dev_info"]["queue_depth"] = info->queue_depth;
-	j["dev_info"]["state"] = info->state;
-	j["dev_info"]["flags"] = info->flags;
-	j["dev_info"]["ublksrv_flags"] = info->ublksrv_flags;
+	j["dev_info"] = j_info;
 
 	return dump_json_to_buf(j, jbuf, len);
 }
@@ -59,35 +70,7 @@ int ublksrv_json_read_dev_info(const char *jbuf,
 
 	auto sj = j["dev_info"];
 
-	if (sj.contains("dev_id"))
-		info->dev_id = j["dev_info"]["dev_id"];
-	else
-		info->dev_id = -1;
-
-	if (sj.contains("nr_hw_queues"))
-		info->nr_hw_queues = j["dev_info"]["nr_hw_queues"];
-	else
-		info->nr_hw_queues = DEF_NR_HW_QUEUES;
-
-	if (sj.contains("queue_depth"))
-		info->queue_depth = j["dev_info"]["queue_depth"];
-	else
-		info->queue_depth = DEF_NR_HW_QUEUES;
-
-	if (sj.contains("state"))
-		info->flags = j["dev_info"]["state"];
-	else
-		info->state = 0;
-
-	if (sj.contains("flags"))
-		info->flags = j["dev_info"]["flags"];
-	else
-		info->flags = 0;
-
-	if (sj.contains("ublksrv_flags"))
-		info->ublksrv_flags = j["dev_info"]["ublksrv_flags"];
-	else
-		info->ublksrv_flags = 0;
+	*info = sj.get<struct ublksrv_ctrl_dev_info>();
 
 	return 0;
 }
