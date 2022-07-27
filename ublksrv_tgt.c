@@ -335,20 +335,48 @@ static int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev)
 	return 0;
 }
 
-static int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev)
+static int ublksrv_check_dev_data(const char *buf, int size)
+{
+	struct ublk_basic_param p = {
+		.header = {
+			.type = UBLK_PARAM_TYPE_BASIC,
+			.len = sizeof(p),
+		},
+	};
+
+	if (size < JSON_OFFSET)
+		return -EINVAL;
+
+	return ublksrv_json_read_param(&p.header, &buf[JSON_OFFSET]);
+}
+
+static int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
+		bool check_data)
 {
 	int ret = -1, pid_fd;
-	char buf[64];
+	char path[256];
+	char *buf = NULL;
+	int size = JSON_OFFSET;
 	int daemon_pid;
+	struct stat st;
 
-	snprintf(buf, 64, "%s/%d.pid", ctrl_dev->run_dir,
+	snprintf(path, 256, "%s/%d.pid", ctrl_dev->run_dir,
 			ctrl_dev->dev_info.dev_id);
 
-	pid_fd = open(buf, O_RDONLY);
+	pid_fd = open(path, O_RDONLY);
 	if (pid_fd < 0)
 		goto out;
 
-	if (read(pid_fd, buf, sizeof(buf)) <= 0)
+	if (fstat(pid_fd, &st) < 0)
+		goto out;
+
+	if (check_data)
+		size = st.st_size;
+	else
+		size = JSON_OFFSET;
+
+	buf = (char *)malloc(size);
+	if (read(pid_fd, buf, size) <= 0)
 		goto out;
 
 	daemon_pid = strtol(buf, NULL, 10);
@@ -359,8 +387,16 @@ static int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev)
 	if (ret)
 		goto out;
 
-	return daemon_pid;
+	if (check_data) {
+		ret = ublksrv_check_dev_data(buf, size);
+		if (ret)
+			goto out;
+	}
+	ret = daemon_pid;
 out:
+	if (pid_fd > 0)
+		close(pid_fd);
+	free(buf);
 	return ret;
 }
 
@@ -371,7 +407,7 @@ static int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
 
 	/* wait until daemon is exited, or timeout after 3 seconds */
 	do {
-		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev);
+		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev, false);
 		if (daemon_pid > 0) {
 			usleep(100000);
 			cnt++;
@@ -402,7 +438,7 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 
 	/* wait until daemon is started, or timeout after 3 seconds */
 	do {
-		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev);
+		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev, true);
 		if (daemon_pid < 0) {
 			usleep(100000);
 			cnt++;
