@@ -340,9 +340,10 @@ void ublksrv_json_dump(const char *jbuf)
 	std::cout << std::setw(4) << j << '\n';
 }
 
+/* the end null character is always counted */
 int ublksrv_json_get_length(const char *jbuf)
 {
 	auto j = json::parse(jbuf);
 
-	return j.dump().length();
+	return j.dump().length() + 1;
 }
