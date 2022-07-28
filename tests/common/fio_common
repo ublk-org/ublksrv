@@ -163,7 +163,7 @@ __run_fio_libaio() {
 
 __ublk_loop_backing_file() {
 	eval $UBLK list > ${UBLK_TMP}
-	file=`cat ${UBLK_TMP} | grep "loop" | awk '{print $2}'`
+	file=`cat ${UBLK_TMP} | grep "loop" | awk '{print $2}' | awk -F "," '{print $1}' | awk -F ":" '{print $2}'`
 	echo $file
 }
 
