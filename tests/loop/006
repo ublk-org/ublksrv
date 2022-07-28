@@ -1,0 +1,6 @@
+#!/bin/bash
+
+. common/fio_common
+
+export T_NEED_GET_DATA=1
+__run_dev_perf "loop" 1 1
