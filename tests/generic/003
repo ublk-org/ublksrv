@@ -4,8 +4,8 @@
 
 ublk_run_mount_test()
 {
-	echo -n -e "\tmount/umount ublk device with root fstype(pin page $1, uring_comp: $2)..."
-	__create_ublk_dev "loop" $QUEUES $1
+	echo -n -e "\tmount/umount ublk device with root fstype(uring_comp: $1, need_get_data: $2)..."
+	__create_ublk_dev "loop" $QUEUES $1 $2
 
 	ROOT_FSTYPE=`findmnt -l -o FSTYPE -n /`
 
@@ -29,7 +29,8 @@ DEV=/dev/ublkb0
 QUEUES=2
 MNT=`mktemp -d`
 URING_COMP=1
+NEED_GET_DATA=1
 
-ublk_run_mount_test $URING_COMP
+ublk_run_mount_test $URING_COMP $NEED_GET_DATA
 
 rm -fr $MNT
