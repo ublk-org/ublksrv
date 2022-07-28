@@ -12,10 +12,11 @@ QUEUES=4
 RT=$TRUNTIME
 LOOPS=4
 URING_COMP=1
+NEED_GET_DATA=1
 
 for CNT in `seq $LOOPS`; do
-	__create_ublk_dev "loop" $QUEUES $URING_COMP
-	echo -e "\trun fio on ublk(uring_comp $URING_COMP) with delete $CNT"
+	__create_ublk_dev "loop" $QUEUES $URING_COMP $NEED_GET_DATA
+	echo -e "\trun fio on ublk(uring_comp $URING_COMP, need_get_data $NEED_GET_DATA) with delete $CNT"
 	__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 	sleep 4
 	RES=`__remove_ublk_dev_return 0`

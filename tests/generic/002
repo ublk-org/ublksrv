@@ -12,10 +12,11 @@ QUEUES=2
 RT=$TRUNTIME
 LOOPS=4
 URING_COMP=1
+NEED_GET_DATA=1
 
 for CNT in `seq $LOOPS`; do
-	__create_ublk_dev "null" $QUEUES $URING_COMP
-	echo -e "\trun fio with killing ublk(uring_comp $URING_COMP) queue daemon $CNT"
+	__create_ublk_dev "null" $QUEUES $URING_COMP $NEED_GET_DATA
+	echo -e "\trun fio with killing ublk(uring_comp $URING_COMP, need_get_data $NEED_GET_DATA) queue daemon $CNT"
 	__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 	sleep 2
 	queue_tid=`__ublk_get_queue_tid 0`
