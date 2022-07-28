@@ -188,7 +188,7 @@ static char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev)
 		return NULL;
 
 	size = st.st_size - JSON_OFFSET;
-	buf = (char *)malloc(size);
+	buf = (char *)calloc(size, 1);
 	ret = pread(fd, buf, size, JSON_OFFSET);
 	if (ret <= 0)
 		fprintf(stderr, "fail to read json from %s ret %d\n",
