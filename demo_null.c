@@ -13,7 +13,7 @@ struct demo_queue_info {
 static struct ublksrv_ctrl_dev *this_dev;
 
 static pthread_mutex_t jbuf_lock;
-static const int jbuf_size = 1024;
+static const int jbuf_size = 4096;
 static char jbuf[jbuf_size];
 
 static void sig_handler(int sig)
