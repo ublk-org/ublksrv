@@ -18,6 +18,8 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		.basic = {
 			.logical_bs_shift	= 9,
 			.physical_bs_shift	= 12,
+			.io_opt_shift		= 12,
+			.io_min_shift		= 9,
 			.max_sectors		= info->max_io_buf_bytes >> 9,
 			.dev_sectors		= dev_size >> 9,
 		},
