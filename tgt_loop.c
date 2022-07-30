@@ -7,6 +7,31 @@ static const char *loop_tgt_backfile(struct ublksrv_tgt_info *tgt)
 	return (const char *)tgt->tgt_data;
 }
 
+static bool backing_supports_discard(char *name)
+{
+	int fd;
+	char buf[512];
+	int len;
+
+	len = snprintf(buf, 512, "/sys/block/%s/queue/discard_max_hw_bytes",
+			basename(name));
+	buf[len] = 0;
+	fd = open(buf, O_RDONLY);
+	if (fd > 0) {
+		char val[128];
+		int ret = pread(fd, val, 128, 0);
+		unsigned long long bytes = 0;
+
+		close(fd);
+		if (ret > 0)
+			bytes = strtol(val, NULL, 10);
+
+		if (bytes > 0)
+			return true;
+	}
+	return false;
+}
+
 static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
@@ -40,6 +65,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 			.max_discard_segments	= 1,
 		},
 	};
+	bool can_discard = false;
 
 	strcpy(tgt_json.name, "loop");
 
@@ -71,8 +97,10 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	if (S_ISBLK(st.st_mode)) {
 		if (ioctl(fd, BLKGETSIZE64, &bytes) != 0)
 			return -1;
+		can_discard = backing_supports_discard(file);
 	} else if (S_ISREG(st.st_mode)) {
 		bytes = st.st_size;
+		can_discard = true;
 	} else {
 		bytes = 0;
 	}
@@ -84,7 +112,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	tgt->fds[1] = fd;
 	p.basic.dev_sectors = bytes >> 9;
 
-	if (st.st_blksize)
+	if (st.st_blksize && can_discard)
 		p.discard.discard_granularity = st.st_blksize;
 	else
 		p.types &= ~UBLK_PARAM_TYPE_DISCARD;
