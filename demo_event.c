@@ -382,6 +382,7 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto fail_del_dev;
 
+	ublksrv_ctrl_del_dev(dev);
 	ublksrv_ctrl_deinit(dev);
 	return 0;
 
