@@ -458,6 +458,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "depth",		1,	NULL, 'd' },
 		{ "zero_copy",		1,	NULL, 'z' },
 		{ "uring_comp",		1,	NULL, 'u' },
+		{ "need_get_data",	1,	NULL, 'g' },
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -466,6 +467,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	int opt, ret, zcopy = 0;
 	int daemon_pid;
 	int uring_comp = 0;
+	int need_get_data = 0;
 	const char *dump_buf;
 
 	data.queue_depth = DEF_QD;
@@ -477,7 +479,7 @@ static int cmd_dev_add(int argc, char *argv[])
 
 	mkpath(data.run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -499,6 +501,9 @@ static int cmd_dev_add(int argc, char *argv[])
 		case 'u':
 			uring_comp = strtol(optarg, NULL, 10);
 			break;
+		case 'g':
+			need_get_data = strtol(optarg, NULL, 10);
+			break;
 		}
 	}
 	data.rq_max_blocks = DEF_BUF_SIZE / data.block_size;
@@ -508,6 +513,8 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.queue_depth = MAX_QD;
 	if (uring_comp)
 		data.flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
+	if (need_get_data)
+		data.flags |= UBLK_F_NEED_GET_DATA;
 
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;
@@ -588,7 +595,8 @@ static void cmd_dev_add_usage(char *cmd)
 	ublksrv_for_each_tgt_type(collect_tgt_types, &data);
 	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "}");
 
-	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH -u URING_COMP\n",
+	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH "
+			"-u URING_COMP -g NEED_GET_DATA\n",
 			cmd, data.names);
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
