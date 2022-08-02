@@ -344,6 +344,11 @@ static const struct ublksrv_tgt_type demo_event_tgt_type = {
 
 int main(int argc, char *argv[])
 {
+	static const struct option longopts[] = {
+		{ "need_get_data",	1,	NULL, 'g' },
+		{ NULL }
+	};
+	
 	struct ublksrv_dev_data data = {
 		.dev_id = -1,
 		.max_io_buf_bytes = DEF_BUF_SIZE,
@@ -351,10 +356,20 @@ int main(int argc, char *argv[])
 		.queue_depth = DEF_QD,
 		.tgt_type = "demo_event",
 		.tgt_ops = &demo_event_tgt_type,
+		.flags = 0,
 	};
 	struct ublksrv_ctrl_dev *dev;
 	char *type = NULL;
-	int ret;
+	int ret, opt;
+
+	while ((opt = getopt_long(argc, argv, ":g",
+				  longopts, NULL)) != -1) {
+		switch (opt) {
+		case 'g':
+			data.flags |= UBLK_F_NEED_GET_DATA;
+			break;
+		}
+	}
 
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
 		return -1;
