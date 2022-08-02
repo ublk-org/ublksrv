@@ -186,22 +186,27 @@ int main(int argc, char *argv[])
 		.block_size = 512,
 		.tgt_type = "demo_null",
 		.tgt_ops = &demo_tgt_type,
+		.flags = 0,
 	};
 	struct ublksrv_ctrl_dev *dev;
 	char *type = NULL;
 	int ret;
 	static const struct option longopts[] = {
 		{ "buf",		1,	NULL, 'b' },
+		{ "need_get_data",	1,	NULL, 'g' },
 		{ NULL }
 	};
 	int opt;
 	bool use_buf = false;
 
-	while ((opt = getopt_long(argc, argv, ":b",
+	while ((opt = getopt_long(argc, argv, ":bg",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'b':
 			use_buf = true;
+			break;
+		case 'g':
+			data.flags |= UBLK_F_NEED_GET_DATA;
 			break;
 		}
 	}
