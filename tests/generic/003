@@ -32,6 +32,8 @@ MNT=`mktemp -d`
 URING_COMP=1
 NEED_GET_DATA=1
 
-ublk_run_mount_test $URING_COMP $NEED_GET_DATA
+for NEED_GET_DATA in `seq 0 1`; do
+	ublk_run_mount_test $URING_COMP $NEED_GET_DATA
+done
 
 rm -fr $MNT
