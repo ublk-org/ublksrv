@@ -214,7 +214,8 @@ __create_ublk_dev()
 
 	if [ "$ublk_type" = "loop" ]; then
 		file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_XXXXX`
-		truncate -s 2G $file
+		#truncate -s 2G $file
+		dd if=/dev/zero of=$file bs=1M count=1k oflag=direct > /dev/null 2>&1
 	fi
 
 	eval $UBLK add -t $ublk_type -q $nr_queues -u $uring_comp -g $need_get_data -d 128 -f $file > /dev/null 2>&1
@@ -229,7 +230,8 @@ __remove_kernel_loop_dev() {
 __create_kernel_loop_dev() {
 	losetup -D
 	file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_XXXXX`
-	truncate -s 2G $file
+	#truncate -s 2G $file
+	dd if=/dev/zero of=$file bs=1M count=1k oflag=direct > /dev/null 2>&1
 	losetup -f $file --direct-io=on
 	#losetup -l
 }
