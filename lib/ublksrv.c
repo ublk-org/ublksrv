@@ -592,7 +592,7 @@ static int ublksrv_create_pid_file(struct ublksrv_dev *dev)
 	/* create pid file and lock it, so that others can't */
 	snprintf(pid_file, 64, "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
 
-	ret = create_pid_file(pid_file, CPF_CLOEXEC, &pid_fd);
+	ret = create_pid_file(pid_file, &pid_fd);
 	if (ret < 0) {
 		/* -1 means the file is locked, and we need to remove it */
 		if (ret == -1) {

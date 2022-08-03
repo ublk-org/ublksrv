@@ -9,9 +9,7 @@
 extern "C" {
 #endif
 
-/* create pid file */
-#define CPF_CLOEXEC 1
-int create_pid_file(const char *pidFile, int flags, int *pid_fd);
+int create_pid_file(const char *pid_file, int *pid_fd);
 
 extern void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset);
 
