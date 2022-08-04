@@ -122,3 +122,18 @@ make test T=generic
 5.3 run single test
 
 make test T=generic/001
+
+
+6 License
+
+nlohmann(include/nlohmann/json.hpp) is from [1], which is covered by MIT
+license.
+
+The library functions (all code in lib/ directory and include/ublksrv.h)
+are covered by dual licensed LGPL and MIT, see COPYING.LGPL and LICENSE.
+
+All other source code are covered by dual licensed GPL and MIT, see
+COPYING and LICENSE.
+
+
+[1] https://github.com/nlohmann/json
