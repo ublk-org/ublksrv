@@ -48,16 +48,21 @@ static char *pop_cmd(int *argc, char *argv[])
 
 static int start_daemon(void (*child_fn)(void *), void *data)
 {
+	char path[PATH_MAX];
 	int fd;
 
 	if (setsid() == -1)
 		return -1;
+
+	getcwd(path, PATH_MAX);
 
 	switch (fork()) {
 	case -1: return -1;
 	case 0:  break;
 	default: _exit(EXIT_SUCCESS);
 	}
+
+	chdir(path);
 
 	close(STDIN_FILENO);
 	fd = open("/dev/null", O_RDWR);
