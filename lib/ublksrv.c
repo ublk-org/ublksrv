@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT or LGPL-2.1-only
+
 #include "ublksrv_priv.h"
 
 /*

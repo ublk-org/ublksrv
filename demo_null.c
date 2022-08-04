@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT or GPL-2.0-only
+
 #include "ublksrv.h"
 
 #define UBLKSRV_TGT_TYPE_DEMO  0

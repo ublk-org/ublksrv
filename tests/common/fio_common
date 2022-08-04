@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT or GPL-2.0-only
 #!/bin/bash
 
 declare -A TEST_RUN

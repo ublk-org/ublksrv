@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT or GPL-2.0-only
+
 #include "ublksrv_tgt.h"
 
 static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,

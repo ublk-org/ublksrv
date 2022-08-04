@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT or GPL-2.0-only
+
 #ifndef UBLKSRV_PRIVATE_INC_H
 #define UBLKSRV_PRIVATE_INC_H
 
