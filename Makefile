@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
 include Makefile.common
 
 TOP_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))

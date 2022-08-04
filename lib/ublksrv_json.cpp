@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT or LGPL-2.1-only
+
 #include <iostream>
 #include "nlohmann/json.hpp"
 #include "ublksrv_priv.h"

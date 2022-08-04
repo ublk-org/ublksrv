@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT or LGPL-2.1-only
 
 include ../Makefile.common
 

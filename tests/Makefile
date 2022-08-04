@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT or GPL-2.0-only
 
 THIS_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 
