@@ -30,7 +30,7 @@ $(PROG_DEMO): $(LIBUBLKSRV) demo_null.o
 $(PROG_DEMO2): $(LIBUBLKSRV) demo_event.o
 	$(CPP) -o $@ demo_event.o $(LDFLAGS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
 
-.PHONY: clean test test_all cscope
+.PHONY: clean test cscope
 clean:
 	rm -f $(UBLKSRV_PROGS) $(UBLKSRV_OBJS) $(UBLKSRV_LIB_OBJS) $(UBLKSRV_LIB)
 	rm -f $(PROG_DEMO) $(PROG_DEMO).o
@@ -43,9 +43,6 @@ clean:
 R = 10
 test: $(UBLKSRV_PROGS)
 	make -s -C ${TOP_DIR}tests run T=${T} R=${R}
-
-test_all: $(UBLKSRV_PROGS)
-	make -s -C ${TOP_DIR}tests run_test_all R=${R}
 
 cscope:
 	@cscope -b -R

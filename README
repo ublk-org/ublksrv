@@ -111,7 +111,7 @@ systemctl enable delete-ublk-before-shutdown.service
 5 test
 5.1 run all built tests
 
-make test_all
+make test T=all
 
 5.2 run test group
 
@@ -122,7 +122,8 @@ make test T=generic
 5.3 run single test
 
 make test T=generic/001
-
+make test T=null/001
+make test T=loop/001
 
 6 License
 
