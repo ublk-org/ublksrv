@@ -35,97 +35,69 @@ READ. Also looks linux-mm can't support zero copy for this case yet[3].
 More ublk targets will be added with this framework in future even though only
 ublk-loop and ublk-null are implemented now.
 
-libublk is also generated, and it helps to integrate ublk into existed
+libublksrv is also generated, and it helps to integrate ublk into existed
 project. One example of demo_null is provided for how to make a ublk
-device over libublk.
+device over libublksrv.
 
 2 Quick start
 
-1) how to build ublksrv:
+2.1 how to build ublksrv:
 
-- build & install liburing, and make sure IORING_SETUP_SQE128 is supported
+1) build & install liburing, and make sure IORING_SETUP_SQE128 is supported
 
-- cd ublksrv && make
+2) cd ublksrv && make
 
-2) help
+2.2 help
+
 - ublk help
 
-3) add one ublk-null disk
+2.3 add one ublk-null disk
 - ublk add -t null
 
-4) add one ublk-loop disk
+2.4 add one ublk-loop disk
 - ublk add -t loop -f /dev/vdb
 or
 - ublk add -t loop -f 1.img
 
-5) remove one ublk disk
+2.5 remove one ublk disk
 - ublk del -n 0		#remove /dev/ublkb0
 - ublk del -a		#remove all ublk devices
 
-6) list ublk devices
+2.6 list ublk devices
 - ublk list
+- ublk list -v	#with all device info dumped
 
-3 remove ublk devices before shutdown
+3 build
 
-During shutdown or reboot, the distribution may call reboot syscall after
-killing application tasks. When ublksrv daemon is killed(by SIGKILL maybe),
-both ublksrv and ublk driver can't get notified, then the daemon may hang
-when canceling io_uring requests in do_exit(). So far ublksrv has one builtin
-monitor for checking if ublksrv daemon is dead, and the period is 5s. Without
-the following systemd service script, system may take at most 5 seconds for
-removing ublk device during shutdown or reboot.
+3.1 run 'make' directly
 
-So far, one approach is to delete ublk device before shutdown is started, such
-as in case of systemd, the following approach can avoid the issue:
+3.2 dependency
+1) liburing with IORING_SETUP_SQE128 support
 
-1) write one systemd service script:
-cat /etc/systemd/system/delete-ublk-before-shutdown.service
+2) linux kernel v5.19(IORING_SETUP_SQE128 support)
 
-	[Unit]
-	Description=Remove ublk device at shutdown
-	DefaultDependencies=no
-	Before=shutdown.target
+3) linux kernel v5.20 with ublk kernel driver(drivers/block/ublk_drv.c)
+merged
 
-	[Service]
-	Type=oneshot
-	ExecStart=ublk del -a
-	TimeoutStartSec=0
-
-	[Install]
-	WantedBy=shutdown.target
-
-2) start/enable the service of delete-ublk-before-shutdown:
-
-systemctl daemon-reload
-systemctl enable delete-ublk-before-shutdown.service
-
-4 build
-
-1) run 'make' directly
-
-2) dependency
-- liburing with IORING_SETUP_SQE128 support
-
-- linux kernel v5.19(IORING_SETUP_SQE128 support)
-
-5 test
-5.1 run all built tests
+4 test
+4.1 run all built tests
 
 make test T=all
 
-5.2 run test group
+4.2 run test group
 
 make test T=null
 make test T=loop
 make test T=generic
 
-5.3 run single test
+4.3 run single test
 
 make test T=generic/001
 make test T=null/001
 make test T=loop/001
+...
 
-6 License
+5 License
 
 nlohmann(include/nlohmann/json.hpp) is from [1], which is covered by MIT
 license.
