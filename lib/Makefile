@@ -15,8 +15,8 @@ all: $(UBLKSRV_LIB) $(UBLKSRV_LIB_STATIC)
 %.o : %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-%.o : %.cpp Makefile
-	$(CPP) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
+ublksrv_json.o : ublksrv_json.cpp Makefile
+	$(CPP) -c $(CFLAGS) -std=c++11 $< -o $@
 
 $(UBLKSRV_LIB): $(UBLKSRV_LIB_OBJS)
 	$(CC) -shared -o $@  $(UBLKSRV_LIB_OBJS) $(LDFLAGS)
