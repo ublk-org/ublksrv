@@ -30,7 +30,7 @@ io request.
 So far, the ublk driver needs to copy io request pages into userspace buffer
 (pages) first for write before notifying the request to ublksrv, and copy
 userspace buffer(pages) to the io request pages after ublksrv handles
-READ. Also looks linux-mm can't support zero copy for this case yet[3].
+READ. Also looks linux-mm can't support zero copy for this case yet[2].
 
 More ublk targets will be added with this framework in future even though only
 ublk-loop and ublk-null are implemented now.
@@ -99,7 +99,7 @@ make test T=loop/001
 
 5 License
 
-nlohmann(include/nlohmann/json.hpp) is from [1], which is covered by MIT
+nlohmann(include/nlohmann/json.hpp) is from [3], which is covered by MIT
 license.
 
 The library functions (all code in lib/ directory and include/ublksrv.h)
@@ -108,5 +108,6 @@ are covered by dual licensed LGPL and MIT, see COPYING.LGPL and LICENSE.
 All other source code are covered by dual licensed GPL and MIT, see
 COPYING and LICENSE.
 
-
-[1] https://github.com/nlohmann/json
+[1] https://lore.kernel.org/linux-block/20220509092312.254354-1-ming.lei@redhat.com/
+[2] https://lore.kernel.org/all/20220318095531.15479-1-xiaoguang.wang@linux.alibaba.com/
+[3] https://github.com/nlohmann/json
