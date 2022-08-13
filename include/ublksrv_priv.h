@@ -83,7 +83,8 @@ static inline void ublksrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op
 {
 	__u32 *addr = (__u32 *)&sqe->off;
 
-	*addr = cmd_op;
+	addr[0] = cmd_op;
+	addr[1] = 0;
 }
 
 #ifdef DEBUG
