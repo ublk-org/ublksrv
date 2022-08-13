@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+#!/bin/bash
+
+. common/fio_common
+
+# ublk-loop over block device
+__run_dev_perf "loop_nullb" 1 1
