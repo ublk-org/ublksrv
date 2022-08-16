@@ -36,6 +36,7 @@
 #include <sys/mman.h>
 #include <dirent.h>
 #include <sys/prctl.h>
+#include <limits.h>
 
 #include "liburing.h"
 
