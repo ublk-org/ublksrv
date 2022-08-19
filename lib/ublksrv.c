@@ -521,8 +521,11 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		q_id * (UBLK_MAX_QUEUE_DEPTH * sizeof(struct ublksrv_io_desc));
 	q->io_cmd_buf = (char *)mmap(0, cmd_buf_size, PROT_READ,
 			MAP_SHARED | MAP_POPULATE, dev->cdev_fd, off);
-	if (q->io_cmd_buf == MAP_FAILED)
+	if (q->io_cmd_buf == MAP_FAILED) {
+		syslog(LOG_INFO, "ublk dev %d queue %d map io_cmd_buf failed",
+				q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 		goto fail;
+	}
 
 	io_buf_size = ctrl_dev->dev_info.max_io_buf_bytes;
 	for (i = 0; i < depth; i++) {
@@ -532,22 +535,34 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 					i, io_buf_size);
 		else
 			if (posix_memalign((void **)&q->ios[i].buf_addr,
-						getpagesize(), io_buf_size))
+						getpagesize(), io_buf_size)) {
+				syslog(LOG_INFO, "ublk dev %d queue %d io %d posix_memalign failed",
+						q->dev->ctrl_dev->dev_info.dev_id, q->q_id, i);
 				goto fail;
+			}
 		//q->ios[i].buf_addr = malloc(io_buf_size);
-		if (!q->ios[i].buf_addr)
+		if (!q->ios[i].buf_addr) {
+			syslog(LOG_INFO, "ublk dev %d queue %d io %d alloc io_buf failed",
+					q->dev->ctrl_dev->dev_info.dev_id, q->q_id, i);
 			goto fail;
+		}
 		q->ios[i].flags = UBLKSRV_NEED_FETCH_RQ | UBLKSRV_IO_FREE;
 	}
 
 	ret = ublksrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128);
-	if (ret < 0)
+	if (ret < 0) {
+		syslog(LOG_INFO, "ublk dev %d queue %d setup io_uring failed",
+				q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 		goto fail;
+	}
 
 	ret = io_uring_register_files(&q->ring, dev->tgt.fds,
 			dev->tgt.nr_fds + 1);
-	if (ret)
+	if (ret) {
+		syslog(LOG_INFO, "ublk dev %d queue %d register files failed",
+				q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 		goto fail;
+	}
 
 	ublksrv_dev_init_io_cmds(dev, q);
 
@@ -576,7 +591,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
  fail:
 	ublksrv_queue_deinit(q);
 	syslog(LOG_INFO, "ublk dev %d queue %d failed",
-			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
+			ctrl_dev->dev_info.dev_id, q_id);
 	return NULL;
 }
 
