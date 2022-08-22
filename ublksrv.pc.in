@@ -1,0 +1,11 @@
+prefix=@prefix@
+exec_prefix=${prefix}
+libdir=@libdir@
+includedir=${prefix}/include
+
+Name: ublksrv
+Version: @version@
+Description: ublk server library and headeres
+Requires: liburing
+Cflags:
+Libs: -lublksrv -luring

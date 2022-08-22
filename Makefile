@@ -12,7 +12,7 @@ PROG_DEMO2 = demo_event
 UBLKSRV_PROGS = $(UBLKSRV_PROG) $(PROG_DEMO) $(PROG_DEMO2)
 LIBUBLKSRV = lib/libublksrv.a
 
-all: $(LIBUBLKSRV) $(UBLKSRV_PROGS)
+all: $(LIBUBLKSRV) $(UBLKSRV_PROGS) ublksrv.pc
 
 -include $(UBLKSRV_OBJS:%.o=%.d)
 
@@ -29,6 +29,14 @@ $(PROG_DEMO): $(LIBUBLKSRV) demo_null.o
 	$(CPP) -o $@ demo_null.o $(LDFLAGS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
 $(PROG_DEMO2): $(LIBUBLKSRV) demo_event.o
 	$(CPP) -o $@ demo_event.o $(LDFLAGS) -L./lib -lublksrv -Wl,-rpath,$(TOP_DIR)lib
+
+ublksrv.pc: ublksrv.pc.in
+	rm -f $@
+	$(SED) -e 's,@prefix@,$(PREFIX),g' \
+	       -e 's,@libdir@,$(LIBDIR),g' \
+	       -e 's,@version@,$(VERSION),g' \
+	       < $< > $@-t
+	mv $@-t $@
 
 .PHONY: clean test cscope
 clean:
