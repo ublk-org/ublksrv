@@ -40,6 +40,7 @@ run_test_all() {
 
 TEST=$1
 export TRUNTIME=$2
+export TLOOPS=$3
 export T_URING_COMP=0
 export T_NEED_GET_DATA=0
 

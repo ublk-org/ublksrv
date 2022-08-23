@@ -49,8 +49,9 @@ clean:
 	rm -f cscope.*
 
 R = 10
+C = 4
 test: $(UBLKSRV_PROGS)
-	make -s -C ${TOP_DIR}tests run T=${T} R=${R}
+	make -s -C ${TOP_DIR}tests run T=${T} R=${R} C=${C}
 
 cscope:
 	@cscope -b -R
