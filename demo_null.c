@@ -13,8 +13,7 @@ struct demo_queue_info {
 static struct ublksrv_ctrl_dev *this_dev;
 
 static pthread_mutex_t jbuf_lock;
-static const int jbuf_size = 4096;
-static char jbuf[jbuf_size];
+static char jbuf[4096];
 
 static void sig_handler(int sig)
 {
@@ -40,7 +39,7 @@ static void *demo_null_io_handler_fn(void *data)
 	sched_setscheduler(getpid(), SCHED_RR, NULL);
 
 	pthread_mutex_lock(&jbuf_lock);
-	ublksrv_json_write_queue_info(dev->ctrl_dev, jbuf, jbuf_size,
+	ublksrv_json_write_queue_info(dev->ctrl_dev, jbuf, sizeof jbuf,
 			q_id, gettid());
 	pthread_mutex_unlock(&jbuf_lock);
 	q = ublksrv_queue_init(dev, q_id, NULL);
@@ -80,7 +79,7 @@ static void demo_null_set_parameters(struct ublksrv_ctrl_dev *cdev,
 	int ret;
 
 	pthread_mutex_lock(&jbuf_lock);
-	ublksrv_json_write_params(&p, jbuf, jbuf_size);
+	ublksrv_json_write_params(&p, jbuf, sizeof jbuf);
 	pthread_mutex_unlock(&jbuf_lock);
 
 	ret = ublksrv_ctrl_set_params(cdev, &p);
@@ -168,8 +167,8 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
-	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, jbuf_size);
-	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
+	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, sizeof jbuf);
+	ublksrv_json_write_target_base_info(jbuf, sizeof jbuf, &tgt_json);
 
 	return 0;
 }
