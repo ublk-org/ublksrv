@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
+#include <errno.h>
+#include <error.h>
+
 #include "ublksrv.h"
 
 #define UBLKSRV_TGT_TYPE_DEMO  0
@@ -236,9 +239,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
-		return -1;
+		error(EXIT_FAILURE, errno, "signal");
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
-		return -1;
+		error(EXIT_FAILURE, errno, "signal");
 
 	if (use_buf) {
 		demo_tgt_type.alloc_io_buf = null_alloc_io_buf;
@@ -247,31 +250,31 @@ int main(int argc, char *argv[])
 
 	pthread_mutex_init(&jbuf_lock, NULL);
 	dev = ublksrv_ctrl_init(&data);
-	if (!dev) {
-		fprintf(stderr, "can't init dev %d\n", data.dev_id);
-		return -ENODEV;
-	}
+	if (!dev)
+		error(EXIT_FAILURE, ENODEV, "ublksrv_ctrl_init");
 	/* ugly, but signal handler needs this_dev */
 	this_dev = dev;
 
 	ret = ublksrv_ctrl_add_dev(dev);
 	if (ret < 0) {
-		fprintf(stderr, "can't add dev %d, ret %d\n", data.dev_id, ret);
+		error(0, -ret, "can't add dev %d", data.dev_id);
 		goto fail;
 	}
 
 	ret = ublksrv_start_daemon(dev);
-	if (ret < 0)
+	if (ret < 0) {
+		error(0, -ret, "can't start daemon");
 		goto fail_del_dev;
+	}
 
 	ublksrv_ctrl_del_dev(dev);
 	ublksrv_ctrl_deinit(dev);
-	return 0;
+	exit(EXIT_SUCCESS);
 
  fail_del_dev:
 	ublksrv_ctrl_del_dev(dev);
  fail:
 	ublksrv_ctrl_deinit(dev);
 
-	return ret;
+	exit(EXIT_FAILURE);
 }
