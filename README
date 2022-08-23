@@ -43,9 +43,22 @@ device over libublksrv.
 
 2.1 how to build ublksrv:
 
-1) build & install liburing, and make sure IORING_SETUP_SQE128 is supported
+  autoreconf -i
+  ./configure
+  make
 
-2) cd ublksrv && make
+'./configure' requires liburing 2.2 package installed, if liburing 2.2 isn't
+available in your distribution, please configure via the following command:
+
+  PKG_CONFIG_PATH=${LIBURING_DIR} \
+  ./configure \
+    CFLAGS="-I${LIBURING_DIR}/src/include" \
+    CXXFLAGS="-I${LIBURING_DIR}/src/include" \
+    LDFLAGS="-L${LIBURING_DIR}/src"
+
+and LIBURING_DIR points to directory of liburing source code, and liburing
+needs to be built before running above commands. Also IORING_SETUP_SQE128
+has to be supported in the liburing source.
 
 2.2 help
 

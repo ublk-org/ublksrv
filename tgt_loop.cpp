@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
+#include <config.h>
+
 #include "ublksrv_tgt.h"
 
 static const char *loop_tgt_backfile(struct ublksrv_tgt_info *tgt)

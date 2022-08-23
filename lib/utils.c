@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT or LGPL-2.1-only
 
+#include <config.h>
+
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>

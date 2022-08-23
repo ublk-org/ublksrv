@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
+#include <config.h>
+
 #include <errno.h>
 #include <error.h>
 
