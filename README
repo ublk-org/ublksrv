@@ -60,6 +60,11 @@ and LIBURING_DIR points to directory of liburing source code, and liburing
 needs to be built before running above commands. Also IORING_SETUP_SQE128
 has to be supported in the liburing source.
 
+note:
+  1) if 'AX_PTHREAD: command not found' is reported when running ./configure
+  or can't link with libpthread, please install autoconf-archive before run
+  the building
+
 2.2 help
 
 - ublk help
