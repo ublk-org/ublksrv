@@ -853,3 +853,9 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 
 	return reapped;
 }
+
+struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
+		int q_id)
+{
+	return dev->__queues[q_id];
+}
