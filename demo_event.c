@@ -11,6 +11,7 @@
 
 #define UBLKSRV_TGT_TYPE_DEMO  0
 
+static int backing_fd = -1;
 
 static struct ublksrv_aio_ctx *aio_ctx = NULL;
 static pthread_t io_thread;
@@ -36,10 +37,50 @@ static void sig_handler(int sig)
 	ublksrv_ctrl_stop_dev(this_ctrl_dev);
 }
 
+int sync_io_submitter(struct ublksrv_aio_ctx *ctx,
+		struct ublksrv_aio *req)
+{
+	const struct ublksrv_io_desc *iod = &req->io;
+	unsigned ublk_op = ublksrv_get_op(iod);
+	void *buf = (void *)iod->addr;
+	unsigned len = iod->nr_sectors << 9;
+	unsigned long long offset = iod->start_sector << 9;
+	int mode = FALLOC_FL_KEEP_SIZE;
+	int ret;
+
+	switch (ublk_op) {
+	case UBLK_IO_OP_READ:
+		ret = pread(req->fd, buf, len, offset);
+		break;
+	case UBLK_IO_OP_WRITE:
+		ret = pwrite(req->fd, buf, len, offset);
+		break;
+	case UBLK_IO_OP_FLUSH:
+		ret = fdatasync(req->fd);
+		break;
+	case UBLK_IO_OP_WRITE_ZEROES:
+		mode |= FALLOC_FL_ZERO_RANGE;
+	case UBLK_IO_OP_DISCARD:
+		ret = fallocate(req->fd, mode, offset, len);
+		break;
+	default:
+		fprintf(stderr, "%s: wrong op %d, fd %d, id %x\n", __func__,
+				ublk_op, req->fd, req->id);
+		return -EINVAL;
+	}
+exit:
+	req->res = ret;
+	return 1;
+}
+
 static int io_submit_worker(struct ublksrv_aio_ctx *ctx,
 		struct ublksrv_aio *req)
 {
-	req->res = req->io.nr_sectors << 9;
+	/* simulate null target */
+	if (req->fd < 0)
+		req->res = req->io.nr_sectors << 9;
+	else
+		return sync_io_submitter(ctx, req);
 
 	return 1;
 }
@@ -60,8 +101,8 @@ static void *demo_event_real_io_handler_fn(void *data)
 	        return NULL;
 	}
 
-	fprintf(stdout, "ublk dev %d aio context started tid %d\n", dev_id,
-			gettid());
+	fprintf(stdout, "ublk dev %d aio context(sync io submitter) started tid %d\n",
+			dev_id, gettid());
 
 	read_event.events = EPOLLIN;
 	read_event.data.fd = ctx->efd;
@@ -234,12 +275,32 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,
 	};
-	strcpy(tgt_json.name, "null_event");
+	struct stat st;
+
+	strcpy(tgt_json.name, "demo_event");
 
 	if (type != UBLKSRV_TGT_TYPE_DEMO)
 		return -1;
 
-	tgt_json.dev_size = tgt->dev_size = 250UL * 1024 * 1024 * 1024;
+	if (backing_fd > 0) {
+		unsigned long long bytes;
+
+		fstat(backing_fd, &st);
+		if (S_ISBLK(st.st_mode)) {
+			if (ioctl(backing_fd, BLKGETSIZE64, &bytes) != 0)
+				return -1;
+		} else if (S_ISREG(st.st_mode)) {
+			bytes = st.st_size;
+		} else {
+			bytes = 0;
+		}
+
+		tgt->dev_size = bytes;
+	} else {
+		tgt->dev_size = 250UL * 1024 * 1024 * 1024;
+	}
+
+	tgt_json.dev_size = tgt->dev_size;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
@@ -255,7 +316,7 @@ static int demo_handle_io_async(struct ublksrv_queue *q, int tag)
 	struct ublksrv_aio *req = ublksrv_aio_alloc_req(aio_ctx, 0);
 
 	req->io = *iod;
-	req->fd = -1;
+	req->fd = backing_fd;
 	req->id = ublksrv_aio_pid_tag(q->q_id, tag);
 	ublksrv_aio_submit_req(aio_ctx, req);
 
@@ -279,9 +340,9 @@ int main(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
 		{ "need_get_data",	1,	NULL, 'g' },
+		{ "backing_file",	1,	NULL, 'f' },
 		{ NULL }
 	};
-	
 	struct ublksrv_dev_data data = {
 		.dev_id = -1,
 		.max_io_buf_bytes = DEF_BUF_SIZE,
@@ -294,12 +355,18 @@ int main(int argc, char *argv[])
 	struct ublksrv_ctrl_dev *dev;
 	char *type = NULL;
 	int ret, opt;
+	char *file = NULL;
 
-	while ((opt = getopt_long(argc, argv, ":g",
+	while ((opt = getopt_long(argc, argv, "f:g",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'g':
 			data.flags |= UBLK_F_NEED_GET_DATA;
+			break;
+		case 'f':
+			backing_fd = open(optarg, O_RDWR | O_DIRECT);
+			if (backing_fd < 0)
+				backing_fd = -1;
 			break;
 		}
 	}
