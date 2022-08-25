@@ -31,12 +31,6 @@ static inline bool ublksrv_io_done(struct ublk_io *io)
 	return io->flags & UBLKSRV_IO_FREE;
 }
 
-static inline struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
-		int q_id)
-{
-	return dev->__queues[q_id];
-}
-
 static inline int is_target_io(__u64 user_data)
 {
 	return (user_data & (1ULL << 63)) != 0;

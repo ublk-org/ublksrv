@@ -366,6 +366,8 @@ extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
 extern int ublksrv_queue_handled_event(struct ublksrv_queue *q);
 extern int ublksrv_queue_send_event(struct ublksrv_queue *q);
+extern struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
+		int q_id);
 
 extern int ublksrv_process_io(struct ublksrv_queue *q);
 extern int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res);
