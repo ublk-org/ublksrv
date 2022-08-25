@@ -7,25 +7,19 @@
 #include <error.h>
 
 #include "ublksrv.h"
+#include "ublksrv_aio.h"
 
 #define UBLKSRV_TGT_TYPE_DEMO  0
 
+
+static struct ublksrv_aio_ctx *aio_ctx = NULL;
+static pthread_t io_thread;
 struct demo_queue_info {
 	struct ublksrv_dev *dev;
 	struct ublksrv_queue *q;
 	int qid;
 
-	/* for notify real io handler that we have io available */
-	int efd, dead;
-
 	pthread_t thread;
-
-	pthread_t io_thread;
-
-	pthread_spinlock_t lock;
-
-	struct ublk_io *pending;
-	struct ublk_io *processed;
 };
 
 static struct ublksrv_ctrl_dev *this_ctrl_dev;
@@ -42,77 +36,47 @@ static void sig_handler(int sig)
 	ublksrv_ctrl_stop_dev(this_ctrl_dev);
 }
 
-static bool demo_add_list(struct ublk_io **head, struct ublk_io **new_list)
+static int io_submit_worker(struct ublksrv_aio_ctx *ctx,
+		struct ublksrv_aio *req)
 {
-	struct ublk_io *io, *end = NULL;
+	req->res = req->io.nr_sectors << 9;
 
-	/* add pending into ->processed list */
-	io = *head;
-	while (io) {
-		end = io;
-		io = (struct ublk_io *)io->io_data;
-	}
-
-	if (end)
-		end->io_data = (unsigned long)*new_list;
-	else
-		*head = *new_list;
-
-	io = *new_list;
-	*new_list = NULL;
-
-	return !!io;
+	return 1;
 }
 
 #define EPOLL_NR_EVENTS 1
 static void *demo_event_real_io_handler_fn(void *data)
 {
-	struct demo_queue_info *info = (struct demo_queue_info *)data;
-	struct ublksrv_dev *dev = info->dev;
-	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
-	unsigned short q_id = info->qid;
+	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
+
+	unsigned dev_id = ctx->dev->ctrl_dev->dev_info.dev_id;
 	struct epoll_event events[EPOLL_NR_EVENTS];
 	int epoll_fd = epoll_create(EPOLL_NR_EVENTS);
 	struct epoll_event read_event;
 	int ret;
 
 	if (epoll_fd < 0) {
-		fprintf(stderr, "ublk dev %d queue %d create epoll fd failed\n",
-				dev_id, q_id);
-		return NULL;
+	        fprintf(stderr, "ublk dev %d create epoll fd failed\n", dev_id);
+	        return NULL;
 	}
+
+	fprintf(stdout, "ublk dev %d aio context started tid %d\n", dev_id,
+			gettid());
 
 	read_event.events = EPOLLIN;
-	read_event.data.fd = info->efd;
-	ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, info->efd, &read_event);
-	if (ret < 0) {
-		fprintf(stderr, "ublk dev %d queue %d epoll_ctl(ADD) failed\n",
-				dev_id, q_id);
-		return NULL;
-	}
+	read_event.data.fd = ctx->efd;
+	ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ctx->efd, &read_event);
 
-	/* wait until the 1st io comes */
-	//read(info->efd, &data, 8);
-	epoll_wait(epoll_fd, events, EPOLL_NR_EVENTS, -1);
+	while (!ublksrv_aio_ctx_dead(ctx)) {
+		struct aio_list compl;
 
-	while (!info->dead) {
-		int added = 0;
+		aio_list_init(&compl);
 
-		/* move all io in ->pending to ->processed */
-		pthread_spin_lock(&info->lock);
-		added = demo_add_list(&info->processed, &info->pending);
-		pthread_spin_unlock(&info->lock);
+		ublksrv_aio_submit_worker(ctx, io_submit_worker, &compl);
 
-		/*
-		 * clear internal event before sending ublksrv event which
-		 * generate new io(internal event) immediately
-		 */
-		read(info->efd, &data, 8);
+		ublksrv_aio_complete_worker(ctx, &compl);
 
-		/* tell ublksrv io_uring context that we have io done */
-		ublksrv_queue_send_event(info->q);
-
-		ret = epoll_wait(epoll_fd, events, EPOLL_NR_EVENTS, -1);
+		epoll_wait(epoll_fd, events, EPOLL_NR_EVENTS, -1);
 	}
 
 	return NULL;
@@ -154,8 +118,6 @@ static void *demo_event_io_handler_fn(void *data)
 			break;
 	} while (1);
 
-	info->dead = 1;
-	write(info->efd, &ev_data, 8);
 	fprintf(stdout, "ublk dev %d queue %d exited\n", dev_id, q->q_id);
 	ublksrv_queue_deinit(q);
 	return NULL;
@@ -206,18 +168,23 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 	if (!dev)
 		return -ENOMEM;
 	this_dev = dev;
+
+
+	aio_ctx = ublksrv_aio_ctx_init(dev, 0);
+	if (!aio_ctx) {
+		fprintf(stderr, "dev %d call ublk_aio_ctx_init failed\n", dev_id);
+		return -ENOMEM;
+	}
+
+	pthread_create(&io_thread, NULL, demo_event_real_io_handler_fn,
+			aio_ctx);
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
 		int j;
-		info_array[i].efd = eventfd(0, 0);
 		info_array[i].dev = dev;
 		info_array[i].qid = i;
-		pthread_spin_init(&info_array[i].lock,
-				PTHREAD_PROCESS_PRIVATE);
+
 		pthread_create(&info_array[i].thread, NULL,
 				demo_event_io_handler_fn,
-				&info_array[i]);
-		pthread_create(&info_array[i].io_thread, NULL,
-				demo_event_real_io_handler_fn,
 				&info_array[i]);
 	}
 
@@ -235,10 +202,10 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
 		int j;
 		pthread_join(info_array[i].thread, &thread_ret);
-		pthread_join(info_array[i].io_thread, &thread_ret);
-		pthread_spin_destroy(&info_array[i].lock);
-		close(info_array[i].efd);
 	}
+	ublksrv_aio_ctx_shutdown(aio_ctx);
+	pthread_join(io_thread, &thread_ret);
+	ublksrv_aio_ctx_deinit(aio_ctx);
 
 fail:
 	ublksrv_dev_deinit(dev);
@@ -284,58 +251,20 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 static int demo_handle_io_async(struct ublksrv_queue *q, int tag)
 {
-	struct demo_queue_info *info = (struct demo_queue_info *)
-		ublksrv_queue_get_data(q);
-	unsigned long long data = 1;
-	struct ublk_io *io = &q->ios[tag];
-
-	/* add current io into ->pending list */
-	pthread_spin_lock(&info->lock);
-	io->io_data = (unsigned long)info->pending;
-	info->pending = io;
-	pthread_spin_unlock(&info->lock);
-
-	write(info->efd, &data, 8);
-	return 0;
-}
-
-static void demo_handle_one_io(struct ublksrv_queue *q, struct ublk_io *io)
-{
-	int tag = ((unsigned long)io - (unsigned long)&q->ios[0]) / sizeof(*io);
 	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
+	struct ublksrv_aio *req = ublksrv_aio_alloc_req(aio_ctx, 0);
 
-	ublksrv_complete_io(q, tag, iod->nr_sectors << 9);
+	req->io = *iod;
+	req->fd = -1;
+	req->id = ublksrv_aio_pid_tag(q->q_id, tag);
+	ublksrv_aio_submit_req(aio_ctx, q, req);
+
+	return 0;
 }
 
 static void demo_handle_event(struct ublksrv_queue *q)
 {
-	struct demo_queue_info *info = (struct demo_queue_info *)
-		ublksrv_queue_get_data(q);
-	int cnt = 0;
-
-	/* complete all ios from ->processed list */
-	while (true) {
-		struct ublk_io *io, *list;
-
-		pthread_spin_lock(&info->lock);
-		list = info->processed;
-		info->processed = NULL;
-		pthread_spin_unlock(&info->lock);
-
-		if (!list)
-			break;
-
-		io = list;
-		while (io) {
-			struct ublk_io *next = (struct ublk_io *)io->io_data;
-
-			demo_handle_one_io(info->q, io);
-			io = next;
-			cnt++;
-		}
-	}
-
-	ublksrv_queue_handled_event(info->q);
+	ublksrv_aio_handle_event(aio_ctx, q);
 }
 
 static const struct ublksrv_tgt_type demo_event_tgt_type = {
