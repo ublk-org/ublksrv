@@ -2,6 +2,7 @@
 
 #include <config.h>
 
+#include <poll.h>
 #include <sys/epoll.h>
 #include <errno.h>
 #include <error.h>
@@ -11,6 +12,7 @@
 
 #define UBLKSRV_TGT_TYPE_DEMO  0
 
+static bool use_aio = 0;
 static int backing_fd = -1;
 
 static struct ublksrv_aio_ctx *aio_ctx = NULL;
@@ -35,6 +37,74 @@ static void sig_handler(int sig)
 	fprintf(stderr, "got signal %d, stopping %d, %d %d\n", sig,
 			q->stopping, q->cmd_inflight, q->tgt_io_inflight);
 	ublksrv_ctrl_stop_dev(this_ctrl_dev);
+}
+
+static void queue_fallocate_async(struct io_uring_sqe *sqe,
+		struct ublksrv_aio *req)
+{
+	__u16 ublk_op = ublksrv_get_op(&req->io);
+	__u32 flags = ublksrv_get_flags(&req->io);
+	__u32 mode = FALLOC_FL_KEEP_SIZE;
+
+	/* follow logic of linux kernel loop */
+	if (ublk_op == UBLK_IO_OP_DISCARD) {
+		mode |= FALLOC_FL_PUNCH_HOLE;
+	} else if (ublk_op == UBLK_IO_OP_WRITE_ZEROES) {
+		if (flags & UBLK_IO_F_NOUNMAP)
+			mode |= FALLOC_FL_ZERO_RANGE;
+		else
+			mode |= FALLOC_FL_PUNCH_HOLE;
+	} else {
+		mode |= FALLOC_FL_ZERO_RANGE;
+	}
+	io_uring_prep_fallocate(sqe, req->fd, mode, req->io.start_sector << 9,
+			req->io.nr_sectors << 9);
+}
+
+int async_io_submitter(struct ublksrv_aio_ctx *ctx,
+		struct ublksrv_aio *req)
+{
+	struct io_uring *ring = (struct io_uring *)ctx->ctx_data;
+	const struct ublksrv_io_desc *iod = &req->io;
+	unsigned op = ublksrv_get_op(iod);
+	struct io_uring_sqe *sqe;
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "%s: uring run out of sqe\n", __func__);
+		return -ENOMEM;
+	}
+
+	if (op == -1 || req->fd < 0) {
+		fprintf(stderr, "%s: wrong op %d, fd %d, id %x\n", __func__, op,
+				req->fd, req->id);
+		return -EINVAL;
+	}
+
+	io_uring_sqe_set_data(sqe, req);
+	switch (op) {
+	case UBLK_IO_OP_DISCARD:
+	case UBLK_IO_OP_WRITE_ZEROES:
+		queue_fallocate_async(sqe, req);
+		break;
+	case UBLK_IO_OP_FLUSH:
+		io_uring_prep_fsync(sqe, req->fd, IORING_FSYNC_DATASYNC);
+		break;
+	case UBLK_IO_OP_READ:
+		io_uring_prep_read(sqe, req->fd, (void *)iod->addr,
+				iod->nr_sectors << 9, iod->start_sector << 9);
+		break;
+	case UBLK_IO_OP_WRITE:
+		io_uring_prep_write(sqe, req->fd, (void *)iod->addr,
+				iod->nr_sectors << 9, iod->start_sector << 9);
+		break;
+	default:
+		fprintf(stderr, "%s: wrong op %d, fd %d, id %x\n", __func__,
+				op, req->fd, req->id);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 int sync_io_submitter(struct ublksrv_aio_ctx *ctx,
@@ -83,6 +153,105 @@ static int io_submit_worker(struct ublksrv_aio_ctx *ctx,
 		return sync_io_submitter(ctx, req);
 
 	return 1;
+}
+
+static inline int is_eventfd_io(__u64 user_data)
+{
+        return user_data == 0;
+}
+
+static int queue_event(struct ublksrv_aio_ctx *ctx)
+{
+	struct io_uring *ring = (struct io_uring *)ctx->ctx_data;
+	struct io_uring_sqe *sqe;
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "%s: uring run out of sqe\n", __func__);
+		return -1;
+	}
+
+	io_uring_prep_poll_add(sqe, ctx->efd, POLLIN);
+	io_uring_sqe_set_data64(sqe, 0);
+
+	return 0;
+}
+
+static int reap_uring(struct ublksrv_aio_ctx *ctx, struct aio_list *list, int
+		*got_efd)
+{
+	struct io_uring *r = (struct io_uring *)ctx->ctx_data;
+	struct io_uring_cqe *cqe;
+	unsigned head;
+	int count = 0;
+
+	io_uring_for_each_cqe(r, head, cqe) {
+		if (cqe->user_data) {
+			struct ublksrv_aio *req = (struct ublksrv_aio *)
+				cqe->user_data;
+
+			if (cqe->res == -EAGAIN)
+				async_io_submitter(ctx, req);
+			else {
+				req->res = cqe->res;
+				aio_list_add(list, req);
+			}
+		} else {
+			if (cqe->res < 0)
+				fprintf(stderr, "eventfd result %d\n",
+						cqe->res);
+			*got_efd = 1;
+		}
+	        count += 1;
+	}
+	io_uring_cq_advance(r, count);
+
+	return count;
+}
+
+static void *demo_event_uring_io_handler_fn(void *data)
+{
+	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
+	unsigned dev_id = ctx->dev->ctrl_dev->dev_info.dev_id;
+	struct io_uring ring;
+	unsigned qd;
+	int ret;
+
+	qd = ctx->dev->ctrl_dev->dev_info.queue_depth *
+		ctx->dev->ctrl_dev->dev_info.nr_hw_queues * 2;
+
+	io_uring_queue_init(qd, &ring, 0);
+	ret = io_uring_register_eventfd(&ring, ctx->efd);
+	if (ret) {
+		fprintf(stdout, "ublk dev %d fails to register eventfd\n",
+			dev_id);
+		return NULL;
+	}
+
+	ctx->ctx_data = (void *)&ring;
+
+	fprintf(stdout, "ublk dev %d aio(io_uring submitter) context started tid %d\n",
+			dev_id, gettid());
+
+	queue_event(ctx);
+	io_uring_submit_and_wait(&ring, 0);
+
+	while (!ublksrv_aio_ctx_dead(ctx)) {
+		struct aio_list compl;
+		int got_efd = 0;
+
+		aio_list_init(&compl);
+		ublksrv_aio_submit_worker(ctx, async_io_submitter, &compl);
+
+		reap_uring(ctx, &compl, &got_efd);
+		ublksrv_aio_complete_worker(ctx, &compl);
+
+		if (got_efd)
+			queue_event(ctx);
+		io_uring_submit_and_wait(&ring, 1);
+	}
+
+	return NULL;
 }
 
 #define EPOLL_NR_EVENTS 1
@@ -217,8 +386,12 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 		return -ENOMEM;
 	}
 
-	pthread_create(&io_thread, NULL, demo_event_real_io_handler_fn,
-			aio_ctx);
+	if (!use_aio)
+		pthread_create(&io_thread, NULL, demo_event_real_io_handler_fn,
+				aio_ctx);
+	else
+		pthread_create(&io_thread, NULL, demo_event_uring_io_handler_fn,
+				aio_ctx);
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
 		int j;
 		info_array[i].dev = dev;
@@ -341,6 +514,7 @@ int main(int argc, char *argv[])
 	static const struct option longopts[] = {
 		{ "need_get_data",	1,	NULL, 'g' },
 		{ "backing_file",	1,	NULL, 'f' },
+		{ "use_aio",		1,	NULL, 'a' },
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {
@@ -357,7 +531,7 @@ int main(int argc, char *argv[])
 	int ret, opt;
 	char *file = NULL;
 
-	while ((opt = getopt_long(argc, argv, "f:g",
+	while ((opt = getopt_long(argc, argv, "f:ga",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'g':
@@ -368,8 +542,14 @@ int main(int argc, char *argv[])
 			if (backing_fd < 0)
 				backing_fd = -1;
 			break;
+		case 'a':
+			use_aio = true;
+			break;
 		}
 	}
+
+	if (backing_fd < 0)
+		use_aio = false;
 
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
 		error(EXIT_FAILURE, errno, "signal");
