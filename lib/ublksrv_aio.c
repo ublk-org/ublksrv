@@ -199,24 +199,19 @@ void ublksrv_aio_get_completed_reqs(struct ublksrv_aio_ctx *ctx,
 void ublksrv_aio_handle_event(struct ublksrv_aio_ctx *ctx,
 		struct ublksrv_queue *q)
 {
+	struct ublksrv_aio_list *compl = &ctx->complete[q->q_id];
+	struct ublksrv_aio *req;
 	struct aio_list al;
-	int cnt = 0;
 
 	aio_list_init(&al);
-	do {
-		struct ublksrv_aio *req;
-
-		ublksrv_aio_get_completed_reqs(ctx, q, &al);
-
-		cnt = 0;
-		while (req = aio_list_pop(&al)) {
-			cnt++;
-			ublksrv_complete_io(q, ublksrv_aio_tag(req->id),
-					req->res);
-			ublksrv_aio_free_req(ctx, req);
-		}
-		aio_list_init(&al);
-	} while (cnt);
-
+	pthread_spin_lock(&compl->lock);
+	aio_list_splice(&compl->list, &al);
 	ublksrv_queue_handled_event(q);
+	pthread_spin_unlock(&compl->lock);
+
+	while (req = aio_list_pop(&al)) {
+		ublksrv_complete_io(q, ublksrv_aio_tag(req->id),
+				req->res);
+		ublksrv_aio_free_req(ctx, req);
+	}
 }
