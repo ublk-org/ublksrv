@@ -37,3 +37,18 @@ test: $(sbin_PROGRAMS) $(noinst_PROGRAMS)
 
 cscope:
 	@cscope -b -R
+
+# Check no files are missing from EXTRA_DIST rules, and that all
+# generated files have been included in the tarball.  (Note you must
+# have done 'make dist')
+maintainer-check-extra-dist:
+	@zcat $(PACKAGE_NAME)-$(VERSION).tar.gz | tar tf - | sort | \
+	    sed 's,^$(PACKAGE_NAME)-$(VERSION)/,,' > tarfiles
+	@git ls-files | \
+	    sort > gitfiles
+	@comm -13 tarfiles gitfiles > comm-out
+	@echo Checking for differences between EXTRA_DIST and git ...
+	@cat comm-out
+	@[ ! -s comm-out ]
+	@rm tarfiles gitfiles comm-out
+	@echo PASS: EXTRA_DIST tests
