@@ -29,6 +29,9 @@ demo_event_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 demo_event_CPPFLAGS = -I$(top_srcdir)/include
 demo_event_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = ublksrv.pc
+
 CLEANFILES = *~ test cscope.* include/*~ *.d
 
 R = 10
