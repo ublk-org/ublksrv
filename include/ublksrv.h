@@ -154,7 +154,9 @@ struct ublksrv_queue {
 	char *io_buf;
 
 	unsigned cmd_inflight, tgt_io_inflight;
-	bool stopping, idle;
+#define UBLKSRV_QUEUE_STOPPING	(1U << 0)
+#define UBLKSRV_QUEUE_IDLE	(1U << 1)
+	unsigned state;
 
 	/* eventfd */
 	int efd;

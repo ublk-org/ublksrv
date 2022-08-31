@@ -207,7 +207,7 @@ static inline int ublksrv_queue_io_cmd(struct ublksrv_queue *q,
 
 	ublksrv_log(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
 			__func__, q->q_id, tag, cmd_op,
-			io->flags, q->stopping);
+			io->flags, !!(q->state & UBLKSRV_QUEUE_STOPPING));
 	return 1;
 }
 
@@ -230,7 +230,7 @@ static inline int __ublksrv_queue_event(struct ublksrv_queue *q)
 		struct io_uring_sqe *sqe;
 		__u64 user_data = build_eventfd_data();
 
-		if (q->stopping)
+		if (q->state & UBLKSRV_QUEUE_STOPPING)
 			return -EINVAL;
 
 		sqe = io_uring_get_sqe(&q->ring);
@@ -311,7 +311,7 @@ static void ublksrv_submit_fetch_commands(struct ublksrv_queue *q)
 
 static int ublksrv_queue_is_done(struct ublksrv_queue *q)
 {
-	return q->stopping && (!q->cmd_inflight && !q->tgt_io_inflight);
+	return (q->state & UBLKSRV_QUEUE_STOPPING) && (!q->cmd_inflight && !q->tgt_io_inflight);
 }
 
 /* used for allocating zero copy vma space */
@@ -460,7 +460,7 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 
 static void ublksrv_kill_eventfd(struct ublksrv_queue *q)
 {
-	if (q->stopping && q->efd > 0) {
+	if ((q->state & UBLKSRV_QUEUE_STOPPING) && q->efd > 0) {
 		unsigned long long data = 1;
 
 		write(q->efd, &data, 8);
@@ -510,7 +510,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	dev->__queues[q_id] = q;
 
 	q->dev = dev;
-	q->stopping = 0;
+	q->state = 0;
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
@@ -742,14 +742,15 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	unsigned tag = user_data_to_tag(cqe->user_data);
 	unsigned cmd_op = user_data_to_op(cqe->user_data);
-	int fetch = (cqe->res != UBLK_IO_RES_ABORT) && !q->stopping;
+	int fetch = (cqe->res != UBLK_IO_RES_ABORT) &&
+		!(q->state & UBLKSRV_QUEUE_STOPPING);
 	struct ublk_io *io;
 
 	ublksrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d event %d) stopping %d\n",
 			__func__, cqe->res, q->q_id, tag, cmd_op,
 			is_target_io(cqe->user_data),
 			is_eventfd_io(cqe->user_data),
-			q->stopping);
+			(q->state & UBLKSRV_QUEUE_STOPPING));
 
 	/* Don't retrieve io in case of target io */
 	if (is_target_io(cqe->user_data)) {
@@ -761,7 +762,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	q->cmd_inflight--;
 
 	if (!fetch) {
-		q->stopping = 1;
+		q->state |= UBLKSRV_QUEUE_STOPPING;
 		io->flags &= ~UBLKSRV_NEED_FETCH_RQ;
 	}
 
@@ -810,12 +811,12 @@ static void ublksrv_queue_discard_io_pages(struct ublksrv_queue *q)
 	unsigned int io_buf_size = cdev->dev_info.max_io_buf_bytes;
 	int i = 0;
 
-	if (q->idle)
+	if (q->state & UBLKSRV_QUEUE_IDLE)
 		return;
 
 	for (i = 0; i < q->q_depth; i++)
 		madvise(q->ios[i].buf_addr, io_buf_size, MADV_DONTNEED);
-	q->idle = true;
+	q->state |= UBLKSRV_QUEUE_IDLE;
 }
 
 static void ublksrv_reset_aio_batch(struct ublksrv_queue *q)
@@ -842,14 +843,15 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 		.tv_sec = UBLKSRV_IO_IDLE_SECS,
 		.tv_nsec = 0
         };
-	struct __kernel_timespec *tsp = q->idle ? NULL : &ts;
+	struct __kernel_timespec *tsp = (q->state & UBLKSRV_QUEUE_IDLE) ?
+		NULL : &ts;
 	struct io_uring_cqe *cqe;
 
 	ublksrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
 				q->dev->ctrl_dev->dev_info.dev_id,
 				q->q_id, io_uring_sq_ready(&q->ring),
 				q->cmd_inflight, q->tgt_io_inflight,
-				q->stopping);
+				(q->state & UBLKSRV_QUEUE_STOPPING));
 
 	if (ublksrv_queue_is_done(q))
 		return -ENODEV;
@@ -861,15 +863,16 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 	ublksrv_submit_aio_batch(q);
 
 	ublksrv_log(LOG_INFO, "submit result %d, reapped %d stop %d idle %d",
-			ret, reapped, q->stopping, q->idle);
+			ret, reapped, (q->state & UBLKSRV_QUEUE_STOPPING),
+			(q->state & UBLKSRV_QUEUE_IDLE));
 
-	if (q->stopping)
+	if ((q->state & UBLKSRV_QUEUE_STOPPING))
 		ublksrv_kill_eventfd(q);
 	else {
 		if (ret == -ETIME && reapped == 0)
 			ublksrv_queue_discard_io_pages(q);
-		else if (q->idle)
-			q->idle = false;
+		else if ((q->state & UBLKSRV_QUEUE_IDLE))
+			q->state &= ~UBLKSRV_QUEUE_IDLE;
 	}
 
 	return reapped;
