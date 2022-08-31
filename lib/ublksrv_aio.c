@@ -173,6 +173,24 @@ void ublksrv_aio_free_req(struct ublksrv_aio_ctx *ctx, struct ublksrv_aio *req)
 	free(req);
 }
 
+static bool ublksrv_aio_add_ctx_for_submit(struct ublksrv_queue *q,
+		struct ublksrv_aio_ctx *ctx)
+{
+	int i = 0;
+
+	for (i = 0; i < q->nr_ctxs; i++) {
+		if (q->ctxs[i] == ctx)
+			return true;
+	}
+
+	if (q->nr_ctxs < UBLKSRV_NR_CTX_BATCH - 1) {
+		q->ctxs[q->nr_ctxs++] = ctx;
+		return true;
+	}
+
+	return false;
+}
+
 void ublksrv_aio_submit_req(struct ublksrv_aio_ctx *ctx,
 		struct ublksrv_queue *q, struct ublksrv_aio *req)
 {
@@ -182,7 +200,8 @@ void ublksrv_aio_submit_req(struct ublksrv_aio_ctx *ctx,
 	aio_list_add(&ctx->submit.list, req);
 	pthread_spin_unlock(&ctx->submit.lock);
 
-	write(ctx->efd, &data, 8);
+	if (!ublksrv_aio_add_ctx_for_submit(q, ctx))
+		write(ctx->efd, &data, 8);
 }
 
 void ublksrv_aio_get_completed_reqs(struct ublksrv_aio_ctx *ctx,

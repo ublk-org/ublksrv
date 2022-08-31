@@ -71,6 +71,8 @@ extern "C" {
  */
 #define UBLKSRV_F_NEED_EVENTFD		(1UL << 1)
 
+struct ublksrv_aio_ctx;
+
 /*
  * Generic data for creating one ublk device
  *
@@ -167,6 +169,10 @@ struct ublksrv_queue {
 
 	unsigned  tid;
 	struct ublksrv_dev *dev;
+
+#define UBLKSRV_NR_CTX_BATCH 4
+	int nr_ctxs;
+	struct ublksrv_aio_ctx *ctxs[UBLKSRV_NR_CTX_BATCH];
 
 	struct ublk_io ios[0];
 };

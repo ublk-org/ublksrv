@@ -3,6 +3,7 @@
 #include <config.h>
 
 #include "ublksrv_priv.h"
+#include "ublksrv_aio.h"
 
 /*
  * /dev/ublkbN shares same lifetime with the ublk io daemon:
@@ -817,6 +818,23 @@ static void ublksrv_queue_discard_io_pages(struct ublksrv_queue *q)
 	q->idle = true;
 }
 
+static void ublksrv_reset_aio_batch(struct ublksrv_queue *q)
+{
+	q->nr_ctxs = 0;
+}
+
+static void ublksrv_submit_aio_batch(struct ublksrv_queue *q)
+{
+	int i;
+
+	for (i = 0; i < q->nr_ctxs; i++) {
+		struct ublksrv_aio_ctx *ctx = q->ctxs[i];
+		unsigned long data = 1;
+
+		write(ctx->efd, &data, 8);
+	}
+}
+
 int ublksrv_process_io(struct ublksrv_queue *q)
 {
 	int ret, reapped;
@@ -837,7 +855,10 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 		return -ENODEV;
 
 	ret = io_uring_submit_and_wait_timeout(&q->ring, &cqe, 1, tsp, NULL);
+
+	ublksrv_reset_aio_batch(q);
 	reapped = ublksrv_reap_events_uring(&q->ring);
+	ublksrv_submit_aio_batch(q);
 
 	ublksrv_log(LOG_INFO, "submit result %d, reapped %d stop %d idle %d",
 			ret, reapped, q->stopping, q->idle);
