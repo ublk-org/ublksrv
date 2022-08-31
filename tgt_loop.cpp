@@ -97,8 +97,16 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		return -2;
 
 	if (S_ISBLK(st.st_mode)) {
+		unsigned int bs, pbs;
+
 		if (ioctl(fd, BLKGETSIZE64, &bytes) != 0)
 			return -1;
+		if (ioctl(fd, BLKSSZGET, &bs) != 0)
+			return -1;
+		if (ioctl(fd, BLKPBSZGET, &pbs) != 0)
+			return -1;
+		p.basic.logical_bs_shift = ilog2(bs);
+		p.basic.physical_bs_shift = ilog2(pbs);
 		can_discard = backing_supports_discard(file);
 	} else if (S_ISREG(st.st_mode)) {
 		bytes = st.st_size;
