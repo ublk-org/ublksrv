@@ -4,6 +4,7 @@
 *.lo
 *.o
 *.so
+*.tar.gz
 *~
 
 .deps

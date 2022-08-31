@@ -2,6 +2,11 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
+EXTRA_DIST = \
+	COPYING.LGPL \
+	.gitignore \
+	LICENSE
+
 SUBDIRS = include lib tests
 
 AM_CXXFLAGS = -fcoroutines -std=c++20
