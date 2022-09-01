@@ -28,6 +28,8 @@ test "x$U" != "x" && AC_MSG_ERROR([Compiler not ANSI compliant])
 
 AM_PROG_CC_C_O
 
+m4_ifdef([AX_PTHREAD],,
+ [m4_fatal([The m4 macro AX_PTHREAD has not been defined. Please install the autoconf-archive package.])])
 AX_PTHREAD
 
 dnl Check for C++.
