@@ -386,6 +386,8 @@ extern void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 			const struct ublksrv_tgt_type *type, void *data),
 		void *data);
 
+extern void ublksrv_apply_oom_protection();
+
 #ifdef __cplusplus
 }
 #endif

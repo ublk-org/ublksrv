@@ -883,3 +883,23 @@ struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 {
 	return dev->__queues[q_id];
 }
+
+/* called in ublksrv process context */
+void ublksrv_apply_oom_protection()
+{
+	char oom_score_adj_path[64];
+	pid_t pid = getpid();
+	int fd;
+
+	snprintf(oom_score_adj_path, 64, "/proc/%d/oom_score_adj", pid);
+
+	fd = open(oom_score_adj_path, O_RDWR);
+	if (fd > 0) {
+		char val[32];
+		int len;
+
+		len = snprintf(val, 32, "%d", -1000);
+		write(fd, val, len);
+		close(fd);
+	}
+}
