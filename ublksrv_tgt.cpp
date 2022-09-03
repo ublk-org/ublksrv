@@ -275,6 +275,7 @@ static void ublksrv_io_handler(void *data)
 	}
 
 	setup_pthread_sigmask();
+	ublksrv_apply_oom_protection();
 
 	info_array = (struct ublksrv_queue_info *)calloc(sizeof(
 				struct ublksrv_queue_info),
