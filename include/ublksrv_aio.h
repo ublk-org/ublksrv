@@ -5,6 +5,10 @@
 
 #include "ublksrv.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ublksrv_aio_ctx;
 struct ublksrv_aio;
 
@@ -162,4 +166,7 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 		struct aio_list *completed);
 void ublksrv_aio_handle_event(struct ublksrv_aio_ctx *ctx,
 		struct ublksrv_queue *q);
+#ifdef __cplusplus
+}
+#endif
 #endif
