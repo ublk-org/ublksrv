@@ -519,6 +519,8 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
 	if (need_get_data)
 		data.flags |= UBLK_F_NEED_GET_DATA;
+	if (!strcmp(data.tgt_type, "loop"))
+		data.ublksrv_flags |= UBLKSRV_F_NEED_EVENTFD;
 
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;
