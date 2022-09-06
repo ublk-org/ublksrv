@@ -110,6 +110,11 @@ make test T=null/001
 make test T=loop/001
 ...
 
+4.4 run specified tests or test groups
+
+make test T=generic:loop/001:null
+
+
 5 License
 
 nlohmann(include/nlohmann/json.hpp) is from [3], which is covered by MIT

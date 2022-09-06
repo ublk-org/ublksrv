@@ -44,12 +44,15 @@ export T_URING_COMP=0
 export T_NEED_GET_DATA=0
 export T_TYPE_PARAMS=""
 
-if [ -d $TEST ]; then
-	run_test_grp $TEST
-elif [ -f $TEST ]; then
-	run_test $TEST
-elif [ `basename $TEST` = "all" ]; then
-	run_test_all `dirname $TEST`
-fi
+_ITEMS=($(echo ${TEST} | tr ':' '\n'))
+for _ITEM in "${_ITEMS[@]}"; do
+	if [ -d ${_ITEM} ]; then
+		run_test_grp ${_ITEM}
+	elif [ -f ${_ITEM} ]; then
+		run_test ${_ITEM}
+	elif [ `basename ${_ITEM}` = "all" ]; then
+		run_test_all `dirname ${_ITEM}`
+	fi
+done
 
 rm -f ${UBLK_TMP}
