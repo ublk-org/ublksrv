@@ -366,6 +366,9 @@ static void loop_deinit_tgt(struct ublksrv_dev *dev)
 	pthread_join(io_thread, NULL);
 	ublksrv_aio_ctx_deinit(aio_ctx);
 
+	fsync(dev->tgt.fds[1]);
+	close(dev->tgt.fds[1]);
+
 	free(dev->tgt.tgt_data);
 }
 
