@@ -74,7 +74,7 @@ static void *loop_sync_io_handler_fn(void *data)
 	int ret;
 
 	if (epoll_fd < 0) {
-	        fprintf(stderr, "ublk dev %d create epoll fd failed\n", dev_id);
+	        syslog(LOG_ERR, "ublk dev %d create epoll fd failed\n", dev_id);
 	        return NULL;
 	}
 
@@ -184,7 +184,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 	fd = open(file, O_RDWR);
 	if (fd < 0) {
-		fprintf(stderr, "__func__, backing file %s can't be opened\n",
+		syslog(LOG_ERR, "%s: backing file %s can't be opened\n",
 				__func__, file);
 		return -2;
 	}
@@ -252,7 +252,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 	aio_ctx = ublksrv_aio_ctx_init(dev, 0);
 	if (!aio_ctx) {
-		fprintf(stderr, "dev %d call ublk_aio_ctx_init failed\n",
+		syslog(LOG_ERR, "dev %d call ublk_aio_ctx_init failed\n",
 				dev->ctrl_dev->dev_info.dev_id);
 		return -ENOMEM;
 	}
