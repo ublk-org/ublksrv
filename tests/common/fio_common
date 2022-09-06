@@ -250,7 +250,6 @@ __run_dev_perf_no_create()
 	JOBS=$2
 	QUEUES=$3
 	DEV=$4
-	FILE=$5
 	RT=$TRUNTIME
 
 	RW="randwrite"
@@ -289,7 +288,7 @@ __run_dev_perf()
 	FILE=`__ublk_loop_backing_file`
 
 	echo -e "\tfio (ublk/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES, uring_comp: $T_URING_COMP, get_data: $T_NEED_GET_DATA)..."
-	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
+	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV
 
 	__remove_ublk_dev 0
 }
@@ -306,7 +305,7 @@ __run_loop_dev_perf()
 	FILE=`losetup | grep loop0 | awk '{print $6}'`
 
 	echo -e "\tfio (kernel_loop/$TYPE($FILE), libaio, bs 4k, dio, hw queues:$QUEUES)..."
-	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV $FILE
+	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV
 
 	__remove_kernel_loop_dev
 }
