@@ -182,7 +182,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	if (!file)
 		return -1;
 
-	fd = open(file, O_RDWR | O_DIRECT);
+	fd = open(file, O_RDWR);
 	if (fd < 0) {
 		fprintf(stderr, "__func__, backing file %s can't be opened\n",
 				__func__, file);
@@ -207,8 +207,19 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	} else if (S_ISREG(st.st_mode)) {
 		bytes = st.st_size;
 		can_discard = true;
+		p.basic.logical_bs_shift = ilog2(st.st_blksize);
+		p.basic.physical_bs_shift = ilog2(st.st_blksize);
 	} else {
 		bytes = 0;
+	}
+
+	/*
+	 * in case of buffered io, use common bs/pbs so that all FS
+	 * image can be supported
+	 */
+	if (fcntl(fd, F_SETFL, O_DIRECT)) {
+		p.basic.logical_bs_shift = 9;
+		p.basic.physical_bs_shift = 12;
 	}
 
 	tgt->tgt_data = strdup(file);
