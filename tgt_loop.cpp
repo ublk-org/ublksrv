@@ -133,10 +133,12 @@ static bool backing_supports_discard(char *name)
 static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
+	int buffered_io = 0;
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
 	static const struct option lo_longopts[] = {
 		{ "file",		1,	NULL, 'f' },
+		{ "buffered_io",	no_argument, &buffered_io, 1},
 		{ NULL }
 	};
 	unsigned long long bytes;
@@ -217,9 +219,10 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	 * in case of buffered io, use common bs/pbs so that all FS
 	 * image can be supported
 	 */
-	if (fcntl(fd, F_SETFL, O_DIRECT)) {
+	if (buffered_io || fcntl(fd, F_SETFL, O_DIRECT)) {
 		p.basic.logical_bs_shift = 9;
 		p.basic.physical_bs_shift = 12;
+		buffered_io = 1;
 	}
 
 	tgt->tgt_data = strdup(file);
@@ -240,6 +243,12 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	do {
 		ret = ublksrv_json_write_target_str_info(jbuf, jbuf_size,
 				"backing_file", file);
+		if (ret < 0)
+			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
+	} while (ret < 0);
+	do {
+		ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size,
+				"direct_io", !buffered_io);
 		if (ret < 0)
 			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
 	} while (ret < 0);

@@ -21,6 +21,7 @@ EXTRA_DIST = \
 	loop/004 \
 	loop/005 \
 	loop/006 \
+	loop/007 \
 	null/001 \
 	null/002 \
 	null/004 \
