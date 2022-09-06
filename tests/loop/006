@@ -1,6 +1,12 @@
 #!/bin/bash
 
 . common/fio_common
+. common/loop_common
+
+file=`_create_loop_backing_file "loop"`
+export T_TYPE_PARAMS=" -f $file"
 
 export T_NEED_GET_DATA=1
 __run_dev_perf "loop" 1 1
+
+[ -f "$file" ] && rm -f $file

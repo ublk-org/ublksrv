@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+#!/bin/bash
+
+_create_loop_backing_file() {
+	file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_XXXXX`
+	#truncate -s 2G $file
+	dd if=/dev/zero of=$file bs=1M count=1k oflag=direct > /dev/null 2>&1
+	echo $file
+}
+
+__remove_kernel_loop_dev() {
+	local DEV=$1
+	losetup -d $DEV
+}
+
+__create_kernel_loop_dev() {
+	local my_file=$1
+	losetup -f $my_file --direct-io=on > /dev/null 2>&1
+	local my_dev=`losetup -l | grep $my_file | awk '{print $1}'`
+	echo $my_dev
+}
+
+__run_loop_dev_perf()
+{
+	local TYPE=$1
+	local JOBS=$2
+	local QUEUES=$3
+	local backing_file=$4
+	local DEV=`__create_kernel_loop_dev $backing_file`
+
+	echo -e "\tfio (kernel_loop/$TYPE($file), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	__run_dev_perf_no_create $TYPE $JOBS $QUEUES $DEV
+
+	__remove_kernel_loop_dev $DEV
+}

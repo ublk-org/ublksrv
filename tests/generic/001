@@ -2,6 +2,7 @@
 #!/bin/bash
 
 . common/fio_common
+. common/loop_common
 
 echo -e "\trun fio with delete ublk-loop test"
 
@@ -33,6 +34,11 @@ ublk_run_delete_test()
 	done
 }
 
+file=`_create_loop_backing_file "loop"`
+export T_TYPE_PARAMS=" -f $file"
+
 for NEED_GET_DATA in `seq 0 1`; do
 	ublk_run_delete_test
 done
+
+[ -f "$file" ] && rm -f $file

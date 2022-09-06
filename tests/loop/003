@@ -2,5 +2,10 @@
 #!/bin/bash
 
 . common/fio_common
+. common/loop_common
 
-__run_loop_dev_perf "kloop" 1 1
+file=`_create_loop_backing_file "loop"`
+
+__run_loop_dev_perf "kloop" 1 1 $file
+
+[ -f "$file" ] && rm -f $file

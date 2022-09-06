@@ -11,6 +11,7 @@ CLEANFILES = *~ */*~
 
 EXTRA_DIST = \
 	common/fio_common \
+	common/loop_common \
 	generic/001 \
 	generic/002 \
 	generic/003 \

@@ -2,6 +2,7 @@
 #!/bin/bash
 
 . common/fio_common
+. common/loop_common
 
 ublk_run_mount_test()
 {
@@ -10,7 +11,7 @@ ublk_run_mount_test()
 
 	ROOT_FSTYPE=`findmnt -l -o FSTYPE -n /`
 
-	wipefs -a $DEV
+	wipefs -a $DEV > /dev/null 2>&1
 	eval mkfs.${ROOT_FSTYPE} $DEV > /dev/null 2>&1
 
 	mount $DEV  $MNT > /dev/null 2>&1
@@ -32,8 +33,12 @@ MNT=`mktemp -d`
 URING_COMP=1
 NEED_GET_DATA=1
 
+file=`_create_loop_backing_file "loop"`
+export T_TYPE_PARAMS=" -f $file"
+
 for NEED_GET_DATA in `seq 0 1`; do
 	ublk_run_mount_test $URING_COMP $NEED_GET_DATA
 done
 
 rm -fr $MNT
+[ -f "$file" ] && rm -f $file
