@@ -7,99 +7,6 @@
 #include "ublksrv_aio.h"
 #include "ublksrv_tgt.h"
 
-static struct ublksrv_aio_ctx *aio_ctx = NULL;
-static pthread_t io_thread;
-
-static bool loop_is_sync_io(struct ublksrv_queue *q,
-		const struct ublk_io *io, int tag)
-{
-	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
-	unsigned ublk_op = ublksrv_get_op(iod);
-
-	switch (ublk_op) {
-	case UBLK_IO_OP_FLUSH:
-	case UBLK_IO_OP_WRITE_ZEROES:
-	case UBLK_IO_OP_DISCARD:
-		return true;
-	}
-
-	return false;
-}
-
-static int loop_sync_io_submitter(struct ublksrv_aio_ctx *ctx,
-		struct ublksrv_aio *req)
-{
-	const struct ublksrv_io_desc *iod = &req->io;
-	unsigned ublk_op = ublksrv_get_op(iod);
-	void *buf = (void *)iod->addr;
-	unsigned len = iod->nr_sectors << 9;
-	unsigned long long offset = iod->start_sector << 9;
-	int mode = FALLOC_FL_KEEP_SIZE;
-	int ret;
-
-	switch (ublk_op) {
-	case UBLK_IO_OP_FLUSH:
-		ret = fdatasync(req->fd);
-		break;
-	case UBLK_IO_OP_WRITE_ZEROES:
-		mode |= FALLOC_FL_ZERO_RANGE;
-	case UBLK_IO_OP_DISCARD:
-		mode |= FALLOC_FL_PUNCH_HOLE;
-		ret = fallocate(req->fd, mode, offset, len);
-		break;
-	case UBLK_IO_OP_READ:
-	case UBLK_IO_OP_WRITE:
-	default:
-		ublksrv_log(LOG_ERR, "%s: wrong op %d, fd %d, id %x\n",
-				__func__, ublk_op, req->fd, req->id);
-		return -EINVAL;
-	}
-	ublksrv_log(LOG_INFO, "%s: op %d, fd %d, id %x, off %llx len %u res %d %s\n",
-			__func__, ublk_op, req->fd, req->id, offset, len, ret,
-			strerror(errno));
-exit:
-	req->res = ret;
-	return 1;
-}
-
-#define EPOLL_NR_EVENTS 1
-static void *loop_sync_io_handler_fn(void *data)
-{
-	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
-
-	unsigned dev_id = ctx->dev->ctrl_dev->dev_info.dev_id;
-	struct epoll_event events[EPOLL_NR_EVENTS];
-	int epoll_fd = epoll_create(EPOLL_NR_EVENTS);
-	struct epoll_event read_event;
-	int ret;
-
-	if (epoll_fd < 0) {
-	        syslog(LOG_ERR, "ublk dev %d create epoll fd failed\n", dev_id);
-	        return NULL;
-	}
-
-	ublksrv_log(LOG_INFO, "ublk dev %d aio context(sync io submitter) started tid %d\n",
-			dev_id, gettid());
-
-	read_event.events = EPOLLIN;
-	read_event.data.fd = ctx->efd;
-	ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ctx->efd, &read_event);
-
-	while (!ublksrv_aio_ctx_dead(ctx)) {
-		struct aio_list list;
-
-		aio_list_init(&list);
-
-		ublksrv_aio_submit_worker(ctx, loop_sync_io_submitter, &list);
-
-		ublksrv_aio_complete_worker(ctx, &list);
-
-		epoll_wait(epoll_fd, events, EPOLL_NR_EVENTS, -1);
-	}
-
-	return NULL;
-}
-
 static const char *loop_tgt_backfile(struct ublksrv_tgt_info *tgt)
 {
 	return (const char *)tgt->tgt_data;
@@ -259,19 +166,6 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
 	} while (ret < 0);
 
-	aio_ctx = ublksrv_aio_ctx_init(dev, 0);
-	if (!aio_ctx) {
-		syslog(LOG_ERR, "dev %d call ublk_aio_ctx_init failed\n",
-				dev->ctrl_dev->dev_info.dev_id);
-		return -ENOMEM;
-	}
-
-	if (pthread_create(&io_thread, NULL, loop_sync_io_handler_fn,
-				aio_ctx)) {
-		ublksrv_aio_ctx_deinit(aio_ctx);
-		aio_ctx = NULL;
-	}
-
 	return 0;
 }
 
@@ -280,21 +174,67 @@ static void loop_usage_for_add(void)
 	printf("           loop: -f backing_file\n");
 }
 
+static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
+{
+       __u16 ublk_op = ublksrv_get_op(iod);
+       __u32 flags = ublksrv_get_flags(iod);
+       int mode = FALLOC_FL_KEEP_SIZE;
+
+       /* follow logic of linux kernel loop */
+       if (ublk_op == UBLK_IO_OP_DISCARD) {
+               mode |= FALLOC_FL_PUNCH_HOLE;
+       } else if (ublk_op == UBLK_IO_OP_WRITE_ZEROES) {
+               if (flags & UBLK_IO_F_NOUNMAP)
+                       mode |= FALLOC_FL_ZERO_RANGE;
+               else
+                       mode |= FALLOC_FL_PUNCH_HOLE;
+       } else {
+               mode |= FALLOC_FL_ZERO_RANGE;
+       }
+
+       return mode;
+}
+
 static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
 		int tag)
 {
 	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
-	unsigned io_op = ublksrv_convert_cmd_op(iod);
 	struct io_uring_sqe *sqe = io_uring_get_sqe(&q->ring);
+	unsigned ublk_op = ublksrv_get_op(iod);
 
 	if (!sqe)
 		return 0;
 
-	io_uring_prep_rw(io_op, sqe, 1, (void *)iod->addr, iod->nr_sectors << 9,
-			iod->start_sector << 9);
-	sqe->flags = IOSQE_FIXED_FILE;
+	switch (ublk_op) {
+	case UBLK_IO_OP_FLUSH:
+		io_uring_prep_fsync(sqe, q->dev->tgt.fds[1],
+				IORING_FSYNC_DATASYNC);
+		break;
+	case UBLK_IO_OP_WRITE_ZEROES:
+	case UBLK_IO_OP_DISCARD:
+		io_uring_prep_fallocate(sqe, q->dev->tgt.fds[1],
+				loop_fallocate_mode(iod),
+				iod->start_sector << 9,
+				iod->nr_sectors << 9);
+		break;
+	case UBLK_IO_OP_READ:
+		io_uring_prep_read(sqe, 1, (void *)iod->addr,
+				iod->nr_sectors << 9,
+				iod->start_sector << 9);
+		sqe->flags = IOSQE_FIXED_FILE;
+		break;
+	case UBLK_IO_OP_WRITE:
+		io_uring_prep_write(sqe, 1, (void *)iod->addr,
+				iod->nr_sectors << 9,
+				iod->start_sector << 9);
+		sqe->flags = IOSQE_FIXED_FILE;
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	/* bit63 marks us as tgt io */
-	sqe->user_data = build_user_data(tag, io_op, 0, 1);
+	sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 
 	q->tgt_io_inflight += 1;
 
@@ -302,8 +242,8 @@ static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %llx %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx) iof %x\n",
-			__func__, io_op, sqe->off, sqe->len, sqe->addr,
-			q->q_id, tag, io_op, 1, sqe->user_data, io->flags);
+			__func__, ublk_op, sqe->off, sqe->len, sqe->addr,
+			q->q_id, tag, ublk_op, 1, sqe->user_data, io->flags);
 
 	return 1;
 }
@@ -317,7 +257,7 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 	io->queued_tgt_io = 0;
  again:
 	ret = loop_queue_tgt_io(q, io, tag);
-	if (ret) {
+	if (ret > 0) {
 		if (io->queued_tgt_io)
 			ublksrv_log(LOG_INFO, "bad queued_tgt_io %d\n",
 					io->queued_tgt_io);
@@ -331,27 +271,18 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 			goto again;
 
 		ublksrv_complete_io(q, tag, cqe->res);
+	} else if (ret < 0) {
+		syslog(LOG_ERR, "fail to queue io %d, ret %d\n", tag, tag);
 	} else {
-		ublksrv_log(LOG_INFO, "no sqe %d\n", tag);
+		syslog(LOG_ERR, "no sqe %d\n", tag);
 	}
 }
 
 static int loop_handle_io_async(struct ublksrv_queue *q, int tag)
 {
 	struct ublk_io_tgt *io = (struct ublk_io_tgt *)&q->ios[tag];
-	bool sync = loop_is_sync_io(q, (struct ublk_io *)io, tag);
-	struct ublksrv_aio *req;
 
-	if (!sync) {
-		io->co = __loop_handle_io_async(q, (struct ublk_io *)io, tag);
-		return 0;
-	}
-
-	req = ublksrv_aio_alloc_req(aio_ctx, 0);
-	req->io = *ublksrv_get_iod(q, tag);
-	req->fd = q->dev->tgt.fds[1];
-	req->id = ublksrv_aio_pid_tag(q->q_id, tag);
-	ublksrv_aio_submit_req(aio_ctx, q, req);
+	io->co = __loop_handle_io_async(q, (struct ublk_io *)io, tag);
 	return 0;
 }
 
@@ -371,30 +302,19 @@ static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 
 static void loop_deinit_tgt(struct ublksrv_dev *dev)
 {
-	ublksrv_aio_ctx_shutdown(aio_ctx);
-	pthread_join(io_thread, NULL);
-	ublksrv_aio_ctx_deinit(aio_ctx);
-
 	fsync(dev->tgt.fds[1]);
 	close(dev->tgt.fds[1]);
 
 	free(dev->tgt.tgt_data);
 }
 
-static void loop_handle_event(struct ublksrv_queue *q)
-{
-	ublksrv_aio_handle_event(aio_ctx, q);
-}
-
 struct ublksrv_tgt_type  loop_tgt_type = {
 	.handle_io_async = loop_handle_io_async,
 	.tgt_io_done = loop_tgt_io_done,
-	.handle_event = loop_handle_event,
 	.usage_for_add	=  loop_usage_for_add,
 	.init_tgt = loop_init_tgt,
 	.deinit_tgt	=  loop_deinit_tgt,
 	.type	= UBLKSRV_TGT_TYPE_LOOP,
-	.ublksrv_flags  = UBLKSRV_F_NEED_EVENTFD,
 	.name	=  "loop",
 };
 
