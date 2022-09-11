@@ -387,15 +387,15 @@ static void loop_handle_event(struct ublksrv_queue *q)
 }
 
 struct ublksrv_tgt_type  loop_tgt_type = {
-	.type	= UBLKSRV_TGT_TYPE_LOOP,
-	.ublksrv_flags  = UBLKSRV_F_NEED_EVENTFD,
-	.name	=  "loop",
-	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,
 	.tgt_io_done = loop_tgt_io_done,
 	.handle_event = loop_handle_event,
 	.usage_for_add	=  loop_usage_for_add,
+	.init_tgt = loop_init_tgt,
 	.deinit_tgt	=  loop_deinit_tgt,
+	.type	= UBLKSRV_TGT_TYPE_LOOP,
+	.ublksrv_flags  = UBLKSRV_F_NEED_EVENTFD,
+	.name	=  "loop",
 };
 
 static void tgt_loop_init() __attribute__((constructor));

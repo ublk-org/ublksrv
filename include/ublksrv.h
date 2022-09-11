@@ -161,6 +161,9 @@ struct ublksrv_queue {
 	/* eventfd */
 	int efd;
 
+	/* cache tgt ops */
+	const struct ublksrv_tgt_type *tgt_ops;
+
 	/*
 	 * ring for submit io command to ublk driver, can only be issued
 	 * from ublksrv daemon.
@@ -169,8 +172,8 @@ struct ublksrv_queue {
 	 */
 	struct io_uring ring;
 
-	unsigned  tid;
 	struct ublksrv_dev *dev;
+	unsigned  tid;
 
 #define UBLKSRV_NR_CTX_BATCH 4
 	int nr_ctxs;
@@ -202,20 +205,6 @@ struct ublksrv_tgt_info {
 };
 
 struct ublksrv_tgt_type {
-	int  type;
-	unsigned ublk_flags;	//flags required for ublk driver
-	unsigned ublksrv_flags;	//flags required for ublksrv
-	int extra_ios;		//extra io slots allocated for handling
-				//target specific IOs, such as meta io
-	const char *name;
-
-	/*
-	 * initialize this new target, argc/argv includes target specific
-	 * command line parameters
-	 */
-	int (*init_tgt)(struct ublksrv_dev *, int type, int argc,
-			char *argv[]);
-
 	/*
 	 * One IO request comes from /dev/ublkbN, so notify target code
 	 * for handling the IO. Inside target code, the IO can be handled
@@ -277,11 +266,25 @@ struct ublksrv_tgt_type {
 	 */
 	void (*usage_for_add)(void);
 
+	/*
+	 * initialize this new target, argc/argv includes target specific
+	 * command line parameters
+	 */
+	int (*init_tgt)(struct ublksrv_dev *, int type, int argc,
+			char *argv[]);
+
 	/* deinitialize this target */
 	void (*deinit_tgt)(struct ublksrv_dev *);
 
 	void *(*alloc_io_buf)(struct ublksrv_queue *q, int tag, int size);
 	void (*free_io_buf)(struct ublksrv_queue *q, void *buf, int tag);
+
+	int  type;
+	unsigned ublk_flags;	//flags required for ublk driver
+	unsigned ublksrv_flags;	//flags required for ublksrv
+	int extra_ios;		//extra io slots allocated for handling
+				//target specific IOs, such as meta io
+	const char *name;
 };
 
 struct ublksrv_dev {

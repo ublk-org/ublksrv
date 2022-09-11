@@ -69,10 +69,10 @@ static int null_handle_io_async(struct ublksrv_queue *q, int tag)
 }
 
 struct ublksrv_tgt_type  null_tgt_type = {
+	.handle_io_async = null_handle_io_async,
+	.init_tgt = null_init_tgt,
 	.type	= UBLKSRV_TGT_TYPE_NULL,
 	.name	=  "null",
-	.init_tgt = null_init_tgt,
-	.handle_io_async = null_handle_io_async,
 };
 
 static void tgt_null_init() __attribute__((constructor));

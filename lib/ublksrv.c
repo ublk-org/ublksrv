@@ -536,6 +536,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 			sizeof(struct ublk_io) * nr_ios);
 	dev->__queues[q_id] = q;
 
+	q->tgt_ops = dev->tgt.ops;	//cache ops for fast path
 	q->dev = dev;
 	q->state = 0;
 	q->q_id = q_id;
@@ -738,8 +739,8 @@ fail:
 }
 
 /* Be careful, target io may not have one ublk_io associated with  */
-static inline void ublksrv_handle_tgt_cqe(struct ublksrv_tgt_info *tgt,
-	struct ublksrv_queue *q, struct io_uring_cqe *cqe)
+static inline void ublksrv_handle_tgt_cqe(struct ublksrv_queue *q,
+		struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
 
@@ -752,11 +753,11 @@ static inline void ublksrv_handle_tgt_cqe(struct ublksrv_tgt_info *tgt,
 	}
 
 	if (is_eventfd_io(cqe->user_data)) {
-		if (tgt->ops->handle_event)
-			tgt->ops->handle_event(q);
+		if (q->tgt_ops->handle_event)
+			q->tgt_ops->handle_event(q);
 	} else {
-		if (tgt->ops->tgt_io_done)
-			tgt->ops->tgt_io_done(q, cqe);
+		if (q->tgt_ops->tgt_io_done)
+			q->tgt_ops->tgt_io_done(q, cqe);
 	}
 }
 
@@ -764,9 +765,6 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 		struct io_uring_cqe *cqe, void *data)
 {
 	struct ublksrv_queue *q = container_of(r, struct ublksrv_queue, ring);
-	struct ublksrv_dev *dev = q->dev;
-	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
-	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	unsigned tag = user_data_to_tag(cqe->user_data);
 	unsigned cmd_op = user_data_to_op(cqe->user_data);
 	int fetch = (cqe->res != UBLK_IO_RES_ABORT) &&
@@ -781,7 +779,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 
 	/* Don't retrieve io in case of target io */
 	if (is_target_io(cqe->user_data)) {
-		ublksrv_handle_tgt_cqe(tgt, q, cqe);
+		ublksrv_handle_tgt_cqe(q, cqe);
 		return;
 	}
 
@@ -800,7 +798,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	 * daemon can poll on both two rings.
 	 */
 	if (cqe->res == UBLK_IO_RES_OK) {
-		tgt->ops->handle_io_async(q, tag);
+		q->tgt_ops->handle_io_async(q, tag);
 	} else if (cqe->res == UBLK_IO_RES_NEED_GET_DATA) {
 		io->flags |= UBLKSRV_NEED_GET_DATA | UBLKSRV_IO_FREE;
 		ublksrv_queue_io_cmd(q, io, tag);
@@ -889,8 +887,8 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 	reapped = ublksrv_reap_events_uring(&q->ring);
 	ublksrv_submit_aio_batch(q);
 
-	if (q->dev->tgt.ops->handle_io_background)
-		q->dev->tgt.ops->handle_io_background(q,
+	if (q->tgt_ops->handle_io_background)
+		q->tgt_ops->handle_io_background(q,
 				io_uring_sq_ready(&q->ring));
 
 	ublksrv_log(LOG_INFO, "submit result %d, reapped %d stop %d idle %d",
