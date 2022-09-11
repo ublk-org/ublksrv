@@ -257,6 +257,19 @@ struct ublksrv_tgt_type {
 	void (*handle_event)(struct ublksrv_queue *);
 
 	/*
+	 * One typical use case is to flush meta data, which is usually done
+	 * in background. So there isn't any tag from libublksrv for this kind
+	 * of IOs, and the target code has to request for allocating extra ios
+	 * by passing tgt_type->extra_ios and let this callback consume & handle
+	 * these extra IOs.
+	 *
+	 * @nr_queued_io: count of queued IOs in ublksrv_reap_events_uring of
+	 * this time
+	 */
+	void (*handle_io_background)(struct ublksrv_queue *, int
+			nr_queued_io);
+
+	/*
 	 * show target specific command line for adding new device
 	 *
 	 * Be careful: this callback is the only one which is not run from

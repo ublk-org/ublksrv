@@ -889,6 +889,10 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 	reapped = ublksrv_reap_events_uring(&q->ring);
 	ublksrv_submit_aio_batch(q);
 
+	if (q->dev->tgt.ops->handle_io_background)
+		q->dev->tgt.ops->handle_io_background(q,
+				io_uring_sq_ready(&q->ring));
+
 	ublksrv_log(LOG_INFO, "submit result %d, reapped %d stop %d idle %d",
 			ret, reapped, (q->state & UBLKSRV_QUEUE_STOPPING),
 			(q->state & UBLKSRV_QUEUE_IDLE));
