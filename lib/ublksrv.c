@@ -135,6 +135,20 @@ void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 	}
 }
 
+const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name)
+{
+	int i;
+
+	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
+                const struct ublksrv_tgt_type  *type = tgt_list[i];
+
+		if (!strcmp(type->name, name))
+			return type;
+	}
+
+	return NULL;
+}
+
 int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
 {
 	if (type->type < UBLKSRV_TGT_TYPE_MAX && !tgt_list[type->type]) {

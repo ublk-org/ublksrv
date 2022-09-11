@@ -469,6 +469,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	};
 	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
+	const struct ublksrv_tgt_type *tgt_type;
 	char *type = NULL;
 	int opt, ret, zcopy = 0;
 	int daemon_pid;
@@ -519,8 +520,14 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
 	if (need_get_data)
 		data.flags |= UBLK_F_NEED_GET_DATA;
-	if (!strcmp(data.tgt_type, "loop"))
-		data.ublksrv_flags |= UBLKSRV_F_NEED_EVENTFD;
+
+	if (data.tgt_type == NULL)
+		return -EINVAL;
+	tgt_type = ublksrv_find_tgt_type(data.tgt_type);
+	if (tgt_type == NULL)
+		return -EINVAL;
+	data.flags |= tgt_type->ublk_flags;
+	data.ublksrv_flags |= tgt_type->ublksrv_flags;
 
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;

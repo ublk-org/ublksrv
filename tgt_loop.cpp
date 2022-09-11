@@ -388,6 +388,7 @@ static void loop_handle_event(struct ublksrv_queue *q)
 
 struct ublksrv_tgt_type  loop_tgt_type = {
 	.type	= UBLKSRV_TGT_TYPE_LOOP,
+	.ublksrv_flags  = UBLKSRV_F_NEED_EVENTFD,
 	.name	=  "loop",
 	.init_tgt = loop_init_tgt,
 	.handle_io_async = loop_handle_io_async,

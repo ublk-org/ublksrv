@@ -203,6 +203,8 @@ struct ublksrv_tgt_info {
 
 struct ublksrv_tgt_type {
 	int  type;
+	unsigned ublk_flags;	//flags required for ublk driver
+	unsigned ublksrv_flags;	//flags required for ublksrv
 	const char *name;
 
 	/*
@@ -385,6 +387,7 @@ extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);
 extern void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 			const struct ublksrv_tgt_type *type, void *data),
 		void *data);
+extern const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name);
 
 extern void ublksrv_apply_oom_protection();
 
