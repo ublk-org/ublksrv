@@ -197,7 +197,7 @@ static void *ublksrv_io_handler_fn(void *data)
 		ublksrv_tgt_store_dev_data(dev, buf);
 	pthread_mutex_unlock(&jbuf_lock);
 
-	q = ublksrv_queue_init(dev, q_id, NULL);
+	q = ublksrv_queue_init(dev, q_id, dev->tgt.ops->extra_ios, NULL);
 	if (!q) {
 		syslog(LOG_INFO, "ublk dev %d queue %d init queue failed",
 				dev->ctrl_dev->dev_info.dev_id, q_id);

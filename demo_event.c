@@ -314,7 +314,7 @@ static void *demo_event_io_handler_fn(void *data)
 			q_id, gettid());
 	pthread_mutex_unlock(&jbuf_lock);
 
-	q = ublksrv_queue_init(dev, q_id, info);
+	q = ublksrv_queue_init(dev, q_id, 0, info);
 	if (!q) {
 		fprintf(stderr, "ublk dev %d queue %d init queue failed\n",
 				dev->ctrl_dev->dev_info.dev_id, q_id);

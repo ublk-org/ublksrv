@@ -205,6 +205,8 @@ struct ublksrv_tgt_type {
 	int  type;
 	unsigned ublk_flags;	//flags required for ublk driver
 	unsigned ublksrv_flags;	//flags required for ublksrv
+	int extra_ios;		//extra io slots allocated for handling
+				//target specific IOs, such as meta io
 	const char *name;
 
 	/*
@@ -372,7 +374,7 @@ static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 }
 
 extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
-		unsigned short q_id, void *queue_data);
+		unsigned short q_id, int nr_extra_ios, void *queue_data);
 extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
 extern int ublksrv_queue_handled_event(struct ublksrv_queue *q);
 extern int ublksrv_queue_send_event(struct ublksrv_queue *q);
