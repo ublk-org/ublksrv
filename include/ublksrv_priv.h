@@ -108,7 +108,7 @@ static inline unsigned ilog2(unsigned x)
 }
 
 #define round_up(val, rnd) \
-	(((val) + (rnd - 1)) & ~(rnd - 1))
+	(((val) + ((rnd) - 1)) & ~((rnd) - 1))
 
 #ifndef offsetof
 #define offsetof(TYPE, MEMBER)  ((size_t)&((TYPE *)0)->MEMBER)
