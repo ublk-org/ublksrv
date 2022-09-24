@@ -103,7 +103,7 @@ struct co_io_job {
  * c++20 is stackless coroutine, and can't handle nested coroutine, so
  * the following two have to be defined as macro
  */
-#define co_io_job_submit_and_wait() do {		\
+#define co_io_job_submit_and_wait(tag) do {		\
 	co_await ublk_suspend_always();			\
 } while (0)
 

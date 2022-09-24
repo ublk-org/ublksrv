@@ -323,7 +323,7 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 					io->queued_tgt_io);
 		io->queued_tgt_io += 1;
 
-		co_io_job_submit_and_wait();
+		co_io_job_submit_and_wait(tag);
 		io->queued_tgt_io -= 1;
 
 		cqe = io->tgt_io_cqe;
