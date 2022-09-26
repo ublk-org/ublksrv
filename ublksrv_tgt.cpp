@@ -588,9 +588,9 @@ static void collect_tgt_types(unsigned int idx,
 
 	if (idx > 0)
 		data->pos += snprintf(data->names + data->pos,
-				4096 - data->pos, "|");
-	data->pos += snprintf(data->names + data->pos, 4096 - data->pos,
-			"%s", type->name);
+                  sizeof(data->names) - data->pos, "|");
+	data->pos += snprintf(data->names + data->pos,
+                sizeof(data->names) - data->pos, "%s", type->name);
 }
 
 static void show_tgt_add_usage(unsigned int idx,
@@ -606,9 +606,9 @@ static void cmd_dev_add_usage(char *cmd)
 		.pos = 0,
 	};
 
-	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "{");
+	data.pos += snprintf(data.names + data.pos, sizeof(data.names) - data.pos, "{");
 	ublksrv_for_each_tgt_type(collect_tgt_types, &data);
-	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "}");
+	data.pos += snprintf(data.names + data.pos, sizeof(data.names) - data.pos, "}");
 
 	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH "
 			"-u URING_COMP -g NEED_GET_DATA\n",
