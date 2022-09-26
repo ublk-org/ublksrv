@@ -42,6 +42,8 @@ TEST=$1
 export TRUNTIME=$2
 export T_URING_COMP=0
 export T_NEED_GET_DATA=0
+export T_RECOVERY=0
+export T_RECOVERY_REISSUE=0
 export T_TYPE_PARAMS=""
 
 _ITEMS=($(echo ${TEST} | tr ':' '\n'))
