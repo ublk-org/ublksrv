@@ -465,6 +465,8 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "zero_copy",		1,	NULL, 'z' },
 		{ "uring_comp",		1,	NULL, 'u' },
 		{ "need_get_data",	1,	NULL, 'g' },
+		{ "user_recovery",	1,	NULL, 'r'},
+		{ "user_recovery_reissue",	1,	NULL, 'i'},
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -475,6 +477,8 @@ static int cmd_dev_add(int argc, char *argv[])
 	int daemon_pid;
 	int uring_comp = 0;
 	int need_get_data = 0;
+	int user_recovery = 0;
+	int user_recovery_reissue = 0;
 	const char *dump_buf;
 
 	data.queue_depth = DEF_QD;
@@ -485,7 +489,7 @@ static int cmd_dev_add(int argc, char *argv[])
 
 	mkpath(data.run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:i:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -509,6 +513,12 @@ static int cmd_dev_add(int argc, char *argv[])
 		case 'g':
 			need_get_data = strtol(optarg, NULL, 10);
 			break;
+		case 'r':
+			user_recovery = strtol(optarg, NULL, 10);
+			break;
+		case 'i':
+			user_recovery_reissue = strtol(optarg, NULL, 10);
+			break;
 		}
 	}
 	data.max_io_buf_bytes = DEF_BUF_SIZE;
@@ -520,7 +530,10 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
 	if (need_get_data)
 		data.flags |= UBLK_F_NEED_GET_DATA;
-
+	if (user_recovery)
+		data.flags |= UBLK_F_USER_RECOVERY;
+	if (user_recovery_reissue)
+		data.flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
 	if (data.tgt_type == NULL)
 		return -EINVAL;
 	tgt_type = ublksrv_find_tgt_type(data.tgt_type);
@@ -611,7 +624,8 @@ static void cmd_dev_add_usage(char *cmd)
 	data.pos += snprintf(data.names + data.pos, 4096 - data.pos, "}");
 
 	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH "
-			"-u URING_COMP -g NEED_GET_DATA\n",
+			"-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY "
+			"-i USER_RECOVERY_REISSUE\n",
 			cmd, data.names);
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
@@ -756,6 +770,113 @@ static void cmd_dev_list_usage(char *cmd)
 	printf("%s list [-n DEV_ID]\n", cmd);
 }
 
+static int __cmd_dev_user_recover(int number, bool verbose)
+{
+	struct ublksrv_dev_data data = {
+		.dev_id = number,
+		.run_dir = UBLKSRV_PID_DIR,
+	};
+	struct ublksrv_ctrl_dev *dev;
+	struct ublksrv_tgt_base_json tgt_json = {0};
+	const char *buf;
+	char pid_file[64];
+	int ret;
+
+	dev = ublksrv_ctrl_init(&data);
+
+	ret = ublksrv_ctrl_start_recovery(dev);
+	if (ret < 0) {
+			fprintf(stderr, "can't start recovery for %d\n", number);
+		goto fail;
+	}
+
+	buf = ublksrv_tgt_get_dev_data(dev);
+	if (!buf) {
+		fprintf(stderr, "get dev %d data failed\n", number);
+		ret = -1;
+		goto fail;
+	}
+
+	ret = ublksrv_json_read_dev_info(buf, &dev->dev_info);
+	if (ret < 0) {
+		fprintf(stderr, "can't read dev info for %d\n", number);
+		goto fail;
+	}
+	ret = ublksrv_json_read_target_base_info(buf, &tgt_json);
+	if (ret < 0) {
+		fprintf(stderr, "can't read dev info for %d\n", number);
+		goto fail;
+	}
+
+	snprintf(pid_file, 64, "%s/%d.pid", dev->run_dir, dev->dev_info.dev_id);
+	ret = unlink(pid_file);
+	if (ret < 0) {
+		fprintf(stderr, "can't delete old pid_file for %d, error:%s\n",
+				number, strerror(errno));
+		goto fail;
+	}
+
+	/*
+	 * TODO: read target specific info such as "backing_file"
+	 */
+	dev->tgt_type = tgt_json.name;
+	dev->tgt_argc = 0;
+	dev->tgt_argv = NULL;
+
+	ret = ublksrv_start_daemon(dev);
+	if (ret < 0) {
+		fprintf(stderr, "start daemon %d failed\n", number);
+		goto fail;
+	}
+
+	ret = ublksrv_ctrl_end_recovery(dev, ret);
+	if (ret < 0) {
+		fprintf(stderr, "end recovery for %d failed\n", number);
+		goto fail;
+	}
+
+	ret = ublksrv_ctrl_get_info(dev);
+	if (ret < 0) {
+		fprintf(stderr, "can't get dev info from %d\n", number);
+		goto fail;
+	}
+
+	if (verbose) {
+		buf = ublksrv_tgt_get_dev_data(dev);
+		ublksrv_ctrl_dump(dev, buf);
+	}
+
+ fail:
+	ublksrv_ctrl_deinit(dev);
+	return ret;
+}
+
+static int cmd_dev_user_recover(int argc, char *argv[])
+{
+	static const struct option longopts[] = {
+		{ "number",		0,	NULL, 'n' },
+		{ "verbose",	0,	NULL, 'v' },
+		{ NULL }
+	};
+	int number = -1;
+	int opt;
+	bool verbose = false;
+
+	while ((opt = getopt_long(argc, argv, "n:v",
+				  longopts, NULL)) != -1) {
+		switch (opt) {
+		case 'n':
+			number = strtol(optarg, NULL, 10);
+			break;
+		case 'v':
+			verbose = true;
+			break;
+		}
+	}
+
+	return __cmd_dev_user_recover(number, verbose);
+}
+
 int main(int argc, char *argv[])
 {
 	char *cmd;
@@ -775,6 +896,8 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_del(argc, argv);
 	if (!strcmp(cmd, "list"))
 		ret = cmd_list_dev_info(argc, argv);
+	if (!strcmp(cmd, "recover"))
+		ret = cmd_dev_user_recover(argc, argv);
 
 	if (!strcmp(cmd, "help")) {
 		cmd_dev_add_usage(exe);
