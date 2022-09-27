@@ -33,7 +33,7 @@ MNT=`mktemp -d`
 URING_COMP=1
 NEED_GET_DATA=1
 
-file=`_create_loop_backing_file "loop"`
+file=`_create_loop_backing_file "loop" 1G`
 export T_TYPE_PARAMS=" -f $file"
 
 for NEED_GET_DATA in `seq 0 1`; do

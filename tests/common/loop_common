@@ -2,10 +2,16 @@
 #!/bin/bash
 
 _create_loop_backing_file() {
-	file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_XXXXX`
-	#truncate -s 2G $file
-	dd if=/dev/zero of=$file bs=1M count=1k oflag=direct > /dev/null 2>&1
-	echo $file
+	local my_size=$2
+
+	local my_file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_${my_size}_XXXXX`
+	truncate -s ${my_size} ${my_file}
+
+	my_size=`stat --printf="%s" ${my_file}`
+	local my_count=`expr ${my_size} / 1048576`
+
+	dd if=/dev/zero of=$my_file bs=1M count=${my_count} oflag=direct > /dev/null 2>&1
+	echo $my_file
 }
 
 __remove_kernel_loop_dev() {

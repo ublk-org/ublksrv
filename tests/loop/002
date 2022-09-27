@@ -4,7 +4,7 @@
 . common/fio_common
 . common/loop_common
 
-file=`_create_loop_backing_file "loop"`
+file=`_create_loop_backing_file "loop" 1G`
 export T_TYPE_PARAMS=" -f $file"
 
 __run_dev_perf "loop" 2 2
