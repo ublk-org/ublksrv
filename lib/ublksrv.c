@@ -518,9 +518,16 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	int cmd_buf_size, io_buf_size;
 	unsigned long off;
 	int ring_depth = depth + dev->tgt.tgt_ring_depth;
+	unsigned nr_ios = depth + dev->tgt.extra_ios;
 
-	q = (struct ublksrv_queue *)malloc(sizeof(struct ublksrv_queue) + sizeof(struct ublk_io) *
-		ctrl_dev->dev_info.queue_depth);
+	/*
+	 * Too many extra ios
+	 */
+	if (nr_ios > depth * 3)
+		return NULL;
+
+	q = (struct ublksrv_queue *)malloc(sizeof(struct ublksrv_queue) +
+			sizeof(struct ublk_io) * nr_ios);
 	dev->__queues[q_id] = q;
 
 	q->tgt_ops = dev->tgt.ops;	//cache ops for fast path

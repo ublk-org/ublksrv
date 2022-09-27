@@ -201,6 +201,13 @@ struct ublksrv_tgt_info {
 	unsigned int nr_fds;
 	int fds[UBLKSRV_TGT_MAX_FDS];
 	void *tgt_data;
+
+	/*
+	 * Extra IO slots for each queue, target code can reserve some
+	 * slots for handling internal IO, such as meta data IO, then
+	 * ublk_io instances can be assigned for these extra IOs.
+	 */
+	unsigned int extra_ios;
 	const struct ublksrv_tgt_type *ops;
 };
 
