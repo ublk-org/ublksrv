@@ -135,6 +135,8 @@ struct ublksrv_aio_ctx {
 	struct ublksrv_dev *dev;
 
 	void *ctx_data;
+
+	unsigned long reserved[8];
 };
 
 static inline bool ublksrv_aio_ctx_dead(struct ublksrv_aio_ctx *ctx)

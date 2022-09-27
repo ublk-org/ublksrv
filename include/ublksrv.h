@@ -113,6 +113,8 @@ struct ublksrv_ctrl_dev {
 	char **tgt_argv;
 
 	cpu_set_t *queues_cpuset;
+
+	unsigned long reserved[4];
 };
 
 struct ublk_io {
@@ -179,6 +181,8 @@ struct ublksrv_queue {
 	int nr_ctxs;
 	struct ublksrv_aio_ctx *ctxs[UBLKSRV_NR_CTX_BATCH];
 
+	unsigned long reserved[8];
+
 	struct ublk_io ios[0];
 };
 
@@ -208,7 +212,10 @@ struct ublksrv_tgt_info {
 	 * ublk_io instances can be assigned for these extra IOs.
 	 */
 	unsigned int extra_ios;
+	unsigned int pad;
 	const struct ublksrv_tgt_type *ops;
+
+	unsigned long reserved[4];
 };
 
 struct ublksrv_tgt_type {
@@ -289,7 +296,10 @@ struct ublksrv_tgt_type {
 	int  type;
 	unsigned ublk_flags;	//flags required for ublk driver
 	unsigned ublksrv_flags;	//flags required for ublksrv
+	unsigned pad;
 	const char *name;
+
+	unsigned long reserved[8];
 };
 
 struct ublksrv_dev {
@@ -303,6 +313,8 @@ struct ublksrv_dev {
 
 	const struct ublksrv_ctrl_dev *ctrl_dev;
 	void	*target_data;
+
+	unsigned long reserved[4];
 };
 
 static inline struct ublksrv_io_desc *ublksrv_get_iod(struct ublksrv_queue *q, int tag)
@@ -358,7 +370,9 @@ extern void ublksrv_dev_deinit(struct ublksrv_dev *dev);
 struct ublksrv_tgt_base_json {
 	char name[UBLKSRV_TGT_NAME_MAX_LEN];
 	int type;
+	unsigned int pad;
 	unsigned long long dev_size;
+	unsigned long reserved[8];
 };
 
 extern int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *dev,
