@@ -207,7 +207,9 @@ static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_FLUSH:
-		io_uring_prep_fsync(sqe, q->dev->tgt.fds[1],
+		io_uring_prep_sync_file_range(sqe, q->dev->tgt.fds[1],
+				iod->nr_sectors << 9,
+				iod->start_sector << 9,
 				IORING_FSYNC_DATASYNC);
 		break;
 	case UBLK_IO_OP_WRITE_ZEROES:
