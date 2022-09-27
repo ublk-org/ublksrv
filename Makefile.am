@@ -35,8 +35,9 @@ pkgconfig_DATA = ublksrv.pc
 CLEANFILES = *~ test cscope.* include/*~ *.d
 
 R = 10
+D = tests/tmp/
 test: $(sbin_PROGRAMS) $(noinst_PROGRAMS)
-	make -C tests run T=${T} R=${R}
+	make -C tests run T=${T} R=${R} D=${D}
 
 cscope:
 	@cscope -b -R

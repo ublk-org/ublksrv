@@ -7,7 +7,6 @@ DIR=$(cd "$(dirname "$0")";pwd)
 
 export UBLK=${DIR}/../ublk
 export TEST_DIR=$DIR
-export UBLK_TMP_DIR=$DIR/tmp
 export UBLK_TMP=`mktemp /tmp/ublk_tmp_XXXXX`
 
 [ ! -d ${UBLK_TMP_DIR} ] && mkdir ${UBLK_TMP_DIR}
@@ -39,7 +38,14 @@ run_test_all() {
 }
 
 TEST=$1
+
+TDIR=$3
+if [ "${TDIR:0:1}" != "/" ]; then
+	TDIR=`dirname $PWD`/${TDIR}
+fi
+
 export TRUNTIME=$2
+export UBLK_TMP_DIR=$TDIR
 export T_URING_COMP=0
 export T_NEED_GET_DATA=0
 export T_TYPE_PARAMS=""

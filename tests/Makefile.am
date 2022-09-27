@@ -5,7 +5,7 @@
 .PHONY: run clean
 
 run:
-	$(srcdir)/run_test.sh ${T} ${R}
+	$(srcdir)/run_test.sh ${T} ${R} ${D}
 
 CLEANFILES = *~ */*~
 
