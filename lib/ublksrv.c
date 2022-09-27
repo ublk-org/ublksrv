@@ -508,17 +508,8 @@ static int ublksrv_setup_eventfd(struct ublksrv_queue *q)
 	return 0;
 }
 
-/*
- * target/backend may need some extra io slots for handling something
- * like meta data flushing in background, so allow target to pass
- * this info via 'nr_extra_ios' which can't be > queue_depth.
- *
- * And it is target code's responsibility for managing these extra
- * slots, and libublksrv won't touch these slots at all.
- */
 struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
-		unsigned short q_id, int nr_extra_ios,
-		void *queue_data)
+		unsigned short q_id, void *queue_data)
 {
 	struct ublksrv_queue *q;
 	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
@@ -527,13 +518,9 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	int cmd_buf_size, io_buf_size;
 	unsigned long off;
 	int ring_depth = depth + dev->tgt.tgt_ring_depth;
-	int nr_ios = depth + nr_extra_ios;
 
-	if (nr_extra_ios > depth)
-		return NULL;
-
-	q = (struct ublksrv_queue *)malloc(sizeof(struct ublksrv_queue) +
-			sizeof(struct ublk_io) * nr_ios);
+	q = (struct ublksrv_queue *)malloc(sizeof(struct ublksrv_queue) + sizeof(struct ublk_io) *
+		ctrl_dev->dev_info.queue_depth);
 	dev->__queues[q_id] = q;
 
 	q->tgt_ops = dev->tgt.ops;	//cache ops for fast path

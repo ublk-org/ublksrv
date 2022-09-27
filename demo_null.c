@@ -47,7 +47,7 @@ static void *demo_null_io_handler_fn(void *data)
 	ublksrv_json_write_queue_info(dev->ctrl_dev, jbuf, sizeof jbuf,
 			q_id, gettid());
 	pthread_mutex_unlock(&jbuf_lock);
-	q = ublksrv_queue_init(dev, q_id, 0, NULL);
+	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
 		fprintf(stderr, "ublk dev %d queue %d init queue failed\n",
 				dev->ctrl_dev->dev_info.dev_id, q_id);
