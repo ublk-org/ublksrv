@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: GPL-2.0
+#!/bin/bash
+
+_create_qcow2_null_image() {
+	local type=$1
+	local size=$2
+	local my_file=`mktemp -p ${UBLK_TMP_DIR}  ublk_${type}_${size}_XXXXX.qcow2`
+	qemu-img create -f qcow2 $my_file $size  > /dev/null 2>&1
+	echo $my_file
+}
+
+_create_qcow2_image() {
+	local my_file=`_create_qcow2_null_image "data" $1`
+	local my_dev=`__create_nbd_dev $my_file`
+	local my_size=`blockdev --getsz $my_dev`
+	local my_count=`expr ${my_size} / 2048`
+
+	dd if=/dev/zero of=$my_dev bs=1M count=${my_count} oflag=direct > /dev/null 2>&1
+	__remove_nbd_dev $my_dev
+	echo $my_file
+}
+
+_check_qcow2_image() {
+	local my_file=$1
+	qemu-img check $my_file > ${UBLK_TMP} 2>&1
+	[ $? -ne 0 ] && echo "qcow2 image $my_file is broken" && cat ${UBLK_TMP} && exit
+}
+
+__remove_nbd_dev() {
+	local DEV=$1
+	sync $DEV
+	qemu-nbd -d $DEV  > /dev/null 2>&1
+}
+
+__create_nbd_dev() {
+	local my_file=$1
+	modprobe nbd > /dev/null 2>&1
+	qemu-nbd -d /dev/nbd11 > /dev/null 2>&1
+	qemu-nbd -c /dev/nbd11 -n --aio=native $my_file > /dev/null 2>&1
+	echo "/dev/nbd11"
+}
+
+__run_nbd_dev_perf()
+{
+	local TYPE=$1
+	local JOBS=$2
+	local QUEUES=$3
+	local backing_file=$4
+	local DEV=`__create_nbd_dev $backing_file`
+
+	echo -e "\tfio ($TYPE($file), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	__run_dev_perf_no_create $TYPE $JOBS $DEV
+
+	__remove_nbd_dev $DEV
+}

@@ -14,7 +14,8 @@ AM_CXXFLAGS = -fcoroutines -std=c++20
 sbin_PROGRAMS = ublk
 noinst_PROGRAMS = demo_null demo_event
 
-ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp
+ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp qcow2/tgt_qcow2.cpp \
+			   qcow2/qcow2.cpp qcow2/qcow2_meta.cpp qcow2/utils.cpp
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_CPPFLAGS = -I$(top_srcdir)/include
 ublk_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
@@ -32,7 +33,7 @@ demo_event_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ublksrv.pc
 
-CLEANFILES = *~ test cscope.* include/*~ *.d
+CLEANFILES = *~ test cscope.* include/*~ *.d qcow2/*~
 
 R = 10
 D = tests/tmp/

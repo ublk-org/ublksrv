@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0
+#!/bin/bash
+
+. common/fio_common
+. common/qcow2_common
+
+echo "run perf test on pre-allocated qcow2 image via nbd"
+
+file=`_create_qcow2_image 2G`
+
+__run_nbd_dev_perf "nbd" 1 1 $file
+
+_check_qcow2_image $file
+
+[ -f "$file" ] && rm -f $file
