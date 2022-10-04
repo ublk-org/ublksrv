@@ -37,3 +37,6 @@ Coroutine improvement, the current c++20 stackless coroutine doesn't support
 nested calling, it is a bit hard to use. If this area can be improved without
 hurting performance, it will help much on building new ublk target/backend.
 
+MQ support, and one problem is still related with coroutine, where more than
+one per-queue pthread may wait for one single event, which is usually done
+in one single queue/pthread.
