@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0
+#!/bin/bash
+
+. common/fio_common
+
+echo "run io test on specified device"
+
+TYPE="vdpa"
+DEV="/dev/vdc"
+QUEUES=1
+
+echo -e "\tfio ($TYPE($DEV), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+__run_dev_perf_no_create $TYPE 1 $DEV
+
