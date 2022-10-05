@@ -963,12 +963,18 @@ co_io_job MetaFlushingState::__write_slice_co(Qcow2State &qs,
 {
 	int ret;
 	qcow2_io_ctx_t ioc(tag, q->q_id);
+	bool wait;
 
 	slices_in_flight.push_back(m);
 again:
 	try {
 		ret = m->flush(qs, ioc, m->get_offset(), m->get_buf_size());
+		wait = false;
 	} catch (MetaUpdateException &meta_update_error) {
+		wait = true;
+	}
+
+	if (wait) {
 		co_io_job_submit_and_wait(tag);
 		goto again;
 	}
@@ -1053,12 +1059,18 @@ co_io_job MetaFlushingState::__write_top_co(Qcow2State &qs,
 {
 	int ret;
 	qcow2_io_ctx_t ioc(tag, q->q_id);
+	bool wait;
 
 again:
 	try {
 		ret = top.flush(qs, ioc,
 				top.get_offset() + parent_blk_idx * 512, 512);
+		wait = false;
 	} catch (MetaUpdateException &meta_update_error) {
+		wait = true;
+	}
+
+	if (wait) {
 		co_io_job_submit_and_wait(tag);
 		goto again;
 	}
@@ -1182,11 +1194,17 @@ co_io_job MetaFlushingState::__zero_my_cluster_co(Qcow2State &qs,
 	qcow2_io_ctx_t ioc(tag, q->q_id);
 	u64 cluster_off = m->get_offset() &
 		~((1ULL << qs.header.cluster_bits) - 1);
+	bool wait;
 
 again:
 	try {
 		ret = m->zero_my_cluster(qs, ioc);
+		wait = false;
 	} catch (MetaUpdateException &meta_update_error) {
+		wait = true;
+	}
+
+	if (wait) {
 		co_io_job_submit_and_wait(tag);
 		goto again;
 	}

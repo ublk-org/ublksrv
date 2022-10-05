@@ -296,6 +296,7 @@ static co_io_job __qcow2_handle_io_async(struct ublksrv_queue *q,
 	struct io_uring_cqe *cqe;
 	int ret = 0;
 	unsigned int op = ublksrv_get_op(iod);
+	bool wait;
 
 	qcow2_io_log("%s: tag %d, ublk op %x virt %llx/%u\n",
 			__func__, tag, op, start, (iod->nr_sectors << 9));
@@ -306,18 +307,14 @@ again:
 	try {
 		mapped_start = qs->cluster_map.map_cluster(ioc, start,
 				op == UBLK_IO_OP_WRITE);
+		wait = false;
 	} catch (MetaIoException &meta_error) {
-
-		co_io_job_submit_and_wait(tag);
-
-		cqe = io->tgt_io_cqe;
-		io->tgt_io_cqe = NULL;
-		ret = qcow2_meta_io_done(q, cqe);
-		if (ret == -EAGAIN)
-			goto again;
-		if (ret < 0)
-			goto exit;
+		wait = true;
 	} catch (MetaUpdateException &meta_update_error) {
+		wait = true;
+	}
+
+	if (wait) {
 		co_io_job_submit_and_wait(tag);
 
 		cqe = io->tgt_io_cqe;
@@ -327,7 +324,6 @@ again:
 			goto again;
 		if (ret < 0)
 			goto exit;
-		goto again;
 	}
 
 	qcow2_io_log("%s: tag %d, ublk op %x virt %llx/%u to host %llx\n",
@@ -359,10 +355,16 @@ queue_io:
 		try {
 			ret = qcow2_queue_tgt_io(q, io_op, tag, mapped_start,
 					&exp_op);
+			wait = false;
 		} catch (MetaUpdateException &meta_error) {
+			wait = true;
+		}
+
+		if (wait) {
 			co_io_job_submit_and_wait(tag);
 			goto queue_io;
 		}
+
 		if (ret > 0) {
 			u32 cqe_op;
 			u64 cluster_start = mapped_start &
