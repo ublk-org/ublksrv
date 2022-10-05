@@ -24,7 +24,8 @@ run_test() {
 
 run_test_grp() {
 	local D=$1
-	for ITEM in `ls ${D} | grep -v "~$"`; do
+	for ITEM in `ls ${D} | grep "^[0-9]" | grep -v "~$"`; do
+			#echo $D/$ITEM
 			run_test $D/$ITEM
 	done
 }
