@@ -549,6 +549,7 @@ class Qcow2SliceMeta: public Qcow2MappingMeta {
 protected:
 	bool prep_flush(const qcow2_io_ctx_t &ioc);
 	void unprep_flush();
+	virtual void wait_clusters(Qcow2State &qs, const qcow2_io_ctx_t &ioc);
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void *validate_addr;
 #endif
@@ -618,8 +619,6 @@ public:
 };
 
 class Qcow2RefcountBlock: public Qcow2SliceMeta {
-private:
-	virtual void wait_clusters(Qcow2State &qs, const qcow2_io_ctx_t &ioc);
 public:
 	unsigned dirty_start_idx;
 	u64  get_entry_fast(u32 idx) {
@@ -709,7 +708,6 @@ class Qcow2L2Table: public Qcow2SliceMeta {
 private:
 	//the two is valid only iff this slice is dirty
 	u64 dirty_start, dirty_end;
-	virtual void wait_clusters(Qcow2State &qs, const qcow2_io_ctx_t &ioc);
 public:
 	u64  get_entry_fast(u32 idx) {
 		u64 val = be64_to_cpu(((const u64 *)addr)[idx]);
