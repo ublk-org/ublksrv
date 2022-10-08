@@ -50,3 +50,5 @@ file=`_create_qcow2_null_image "null" 2G`
 export T_TYPE_PARAMS=" -f $file"
 
 ublk_run_abort_test
+
+[ -f "$file" ] && rm -f $file
