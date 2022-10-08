@@ -50,11 +50,14 @@ how to build ublksrv:
 --------------------
 
   autoreconf -i
+
   ./configure
+
   make
 
 note: './configure' requires liburing 2.2 package installed, if liburing 2.2
-isn't available in your distribution, please configure via the following command:
+isn't available in your distribution, please configure via the following
+command, or refer to ``build_with_liburing_src`` [#build_with_liburing_src]_
 
   PKG_CONFIG_PATH=${LIBURING_DIR} \
   ./configure \
@@ -76,16 +79,20 @@ add one ublk-null disk
 
 - ublk add -t null
 
+
 add one ublk-loop disk
 ----------------------
 
 - ublk add -t loop -f /dev/vdb
+
 or
+
 - ublk add -t loop -f 1.img
 
 
 add one qcow2 disk
 ------------------
+
 - ublk add -t qcow2 -f test.qcow2
 
 note: qcow2 support is experimental, see details in qcow2 status [#qcow2_status]_
@@ -96,36 +103,16 @@ remove one ublk disk
 --------------------
 
 - ublk del -n 0		#remove /dev/ublkb0
+
 - ublk del -a		#remove all ublk devices
 
 list ublk devices
 ---------------------
 
 - ublk list
+
 - ublk list -v	#with all device info dumped
 
-build
-=====
-
-how to make
------------
-
-autoreconf -i
-
-./configure
-
-make
-
-
-dependency
-----------
-
-1) liburing with IORING_SETUP_SQE128 support
-
-2) linux kernel v5.19(IORING_SETUP_SQE128 support)
-
-3) linux kernel v5.20 with ublk kernel driver(drivers/block/ublk_drv.c)
-merged
 
 test
 ====
@@ -135,18 +122,24 @@ run all built tests
 
 make test T=all
 
+
 run test group
 --------------
 
 make test T=null
+
 make test T=loop
+
 make test T=generic
+
 
 run single test
 ---------------
 
 make test T=generic/001
+
 make test T=null/001
+
 make test T=loop/001
 ...
 
@@ -178,3 +171,4 @@ References
 .. [#nlohmann] https://github.com/nlohmann/json
 .. [#qcow2_status] https://github.com/ming1/ubdsrv/blob/master/qcow2/STATUS.rst
 .. [#qcow2_readme] https://github.com/ming1/ubdsrv/blob/master/qcow2/README.rst
+.. [#build_with_liburing_src] https://github.com/ming1/ubdsrv/blob/master/build_with_liburing_src
