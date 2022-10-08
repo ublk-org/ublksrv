@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# build liburing first
+#
+# cd $LIBURING_DIR
+# ./configure && make install
+
 autoreconf -i
 
 OPTS="-g -O0"
