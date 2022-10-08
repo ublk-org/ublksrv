@@ -584,6 +584,30 @@ public:
 		if (--refcnt == 0)
 			delete this;
 	}
+
+	//In theory, virt_offset() should be implemented as virtual function.
+	//However, it is actually one helper for fast path, so move it to
+	//parent class, and use base flag to return the proper return value.
+	u64 virt_offset() {
+		if (is_mapping_meta()) {
+			u64 base = ((u64)parent_idx) << (header.cluster_bits -
+					3 + header.cluster_bits);
+			u64 clusters = (get_offset() &
+				((1ULL << header.cluster_bits) - 1)) >> 3;
+
+			return base + (clusters << header.cluster_bits);
+		}
+
+		const u64 single_entry_order = 2 * header.cluster_bits +
+			3 - header.refcount_order;
+		u32 slice_idx = (get_offset() & ((1U << header.cluster_bits) - 1)) >>
+			QCOW2_PARA::REFCOUNT_BLK_SLICE_BITS;
+		u32 slice_virt_bits = header.cluster_bits + 3 -
+			header.refcount_order + QCOW2_PARA::REFCOUNT_BLK_SLICE_BITS;
+
+		return ((u64)parent_idx << single_entry_order) +
+			((u64)slice_idx << slice_virt_bits);
+	}
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void io_done_validate(Qcow2State &qs, struct ublksrv_queue *q,
 			struct io_uring_cqe *cqe);
@@ -666,19 +690,6 @@ public:
 		return header.cluster_bits + 3 - header.refcount_order;
 	}
 
-	u64 virt_offset()
-	{
-		const u64 single_entry_order = entries_order() +
-			header.cluster_bits;
-		u32 slice_idx = (offset & ((1U << header.cluster_bits) - 1)) >>
-			QCOW2_PARA::REFCOUNT_BLK_SLICE_BITS;
-		u32 slice_virt_bits = header.cluster_bits + 3 - header.refcount_order +
-		QCOW2_PARA::REFCOUNT_BLK_SLICE_BITS;
-
-		return ((u64)parent_idx << single_entry_order) + ((u64)slice_idx <<
-				slice_virt_bits);
-	}
-
 	bool entry_is_dirty(u32 idx) {
 		return idx >= dirty_start_idx;
 	}
@@ -719,15 +730,6 @@ public:
 		return entry != 0;
 	}
 
-	u64 virt_offset()
-	{
-		u64 base = ((u64)parent_idx) << (header.cluster_bits - 3 +
-				header.cluster_bits);
-		u64 clusters = (get_offset() &
-				((1ULL << header.cluster_bits) - 1)) >> 3;
-
-		return base + (clusters << header.cluster_bits);
-	}
 	bool entry_is_dirty(u32 idx) {
 		return entry_val_is_dirty(get_entry(idx));
 	}
