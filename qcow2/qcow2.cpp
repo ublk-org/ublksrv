@@ -55,16 +55,14 @@ u32 Qcow2State::get_l1_table_max_size()
 
 u32 Qcow2State::get_refcount_table_max_size()
 {
-	u32 blk_entry_bits = 1 << header.refcount_order;
 	u64 blk_size, res;
 
-	blk_size = ((1 << (header.cluster_bits + 3)) / blk_entry_bits) <<
-		header.cluster_bits;
+	blk_size = 1ULL << (2 * header.cluster_bits + 3 - header.refcount_order);
 	res = (header.get_size() + blk_size - 1) / blk_size;
 	res *= 8;
 
-	//qcow2_log("%s: cls bit %d, refcount_blk entry bits %d, blk_size %llu, ref tbl size %d\n",
-	//		__func__, header.cluster_bits, blk_entry_bits, blk_size, res);
+	//qcow2_log("%s: cls bit %d, refcount_order %d, blk_size %llu, ref tbl size %d\n",
+	//		__func__, header.cluster_bits, header.refcount_order, blk_size, res);
 	if (res < QCOW_MAX_REFTABLE_SIZE)
 		return round_up(res, 1UL << min_bs_bits);
 	return  QCOW_MAX_REFTABLE_SIZE;
