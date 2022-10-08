@@ -83,6 +83,15 @@ add one ublk-loop disk
 or
 - ublk add -t loop -f 1.img
 
+
+add one qcow2 disk
+------------------
+- ublk add -t qcow2 -f test.qcow2
+
+note: qcow2 support is experimental, see details in qcow2 status [#qcow2_status]_
+and readme [#qcow2_readme]_
+
+
 remove one ublk disk
 --------------------
 
@@ -167,3 +176,5 @@ References
 .. [#ublk_driver] https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/block/ublk_drv.c?h=v6.0
 .. [#zero_copy] https://lore.kernel.org/all/20220318095531.15479-1-xiaoguang.wang@linux.alibaba.com/
 .. [#nlohmann] https://github.com/nlohmann/json
+.. [#qcow2_status] https://github.com/ming1/ubdsrv/blob/master/qcow2/STATUS.rst
+.. [#qcow2_readme] https://github.com/ming1/ubdsrv/blob/master/qcow2/README.rst
