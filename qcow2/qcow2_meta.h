@@ -685,10 +685,6 @@ public:
 			dirty_start_idx = idx;
 	}
 
-	u32 entries_order() {
-		return header.cluster_bits + 3 - header.refcount_order;
-	}
-
 	bool entry_is_dirty(u32 idx) {
 		return idx >= dirty_start_idx;
 	}
