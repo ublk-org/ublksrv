@@ -914,7 +914,7 @@ MetaFlushingState::MetaFlushingState(Qcow2TopTable &t, bool is_mapping):
 	state = qcow2_meta_flush::IDLE;
 	slice_dirtied = 0;
 	parent_blk_idx = -1;
-	gettimeofday(&last_flush, NULL);
+	last_flush = std::chrono::system_clock::now();
 }
 
 void MetaFlushingState::del_meta_from_list(std::vector <Qcow2SliceMeta *> &v,
@@ -1118,7 +1118,7 @@ void MetaFlushingState::__write_top(Qcow2State &qs,
 void MetaFlushingState::__done(Qcow2State &qs, struct ublksrv_queue *q)
 {
 	set_state(qcow2_meta_flush::IDLE);
-	gettimeofday(&last_flush, NULL);
+	last_flush = std::chrono::system_clock::now();
 }
 
 void MetaFlushingState::mark_no_update()
@@ -1319,12 +1319,12 @@ bool MetaFlushingState::__need_flush(int queued)
 		return false;
 
 	if (queued) {
-		struct timeval t;
-
-		gettimeofday(&t, NULL);
+		auto diff = std::chrono::system_clock::now() - last_flush;
+		std::chrono::milliseconds ms = std::chrono::duration_cast<
+			std::chrono::milliseconds>(diff);
 
 		//timeout, so flush now
-		if (usec_diff(&t, &last_flush) > MAX_META_FLUSH_DELAY)
+		if (ms.count() > MAX_META_FLUSH_DELAY_MS)
 			return true;
 		else
 			return false;

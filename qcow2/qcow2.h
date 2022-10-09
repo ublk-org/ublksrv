@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <bits/stdc++.h>
 #include <exception>
+#include <chrono>
 #include "qcow2_format.h"
 #include "ublksrv_priv.h"
 #include "lrucache.hpp"
@@ -45,7 +46,7 @@ enum QCOW2_PARA {
 #endif
 	//at most 500ms delay if not any slice is running of
 	//lru cache, otherwise the flush is started immediately
-	MAX_META_FLUSH_DELAY = 500000,
+	MAX_META_FLUSH_DELAY_MS = 500,
 };
 
 static inline void qcow2_log(const char *fmt, ...)
@@ -1416,7 +1417,7 @@ private:
 public:
 	Qcow2TopTable &top;
 	unsigned slice_dirtied;
-	struct timeval last_flush;
+	std::chrono::system_clock::time_point last_flush;
 
 	unsigned get_state() const {
 		return state;
@@ -1623,13 +1624,6 @@ static inline int qcow2_meta_io_done(struct ublksrv_queue *q,
 	meta->io_done(*qs, q, cqe);
 
 	return -EAGAIN;
-}
-
-static inline unsigned long usec_diff(const struct timeval *end,
-		const struct timeval *start)
-{
-	return (end->tv_sec - start->tv_sec) * 1000000 +
-		(end->tv_usec - start->tv_usec);
 }
 
 #endif
