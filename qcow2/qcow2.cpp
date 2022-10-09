@@ -293,14 +293,14 @@ void slice_cache<T>::add_slice_to_evicted_list(u64 virt_offset, T *t)
 
 template <class T>
 void slice_cache<T>::dump(Qcow2State &qs) {
-	unsigned long long start;
-	unsigned long long end = qs.get_dev_size();
+	auto lru_list = slices.get_lru_list_ro();
 
 	syslog(LOG_INFO, "cache size %u, dirty cache size %u\n",
 			slices.size(), evicted_slices.size());
-	for (start = 0; start <= end;
-			start += (1ULL << slice_virt_size_bits)) {
-		T *t = __find_slice(start, true);
+
+	//todo: use lrucache iterator to cut the loop time
+	for (auto it = lru_list.cbegin(); it != lru_list.cend(); ++it) {
+		T *t = it->second;
 
 		if (t)
 			t->dump();
@@ -339,16 +339,14 @@ int slice_cache<T>::figure_group_from_dirty_list(Qcow2State &qs) {
 template <class T>
 int slice_cache<T>::__figure_group_for_flush(Qcow2State &qs)
 {
-	unsigned long long start;
-	unsigned long long end = qs.get_dev_size();
 	std::unordered_map<u32, int> cnt;
 	int val = -1;
 	int idx = -1;
+	auto lru_list = slices.get_lru_list_ro();
 
 	//todo: use lrucache iterator to cut the loop time
-	for (start = 0; start <= end;
-			start += (1ULL << slice_virt_size_bits)) {
-		T *t = slices.__get(start);
+	for (auto it = lru_list.cbegin(); it != lru_list.cend(); ++it) {
+		T *t = it->second;
 
 		if (t != nullptr && t->get_dirty(-1) && !t->is_flushing()) {
 			u32 key = (t->parent_idx * 8) / 512;
