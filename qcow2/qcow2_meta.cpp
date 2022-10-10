@@ -11,6 +11,10 @@
 Qcow2Meta::Qcow2Meta(Qcow2Header &h, u64 off, u32 sz, const char *name, u32 f):
 	offset(off), buf_sz(sz), header(h), flags(f), refcnt(2)
 {
+	//used for implementing slice's ->reset() only
+	if (f & QCOW2_META_DONT_ALLOC_BUF)
+		return;
+
 	if (posix_memalign((void **)&addr, getpagesize(), sz))
 		syslog(LOG_ERR, "allocate memory %d bytes failed, %s\n",
 				sz, name);
@@ -38,6 +42,9 @@ Qcow2Meta::~Qcow2Meta()
 	qcow2_log("%s: destructed, obj %p flags %x off %lx ref %d\n",
 			id, this, flags, offset, refcnt);
 #endif
+	if (flags & QCOW2_META_DONT_ALLOC_BUF)
+		return;
+
 	if (!is_top_meta() && (get_dirty(-1) || is_flushing() ||
 				(!get_update() && !get_evicted()))) {
 		qcow2_log("BUG %s: obj %p flags %x off %lx\n",
@@ -834,6 +841,24 @@ Qcow2RefcountBlock::Qcow2RefcountBlock(Qcow2State &qs, u64 off, u32 p_idx, u32 f
 	meta_log("rb meta %p %llx -> %llx \n", this, virt_offset(), off);
 }
 
+
+void Qcow2RefcountBlock::reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f)
+{
+	Qcow2RefcountBlock tmp(qs, off, p_idx, f | QCOW2_META_DONT_ALLOC_BUF);
+
+	qcow2_assert(refcnt == 0);
+
+	offset = tmp.get_offset();
+	flags  = tmp.get_flags() & ~QCOW2_META_DONT_ALLOC_BUF;
+	refcnt = tmp.read_ref();
+
+	next_free_idx = tmp.get_next_free_idx();
+
+	parent_idx = tmp.parent_idx;
+
+	dirty_start_idx = tmp.dirty_start_idx;
+}
+
 u64  Qcow2RefcountBlock::get_entry(u32 idx) {
 	return get_entry_fast(idx);
 }
@@ -923,6 +948,23 @@ Qcow2L2Table::Qcow2L2Table(Qcow2State &qs, u64 off, u32 p_idx, u32 f):
 	dirty_start = (u64)-1;
 	dirty_end = 0;
         meta_log("l2 meta %p %llx -> %llx \n", this, virt_offset(), off);
+}
+
+void Qcow2L2Table::reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f)
+{
+	Qcow2L2Table tmp(qs, off, p_idx, f | QCOW2_META_DONT_ALLOC_BUF);
+
+	qcow2_assert(refcnt == 0);
+
+	offset = tmp.get_offset();
+	flags = tmp.get_flags() & ~QCOW2_META_DONT_ALLOC_BUF;
+	refcnt = tmp.read_ref();
+
+	next_free_idx = tmp.get_next_free_idx();
+
+	parent_idx = tmp.parent_idx;
+
+	tmp.get_dirty_range(&dirty_start, &dirty_end);
 }
 
 Qcow2L2Table::~Qcow2L2Table()

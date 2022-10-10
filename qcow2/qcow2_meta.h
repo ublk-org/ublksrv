@@ -46,6 +46,9 @@ protected:
 //set for L1/L2 meta
 #define QCOW2_META_MAPPING   (1U << 5)
 
+//only used for .reset()
+#define QCOW2_META_DONT_ALLOC_BUF   (1U << 6)
+
 //evicted from lru cache, and may be in loading or flushing, and will
 //be freed after loading or flushing is done.
 //
@@ -690,6 +693,7 @@ public:
 	}
 
 	Qcow2RefcountBlock(Qcow2State &qs, u64 off, u32 p_idx, u32 f);
+	void reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f);
 	virtual ~Qcow2RefcountBlock();
 	virtual u64  get_entry(u32 idx);
 	virtual void set_entry(u32 idx, u64 val);
@@ -729,6 +733,7 @@ public:
 	}
 
 	Qcow2L2Table(Qcow2State &qs, u64 off, u32 p_idx, u32 f);
+	void reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f);
 	virtual ~Qcow2L2Table();
 	virtual u64  get_entry(u32 idx);
 	virtual void set_entry(u32 idx, u64 val);
