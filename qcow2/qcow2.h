@@ -1177,9 +1177,7 @@ public:
 	u64 map_cluster(const qcow2_io_ctx_t &ioc, u64 offset, bool create_l2);
 	int figure_group_from_l1_table();
 
-	Qcow2L2Table* __find_slice(u64 key, bool use_dirty=true) {
-		return cache.__find_slice(key, use_dirty);
-	}
+	Qcow2L2Table* __find_slice(u64 key, bool use_dirty=true);
 
 	u64 l1_idx(u64 offset) {
 		return offset >> (cluster_bits + l2_entries_order);
@@ -1288,9 +1286,7 @@ public:
 	void dump_meta();
 	int figure_group_from_refcount_table();
 
-	Qcow2RefcountBlock* __find_slice(u64 key) {
-		return cache.__find_slice(key, true);
-	}
+	Qcow2RefcountBlock* __find_slice(u64 key);
 
 	bool has_evicted_dirty_slices()
 	{

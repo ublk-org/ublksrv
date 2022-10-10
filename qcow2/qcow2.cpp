@@ -395,6 +395,11 @@ Qcow2ClusterAllocator::Qcow2ClusterAllocator(Qcow2State &qs): state(qs),
 	max_alloc_states = 0;
 };
 
+Qcow2RefcountBlock* Qcow2ClusterAllocator::__find_slice(u64 key)
+{
+	return cache.__find_slice(key, true);
+}
+
 int Qcow2ClusterAllocator::figure_group_from_refcount_table()
 {
 	int ret = cache.figure_group_for_flush(state);
@@ -640,6 +645,11 @@ Qcow2ClusterMapping::Qcow2ClusterMapping(Qcow2State &qs): state(qs),
 	l2_entries_order(state.header.cluster_bits - 3),
 	max_alloc_entries(0)
 {
+}
+
+Qcow2L2Table* Qcow2ClusterMapping::__find_slice(u64 key, bool use_dirty)
+{
+	return cache.__find_slice(key, use_dirty);
 }
 
 int Qcow2ClusterMapping::figure_group_from_l1_table()
