@@ -574,6 +574,8 @@ public:
 			struct io_uring_cqe *cqe);
 	int zero_my_cluster(Qcow2State &qs, const qcow2_io_ctx_t &ioc);
 
+	void reclaim_me();
+
 	u64 get_offset() const {
 		return offset;
 	}
@@ -586,7 +588,7 @@ public:
 	void put_ref() {
 		qcow2_assert(refcnt > 0);
 		if (--refcnt == 0)
-			delete this;
+			reclaim_me();
 	}
 
 	//In theory, virt_offset() should be implemented as virtual function.

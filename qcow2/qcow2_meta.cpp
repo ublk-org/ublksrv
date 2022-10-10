@@ -562,20 +562,6 @@ Qcow2SliceMeta::Qcow2SliceMeta(Qcow2State &qs, u64 off, u32 buf_sz,
 }
 
 Qcow2SliceMeta::~Qcow2SliceMeta() {
-	unsigned queues = header.qs.dev->ctrl_dev->dev_info.nr_hw_queues;
-
-#ifdef QCOW2_CACHE_DEBUG
-	qcow2_log("slice meta %llx/%p/%d freed\n", offset, addr, buf_sz);
-#endif
-	meta_log("%s: %p off %llx\n", __func__, this, get_offset());
-
-	//Tell the whole world, I am leaving
-	for (int i = 0; i < queues; i++) {
-		struct ublksrv_queue *q = ublksrv_get_queue(header.qs.dev, i);
-
-		wakeup_all(q, -1);
-	}
-
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	free(validate_addr);
 #endif
@@ -831,6 +817,25 @@ void Qcow2SliceMeta::wait_clusters(Qcow2State &qs,
 	}
 }
 
+void Qcow2SliceMeta::reclaim_me()
+{
+	unsigned queues = header.qs.dev->ctrl_dev->dev_info.nr_hw_queues;
+
+	meta_log("%s: %p off %llx flags %x\n", __func__,
+			this, get_offset(), flags);
+
+	header.qs.remove_slice_from_evicted_list(this);
+
+	meta_log("%s: %p off %llx\n", __func__, this, get_offset());
+
+	//Tell the whole world, I am leaving
+	for (int i = 0; i < queues; i++) {
+		struct ublksrv_queue *q = ublksrv_get_queue(header.qs.dev, i);
+
+		wakeup_all(q, -1);
+	}
+	header.qs.reclaim_slice(this);
+}
 
 Qcow2RefcountBlock::Qcow2RefcountBlock(Qcow2State &qs, u64 off, u32 p_idx, u32 f):
 	Qcow2SliceMeta(qs, off, QCOW2_PARA::REFCOUNT_BLK_SLICE_BYTES,
@@ -851,6 +856,9 @@ void Qcow2RefcountBlock::reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f)
 	offset = tmp.get_offset();
 	flags  = tmp.get_flags() & ~QCOW2_META_DONT_ALLOC_BUF;
 	refcnt = tmp.read_ref();
+
+	meta_log("%s: %p refcnt %d flags %x offset %lx \n",
+			__func__, this, refcnt, flags, offset);
 
 	next_free_idx = tmp.get_next_free_idx();
 
@@ -900,8 +908,6 @@ int Qcow2RefcountBlock::flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 
 Qcow2RefcountBlock::~Qcow2RefcountBlock()
 {
-	meta_log("%s: %p off %llx\n", __func__, this, get_offset());
-	header.qs.cluster_allocator.remove_slice_from_evicted_list(this);
 }
 
 void Qcow2RefcountBlock::get_dirty_range(u64 *start, u64 *end)
@@ -960,6 +966,9 @@ void Qcow2L2Table::reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f)
 	flags = tmp.get_flags() & ~QCOW2_META_DONT_ALLOC_BUF;
 	refcnt = tmp.read_ref();
 
+	meta_log("%s: %p refcnt %d flags %x offset %lx \n",
+			__func__, this, refcnt, flags, offset);
+
 	next_free_idx = tmp.get_next_free_idx();
 
 	parent_idx = tmp.parent_idx;
@@ -969,8 +978,6 @@ void Qcow2L2Table::reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f)
 
 Qcow2L2Table::~Qcow2L2Table()
 {
-	meta_log("%s: %p off %llx\n", __func__, this, get_offset());
-	header.qs.cluster_map.remove_slice_from_evicted_list(this);
 }
 
 void Qcow2L2Table::io_done(Qcow2State &qs, struct ublksrv_queue *q,

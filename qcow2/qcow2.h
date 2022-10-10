@@ -10,6 +10,7 @@
 #include <bits/stdc++.h>
 #include <exception>
 #include <chrono>
+#include <deque>
 #include "lrucache.hpp"
 #include "qcow2_format.h"
 #include "qcow2_meta.h"
@@ -75,9 +76,24 @@ private:
 	cache::lru_cache<u64, T *> slices;
 	std::unordered_map<u64, T *> evicted_slices;
 
+	std::deque<T *> reclaimed_slices;
+
 	int __figure_group_for_flush(Qcow2State &qs);
 	int figure_group_from_dirty_list(Qcow2State &qs);
 public:
+	void add_slice_to_reclaim_list(T *t) {
+		reclaimed_slices.push_back(t);
+	}
+
+	T *pick_slice_from_reclaim_list() {
+		if (reclaimed_slices.empty())
+			return nullptr;
+		auto t = reclaimed_slices.front();
+		reclaimed_slices.pop_front();
+
+		return t;
+	}
+
 	unsigned get_nr_slices() {
 		return 1U << (cluster_size_bits - slice_size_bits);
 	}
@@ -159,6 +175,8 @@ class Qcow2ClusterMapping {
 private:
 	Qcow2State &state;
 	slice_cache <Qcow2L2Table> cache;
+
+	friend class Qcow2State;
 
 	u32 l2_entries_order, cluster_bits;
 
@@ -297,10 +315,6 @@ public:
 		return cache.has_evicted_dirty_slices();
 	}
 
-	void remove_slice_from_evicted_list(Qcow2L2Table *t) {
-		cache.remove_slice_from_evicted_list(t);
-	}
-
 	void dump_meta();
 };
 
@@ -374,6 +388,8 @@ private:
 	u32 refcount_block_entries();
 	void allocate_refcount_blk(const qcow2_io_ctx_t &ioc, s32 idx);
 
+	friend class Qcow2State;
+
 public:
 	//key is cluster start offset, val is its allocate status
 	std::unordered_map<u64, Qcow2ClusterState *> alloc_state;
@@ -395,10 +411,6 @@ public:
 	bool has_evicted_dirty_slices()
 	{
 		return cache.has_evicted_dirty_slices();
-	}
-
-	void remove_slice_from_evicted_list(Qcow2RefcountBlock *t) {
-		cache.remove_slice_from_evicted_list(t);
 	}
 
 	/* the following helpers are for implementing soft update */
@@ -661,6 +673,8 @@ public:
 	void kill_slices(struct ublksrv_queue *q);
 	u32 add_meta_io(u32 qid, Qcow2MappingMeta *m);
 	void dump_meta();
+	void reclaim_slice(Qcow2SliceMeta *m);
+	void remove_slice_from_evicted_list(Qcow2SliceMeta *m);
 
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void validate_cluster_use(u64 host_off, u64 virt_off, u32 use);

@@ -110,6 +110,36 @@ u32 Qcow2State::add_meta_io(u32 qid, Qcow2MappingMeta *m)
 	return i;
 }
 
+void Qcow2State::reclaim_slice(Qcow2SliceMeta *m)
+{
+	if (m->is_mapping_meta()) {
+		Qcow2L2Table *t =
+			static_cast<Qcow2L2Table *>(m);
+
+		cluster_map.cache.add_slice_to_reclaim_list(t);
+	} else {
+		Qcow2RefcountBlock *t =
+			static_cast<Qcow2RefcountBlock *>(m);
+
+		cluster_allocator.cache.add_slice_to_reclaim_list(t);
+	}
+}
+
+void Qcow2State::remove_slice_from_evicted_list(Qcow2SliceMeta *m)
+{
+	if (m->is_mapping_meta()) {
+		Qcow2L2Table *t =
+			static_cast<Qcow2L2Table *>(m);
+
+		cluster_map.cache.remove_slice_from_evicted_list(t);
+	} else {
+		Qcow2RefcountBlock *t =
+			static_cast<Qcow2RefcountBlock *>(m);
+
+		cluster_allocator.cache.remove_slice_from_evicted_list(t);
+	}
+}
+
 void Qcow2State::dump_meta()
 {
 	cluster_allocator.dump_meta();
@@ -220,7 +250,12 @@ T *slice_cache<T>::alloc_slice(Qcow2State &state, const qcow2_io_ctx_t &ioc,
 		zero_buf = false;
 	}
 
-	t = new T(state, host_offset, parent_idx, flags);
+	t = pick_slice_from_reclaim_list();
+	if (t == nullptr)
+		t = new T(state, host_offset, parent_idx, flags);
+	else
+		t->reset(state, host_offset, parent_idx, flags);
+
 	if (t->get_dirty(-1))
 		state.meta_flushing.inc_dirtied_slice(t->is_mapping_meta());
 
