@@ -48,7 +48,16 @@ void IOWaiters::__mapping_meta_wakeup_all(struct ublksrv_queue *q,
 
 			it = tags.erase(it);
 			__io->tgt_io_cqe = NULL;
-			((struct ublk_io_tgt *)__io)->co.resume();
+
+			try {
+				((struct ublk_io_tgt *)__io)->co.resume();
+			} catch (MetaIoException &meta_error) {
+				io_waiters.merge(tags);
+				throw MetaIoException();
+			} catch (MetaUpdateException &meta_update_error) {
+				io_waiters.merge(tags);
+				throw MetaUpdateException();
+			}
 		} else {
 			it++;
 		}
