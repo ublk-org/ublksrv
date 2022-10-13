@@ -168,6 +168,7 @@ public:
 	void add_slice_to_evicted_list(u64 virt_offset, T *l2);
 	void dump(Qcow2State &qs);
 	int figure_group_for_flush(Qcow2State &qs);
+	bool has_dirty_slice(Qcow2State &qs);
 };
 
 /* todo: remove caches in destructor */
@@ -598,6 +599,7 @@ public:
 	int alloc_tag(struct ublksrv_queue *q);
 	void free_tag(struct ublksrv_queue *q, int tag);
 	void run_flush(struct ublksrv_queue *q, int queued);
+	bool is_flushing();
 };
 
 class Qcow2State {
@@ -675,6 +677,7 @@ public:
 	void dump_meta();
 	void reclaim_slice(Qcow2SliceMeta *m);
 	void remove_slice_from_evicted_list(Qcow2SliceMeta *m);
+	bool has_dirty_slice();
 
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void validate_cluster_use(u64 host_off, u64 virt_off, u32 use);

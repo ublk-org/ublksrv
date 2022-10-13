@@ -451,8 +451,13 @@ static void qcow2_handle_io_bg(struct ublksrv_queue *q, int nr_queued_io)
 
 	meta_log("%s %d, queued io %d\n", __func__, __LINE__, nr_queued_io);
 	qs->kill_slices(q);
-
+again:
 	qs->meta_flushing.run_flush(q, nr_queued_io);
+
+	if (!nr_queued_io && !qs->meta_flushing.is_flushing()) {
+		if (qs->has_dirty_slice())
+			goto again;
+	}
 }
 
 struct ublksrv_tgt_type  qcow2_tgt_type = {

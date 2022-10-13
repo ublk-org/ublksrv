@@ -110,6 +110,12 @@ u32 Qcow2State::add_meta_io(u32 qid, Qcow2MappingMeta *m)
 	return i;
 }
 
+bool Qcow2State::has_dirty_slice()
+{
+	return cluster_map.cache.has_dirty_slice(*this) ||
+		cluster_allocator.cache.has_dirty_slice(*this);
+}
+
 void Qcow2State::reclaim_slice(Qcow2SliceMeta *m)
 {
 	if (m->is_mapping_meta()) {
@@ -415,6 +421,22 @@ int slice_cache<T>::figure_group_for_flush(Qcow2State &qs)
 		return figure_group_from_dirty_list(qs);
 
 	return __figure_group_for_flush(qs);
+}
+
+template <class T>
+bool slice_cache<T>::has_dirty_slice(Qcow2State &qs)
+{
+	auto lru_list = slices.get_lru_list_ro();
+
+	//todo: use lrucache iterator to cut the loop time
+	for (auto it = lru_list.cbegin(); it != lru_list.cend(); ++it) {
+		T *t = it->second;
+
+		if (t != nullptr && t->get_dirty(-1) && !t->is_flushing())
+			return true;
+	}
+
+	return has_evicted_dirty_slices();
 }
 
 // refcount table shouldn't be so big
@@ -1563,6 +1585,12 @@ void Qcow2MetaFlushing::handle_mapping_dependency(Qcow2State *qs,
 		mapping_stat.run_flush(state, q, -1);
 }
 
+bool Qcow2MetaFlushing::is_flushing()
+{
+	return mapping_stat.get_state() != qcow2_meta_flush::IDLE ||
+			refcount_stat.get_state() != qcow2_meta_flush::IDLE;
+}
+
 void Qcow2MetaFlushing::run_flush(struct ublksrv_queue *q, int queued)
 {
 	Qcow2State *qs = dev_to_qcow2state(q->dev);
@@ -1588,8 +1616,9 @@ void Qcow2MetaFlushing::run_flush(struct ublksrv_queue *q, int queued)
 		handle_mapping_dependency(qs, q);
 
 	if (need_flush)
-		flush_log("%s: exit flush: state %d/%d queued %d refcnt blks(%d %d)\n",
+		flush_log("%s: exit flush: state %d/%d queued %d refcnt blks(%d %d) has dirty slice %d\n",
 			__func__, mapping_stat.get_state(),
 			refcount_stat.get_state(), queued,
-			refcnt_blk_start, refcnt_blk_end);
+			refcnt_blk_start, refcnt_blk_end,
+			qs->has_dirty_slice());
 }
