@@ -6,7 +6,7 @@
 
 echo "run perf test on pre-allocated qcow2 image via nbd"
 
-file=`_create_qcow2_image 2G`
+file=`_create_qcow2_image $QCOW2_IMG_SZ`
 
 __run_nbd_dev_perf "nbd" 1 1 $file
 

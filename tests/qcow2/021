@@ -6,7 +6,7 @@
 
 echo "run perf test on empty qcow2 image via ublk"
 
-file=`_create_qcow2_null_image "null" 2G`
+file=`_create_qcow2_null_image "null" $QCOW2_IMG_SZ`
 export T_TYPE_PARAMS=" -f $file"
 
 __run_dev_perf "qcow2" 1 1

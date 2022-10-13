@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
 #!/bin/bash
 
+export QCOW2_IMG_SZ=2G
+
 _create_qcow2_null_image() {
 	local type=$1
 	local size=$2
