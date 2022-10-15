@@ -217,6 +217,13 @@ struct ublksrv_tgt_info {
 	unsigned int pad;
 	const struct ublksrv_tgt_type *ops;
 
+	/*
+	 * If target needs to override default max workers for io_uring,
+	 * initialize io_wq_max_workers with proper value, otherwise
+	 * keep them as zero
+	 */
+	unsigned int iowq_max_workers[2];
+
 	unsigned long reserved[4];
 };
 

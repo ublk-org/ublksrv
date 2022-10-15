@@ -508,6 +508,32 @@ static int ublksrv_setup_eventfd(struct ublksrv_queue *q)
 	return 0;
 }
 
+static void ublksrv_queue_adjust_uring_io_wq_workers(struct ublksrv_queue *q)
+{
+	struct ublksrv_dev *dev = q->dev;
+	unsigned int val[2] = {0, 0};
+	int ret;
+
+	if (!dev->tgt.iowq_max_workers[0] && !dev->tgt.iowq_max_workers[1])
+		return;
+
+	ret = io_uring_register_iowq_max_workers(&q->ring, val);
+	if (ret)
+		syslog(LOG_ERR, "%s: register iowq max workers failed %d\n",
+				__func__, ret);
+
+	if (!dev->tgt.iowq_max_workers[0])
+		dev->tgt.iowq_max_workers[0] = val[0];
+	if (!dev->tgt.iowq_max_workers[1])
+		dev->tgt.iowq_max_workers[1] = val[1];
+
+	ret = io_uring_register_iowq_max_workers(&q->ring,
+			dev->tgt.iowq_max_workers);
+	if (ret)
+		syslog(LOG_ERR, "%s: register iowq max workers failed %d\n",
+				__func__, ret);
+}
+
 struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data)
 {
@@ -594,6 +620,8 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
 		syslog(LOG_INFO, "ublk dev %d queue %d set_io_flusher failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
+
+	ublksrv_queue_adjust_uring_io_wq_workers(q);
 
 	q->private_data = queue_data;
 
