@@ -88,6 +88,7 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	p.basic.chunk_sectors = 1 << (be32_to_cpu(header->cluster_bits) - 9);
 	tgt->tgt_ring_depth = info->queue_depth * 4;
 	tgt->extra_ios = QCOW2_PARA::META_MAX_TAGS;
+	tgt->iowq_max_workers[0] = 1;
 	tgt->nr_fds = 1;
 	tgt->fds[1] = fd;
 	dev->target_data = qs = make_qcow2state(file, dev);
