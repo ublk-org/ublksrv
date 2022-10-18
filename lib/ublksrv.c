@@ -871,6 +871,9 @@ static void ublksrv_queue_idle_enter(struct ublksrv_queue *q)
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id, q->state);
 	ublksrv_queue_discard_io_pages(q);
 	q->state |= UBLKSRV_QUEUE_IDLE;
+
+	if (q->tgt_ops->idle_fn)
+		q->tgt_ops->idle_fn(q, true);
 }
 
 static inline void ublksrv_queue_idle_exit(struct ublksrv_queue *q)
@@ -879,6 +882,8 @@ static inline void ublksrv_queue_idle_exit(struct ublksrv_queue *q)
 		ublksrv_log(LOG_INFO, "dev%d-q%d: exit idle %x\n",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id, q->state);
 		q->state &= ~UBLKSRV_QUEUE_IDLE;
+		if (q->tgt_ops->idle_fn)
+			q->tgt_ops->idle_fn(q, false);
 	}
 }
 

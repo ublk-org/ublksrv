@@ -302,6 +302,8 @@ struct ublksrv_tgt_type {
 	void *(*alloc_io_buf)(struct ublksrv_queue *q, int tag, int size);
 	void (*free_io_buf)(struct ublksrv_queue *q, void *buf, int tag);
 
+	void (*idle_fn)(struct ublksrv_queue *q, bool enter);
+
 	int  type;
 	unsigned ublk_flags;	//flags required for ublk driver
 	unsigned ublksrv_flags;	//flags required for ublksrv
