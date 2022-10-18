@@ -680,6 +680,7 @@ public:
 	void remove_slice_from_evicted_list(Qcow2SliceMeta *m);
 	bool has_dirty_slice();
 	u32 get_l2_slices_count();
+	void shrink_cache();
 
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void validate_cluster_use(u64 host_off, u64 virt_off, u32 use);

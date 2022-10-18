@@ -182,6 +182,12 @@ void Qcow2State::kill_slices(struct ublksrv_queue *q)
 	}
 }
 
+void Qcow2State::shrink_cache()
+{
+	cluster_map.cache.shrink(*this);
+	cluster_allocator.cache.shrink(*this);
+}
+
 #ifdef DEBUG_QCOW2_META_VALIDATE
 void Qcow2State::validate_cluster_use(u64 host_off, u64 virt_off, u32 use) {
 	auto it = cluster_use.find(host_off);
@@ -728,7 +734,7 @@ Qcow2ClusterMapping::Qcow2ClusterMapping(Qcow2State &qs): state(qs),
 	cache(QCOW2_PARA::L2_TABLE_SLICE_BITS,
 		qs.header.cluster_bits,
 		qs.header.cluster_bits + L2_TABLE_SLICE_BITS - 3,
-		QCOW2_PARA::L2_TABLE_MAX_CACHE_BYTES),
+		qs.get_l2_slices_count() * QCOW2_PARA::L2_TABLE_SLICE_BYTES),
 	cluster_bits(state.header.cluster_bits),
 	l2_entries_order(state.header.cluster_bits - 3),
 	max_alloc_entries(0)

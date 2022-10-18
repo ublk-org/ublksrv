@@ -461,6 +461,16 @@ again:
 	}
 }
 
+static void qcow2_idle(struct ublksrv_queue *q, bool enter)
+{
+	Qcow2State *qs = dev_to_qcow2state(q->dev);
+
+	if (!enter)
+		return;
+
+	qs->shrink_cache();
+}
+
 struct ublksrv_tgt_type  qcow2_tgt_type = {
 	.handle_io_async = qcow2_handle_io_async,
 	.tgt_io_done = qcow2_tgt_io_done,
@@ -468,6 +478,7 @@ struct ublksrv_tgt_type  qcow2_tgt_type = {
 	.usage_for_add	=  qcow2_usage_for_add,
 	.init_tgt = qcow2_init_tgt,
 	.deinit_tgt	=  qcow2_deinit_tgt,
+	.idle_fn	=  qcow2_idle,
 	.type	= UBLKSRV_TGT_TYPE_QCOW2,
 	.name	=  "qcow2",
 };
