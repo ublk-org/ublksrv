@@ -89,6 +89,17 @@ u64 Qcow2State::get_refcount_table_offset()
 	return header.get_refcount_table_offset();
 }
 
+u32 Qcow2State::get_l2_slices_count()
+{
+	u32 mapping_bytes = get_dev_size() >> (header.cluster_bits - 3);
+
+	//align with qemu, at most 32MB
+	if (mapping_bytes > (32U << 20))
+		mapping_bytes = 32U << 20;
+
+	return mapping_bytes >> QCOW2_PARA::L2_TABLE_SLICE_BITS;
+}
+
 u32 Qcow2State::add_meta_io(u32 qid, Qcow2MappingMeta *m)
 {
 	struct meta_mapping *map = &meta_io_map[qid];
@@ -437,6 +448,28 @@ bool slice_cache<T>::has_dirty_slice(Qcow2State &qs)
 	}
 
 	return has_evicted_dirty_slices();
+}
+
+template <class T>
+void slice_cache<T>::shrink(Qcow2State &qs)
+{
+	u32 cnt = qs.get_l2_slices_count();
+
+	for (auto it = reclaimed_slices.cbegin();
+			it != reclaimed_slices.cend(); ++it) {
+		delete *it;
+	}
+
+	reclaimed_slices.clear();
+
+	cnt >>= 3;
+
+	//shrink cache until 1/8 slices are kept
+	while (slices.size() > cnt) {
+		auto t = slices.remove_last();
+
+		delete t;
+	}
 }
 
 // refcount table shouldn't be so big

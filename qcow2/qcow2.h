@@ -169,6 +169,7 @@ public:
 	void dump(Qcow2State &qs);
 	int figure_group_for_flush(Qcow2State &qs);
 	bool has_dirty_slice(Qcow2State &qs);
+	void shrink(Qcow2State &qs);
 };
 
 /* todo: remove caches in destructor */
@@ -678,6 +679,7 @@ public:
 	void reclaim_slice(Qcow2SliceMeta *m);
 	void remove_slice_from_evicted_list(Qcow2SliceMeta *m);
 	bool has_dirty_slice();
+	u32 get_l2_slices_count();
 
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void validate_cluster_use(u64 host_off, u64 virt_off, u32 use);
