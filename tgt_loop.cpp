@@ -2,7 +2,9 @@
 
 #include <config.h>
 
+#include <linux/blkzoned.h>
 #include <poll.h>
+#include <stdint.h>
 #include <sys/epoll.h>
 #include "ublksrv_tgt.h"
 
@@ -162,6 +164,28 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		ublk_err( "%s: backing file %s can't be opened\n",
 				__func__, file);
 		return -2;
+	}
+
+	if (info->flags & UBLK_F_ZONED) {
+		uint32_t zone_size;
+		if (ioctl(fd, BLKGETZONESZ, &zone_size)) {
+			syslog(LOG_ERR, "%s: BLKGETSONESZ ioctl failed for %s\n", __func__, file);
+			return -1;
+		}
+
+		if (zone_size == 0) {
+			syslog(LOG_ERR, "%s: target %s is not zoned\n",
+				__func__, file);
+			return -1;
+		}
+
+		dev->tgt.zone_size_sectors = zone_size;
+
+		p.basic.chunk_sectors = zone_size;
+		p.types |= UBLK_PARAM_TYPE_ZONED;
+		/* TODO: lift these values from loop target */
+		p.zoned.max_open_zones = 14;
+		p.zoned.max_active_zones = 14;
 	}
 
 	if (fstat(fd, &st) < 0)
@@ -369,11 +393,111 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 	return 1;
 }
 
+static bool __loop_handle_report_zones(const struct ublksrv_queue *q,
+				       const struct ublk_io_data *data, int tag)
+{
+	const struct ublksrv_io_desc *iod = data->iod;
+	unsigned ublk_op = ublksrv_get_op(iod);
+
+	if (ublk_op == UBLK_IO_OP_REPORT_ZONES) {
+		struct blk_zone_report *report;
+		int ret = 0;
+		unsigned int nr_zones =
+			iod->nr_sectors / q->dev->tgt.zone_size_sectors;
+		struct blk_zone *zone_info = (struct blk_zone *)iod->addr;
+
+		report = (struct blk_zone_report *)malloc(
+			sizeof(struct blk_zone_report) +
+			sizeof(struct blk_zone) * nr_zones);
+
+		if (!report) {
+		       syslog(LOG_ERR, "%s: failed to allocate", __func__);
+		       ublksrv_complete_io(q, tag, -errno);
+		       return true;
+		}
+
+		report->sector = iod->start_sector;
+		report->nr_zones = nr_zones;
+
+		ret = ioctl(q->dev->tgt.fds[1], BLKREPORTZONE, report);
+		if (ret) {
+		       syslog(LOG_ERR, "%s: BLKREPORTZONE failed\n", __func__);
+		       ret = -1;
+		       goto out;
+		}
+
+		if (report->nr_zones == 0) {
+		       /* Reporting zero length zone to indicate end */
+		       memset(zone_info, 0, sizeof(*zone_info));
+		       ret = -1;
+		       goto out;
+		}
+
+		// TODO: write directly to io buffer
+		ret = sizeof(*zone_info) * report->nr_zones;
+
+		memcpy(zone_info, &report->zones[0], ret);
+
+out:
+		free(report);
+		ublksrv_complete_io(q, tag, ret);
+		return true;
+	}
+
+	return false;
+}
+
+static bool __loop_handle_zone_ops(const struct ublksrv_queue *q,
+				   const struct ublk_io_data *data, int tag)
+{
+	const struct ublksrv_io_desc *iod = data->iod;
+	unsigned ublk_op = ublksrv_get_op(iod);
+	unsigned long ioctl_op = 0;
+	int ret;
+
+	switch (ublk_op) {
+	case UBLK_IO_OP_ZONE_OPEN:
+		ioctl_op = BLKOPENZONE;
+		break;
+	case UBLK_IO_OP_ZONE_CLOSE:
+		ioctl_op = BLKCLOSEZONE;
+		break;
+	case UBLK_IO_OP_ZONE_FINISH:
+		ioctl_op = BLKFINISHZONE;
+		break;
+	case UBLK_IO_OP_ZONE_RESET:
+		ioctl_op = BLKRESETZONE;
+		break;
+	}
+
+	if (ioctl_op) {
+		struct blk_zone_range range = {
+			.sector = iod->start_sector,
+			.nr_sectors = q->dev->tgt.zone_size_sectors,
+		};
+
+		ret = ioctl(q->dev->tgt.fds[1], ioctl_op, &range);
+
+		if (ret > 0) {
+		       ret = 0;
+		}
+
+		ublksrv_complete_io(q, tag, ret);
+		return true;
+	}
+
+	return __loop_handle_report_zones(q, data, tag);
+}
+
 static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
-		const struct ublk_io_data *data, int tag)
+					const struct ublk_io_data *data,
+					int tag)
 {
 	int ret;
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+	if (__loop_handle_zone_ops(q, data, tag))
+		co_return;
 
 	io->queued_tgt_io = 0;
  again:

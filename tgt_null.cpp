@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
+#include "ublksrv.h"
 #include <config.h>
+#include <linux/blkzoned.h>
 
 #include "ublksrv_tgt.h"
 
@@ -11,11 +13,15 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int jbuf_size;
+	unsigned long zone_size = 128;
+	static const struct option longopts[] = {
+		{"zone-size", 1, NULL, 's'}, {NULL}};
+	int opt;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,
 	};
-	unsigned long long dev_size = 250UL * 1024 * 1024 * 1024;
+	unsigned long long dev_size =  (1024<<9) * 10;
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
 		.basic = {
@@ -28,6 +34,23 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		},
 	};
 
+	if (info->flags & UBLK_F_ZONED) {
+		while ((opt = getopt_long(argc, argv, "-:s:", longopts, NULL)) != -1) {
+			switch (opt) {
+			case 's':
+				zone_size = strtol(optarg, NULL, 10);
+				break;
+			}
+		}
+
+    dev->tgt.zone_size_sectors = zone_size;
+		p.basic.chunk_sectors = zone_size;
+		p.types |= UBLK_PARAM_TYPE_ZONED;
+		p.zoned.max_open_zones = 14;
+		p.zoned.max_active_zones = 14;
+	}
+
+	int ret;
 	strcpy(tgt_json.name, "null");
 
 	if (type != UBLKSRV_TGT_TYPE_NULL)
@@ -76,6 +99,37 @@ static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 static co_io_job __null_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
+	const struct ublksrv_io_desc *iod = data->iod;
+	unsigned ublk_op = ublksrv_get_op(iod);
+	uint64_t sector = iod->start_sector;
+	unsigned long zone_size = q->dev->tgt.zone_size_sectors;
+	unsigned long dev_sectors = q->dev->tgt.dev_size >> 9;
+
+	size_t zone_idx = sector / zone_size;
+	size_t num_zones = dev_sectors / zone_size;
+
+	if (ublk_op == UBLK_IO_OP_REPORT_ZONES) {
+		struct blk_zone *zone_info = (struct blk_zone *)iod->addr;
+
+		// Last zone
+		if (zone_idx == num_zones) {
+			/* Reporting zero length zone to indicate end */
+			memset(zone_info, 0, sizeof(*zone_info));
+			// TODO: error code
+			ublksrv_complete_io(q, tag, -1);
+			co_return;
+		}
+
+		zone_info->start = zone_idx * zone_size;
+		zone_info->len = zone_size;
+		zone_info->wp = 0;
+		zone_info->type = BLK_ZONE_TYPE_SEQWRITE_REQ;
+		zone_info->cond = 0;
+		zone_info->capacity = zone_size;
+
+		ublksrv_complete_io(q, tag, sizeof(*zone_info));
+		co_return;
+	}
 	ublksrv_complete_io(q, tag, data->iod->nr_sectors << 9);
 
 	co_return;

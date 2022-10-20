@@ -162,6 +162,8 @@ struct ublksrv_tgt_info {
 	 */
 	unsigned int iowq_max_workers[2];
 
+	uint64_t zone_size_sectors;
+
 	unsigned long reserved[4];
 };
 
