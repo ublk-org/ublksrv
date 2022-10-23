@@ -600,7 +600,8 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		q->ios[i].flags = UBLKSRV_NEED_FETCH_RQ | UBLKSRV_IO_FREE;
 	}
 
-	ret = ublksrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128);
+	ret = ublksrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128 |
+			IORING_SETUP_COOP_TASKRUN);
 	if (ret < 0) {
 		syslog(LOG_INFO, "ublk dev %d queue %d setup io_uring failed %d",
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
