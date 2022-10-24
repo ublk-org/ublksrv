@@ -157,7 +157,7 @@ __run_fio_libaio() {
         --iodepth=$QD \
         --iodepth_batch_submit=$BATCH \
         --iodepth_batch_complete_min=$BATCH \
-        --filename=$DEVS \
+        --filename=$DEVS --gtod_reduce=1 \
         --direct=1 --runtime=$RTIME --numjobs=$JOBS --rw=$RW \
         --name=test > /dev/null 2>&1
 }
