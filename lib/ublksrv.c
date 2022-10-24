@@ -421,6 +421,8 @@ void ublksrv_queue_deinit(struct ublksrv_queue *q)
 	if (q->efd > 0)
 		close(q->efd);
 
+	io_uring_unregister_ring_fd(&q->ring);
+
 	if (q->ring.ring_fd > 0) {
 		io_uring_unregister_files(&q->ring);
 		close(q->ring.ring_fd);
@@ -607,6 +609,8 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
 		goto fail;
 	}
+
+	io_uring_register_ring_fd(&q->ring);
 
 	ret = io_uring_register_files(&q->ring, dev->tgt.fds,
 			dev->tgt.nr_fds + 1);
