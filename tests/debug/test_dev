@@ -1,14 +1,22 @@
 # SPDX-License-Identifier: GPL-2.0
 #!/bin/bash
+#
+#usage:
+#	export UBLK_DBG_DEV=/dev/vdc; make test T=debug/test_dev
+
 
 . common/fio_common
 
 echo "run io test on specified device"
 
-TYPE="vdpa"
-DEV="/dev/vdc"
-QUEUES=1
+DEV=${UBLK_DBG_DEV}
+TYPE="debug"
 
-echo -e "\tfio ($TYPE($DEV), libaio, bs 4k, dio, hw queues:$QUEUES)..."
-__run_dev_perf_no_create $TYPE 1 $DEV
+DEV_NAME=`basename $DEV`
+QUEUES=`ls /sys/block/${DEV_NAME}/mq | wc -l`
+IOSCHED=`cat /sys/block/${DEV_NAME}/queue/scheduler | sed -n 's/.*\[\(.*\)\].*/\1/p'`
+JOBS=1
+
+echo -e "\tfio ($DEV, libaio, bs 4k, dio, io_jobs: $JOBS hw queues:$QUEUES, io_sched: $IOSCHED)..."
+__run_dev_perf_no_create $TYPE $JOBS $DEV
 
