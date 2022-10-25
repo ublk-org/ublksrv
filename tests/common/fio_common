@@ -213,32 +213,42 @@ __create_ublk_dev()
 	eval $UBLK add -t $ublk_type -q $nr_queues -u $uring_comp -g $need_get_data -d 128 ${T_TYPE_PARAMS} > /dev/null 2>&1
 }
 
+__get_cpu_utils()
+{
+	local user_cpu=`echo ${TEST_RUN["user cpu"]} | awk -F "." '{print $1}'`
+	local sys_cpu=`echo ${TEST_RUN["system cpu"]} | awk -F "." '{print $1}'`
+	echo "cpu_util(${user_cpu}% ${sys_cpu}%)"
+}
+
 __run_dev_perf_no_create()
 {
-	TYPE=$1
-	JOBS=$2
-	DEV=$3
-	RT=$TRUNTIME
+	local TYPE=$1
+	local JOBS=$2
+	local DEV=$3
+	local RT=$TRUNTIME
+	local BS=4k
+	local FIO_PERF_FIELDS=("read iops" "write iops" "user cpu" "system cpu")
 
 	RW="randwrite"
-	FIO_PERF_FIELDS=("write iops")
-	__run_fio_perf $DEV 4k $RW $JOBS 20
-	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["write iops"]}"
+	__run_fio_perf $DEV $BS $RW $JOBS 20
+	cpu_util=`__get_cpu_utils`
+	echo -e "\t$RW($BS): jobs $JOBS, iops ${TEST_RUN["write iops"]}, $cpu_util"
 
 	RW="randread"
-	FIO_PERF_FIELDS=("read iops")
-	__run_fio_perf $DEV 4k $RW $JOBS $RT
-	echo -e "\t$RW: jobs $JOBS, iops ${TEST_RUN["read iops"]}"
+	__run_fio_perf $DEV $BS $RW $JOBS $RT
+	cpu_util=`__get_cpu_utils`
+	echo -e "\t$RW($BS): jobs $JOBS, iops ${TEST_RUN["read iops"]}, $cpu_util"
 
 	RW="randrw"
-	FIO_PERF_FIELDS=("read iops" "write iops")
-	__run_fio_perf $DEV 4k $RW $JOBS $RT
-	echo -e "\t$RW: jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+	__run_fio_perf $DEV $BS $RW $JOBS $RT
+	cpu_util=`__get_cpu_utils`
+	echo -e "\t$RW($BS): jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}, $cpu_util"
 
 	RW="rw"
-	FIO_PERF_FIELDS=("read iops" "write iops")
-	__run_fio_perf $DEV 512k $RW $JOBS $RT
-	echo -e "\t$RW(512k): jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}"
+	BS=512k
+	__run_fio_perf $DEV $BS $RW $JOBS $RT
+	cpu_util=`__get_cpu_utils`
+	echo -e "\t$RW($BS): jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}, $cpu_util"
 
 	echo ""
 }
@@ -253,7 +263,7 @@ __run_dev_perf()
 	__remove_ublk_dev
 	__create_ublk_dev $TYPE $QUEUES $T_URING_COMP $T_NEED_GET_DATA
 
-	echo -e "\tfio (ublk/$TYPE(${T_TYPE_PARAMS}), libaio, bs 4k, dio, hw queues:$QUEUES, io jobs: $JOBS, uring_comp: $T_URING_COMP, get_data: $T_NEED_GET_DATA)..."
+	echo -e "\tfio (ublk/$TYPE(${T_TYPE_PARAMS}), libaio, dio, hw queues:$QUEUES, io jobs: $JOBS, uring_comp: $T_URING_COMP, get_data: $T_NEED_GET_DATA)..."
 	__run_dev_perf_no_create $TYPE $JOBS $DEV
 
 	__remove_ublk_dev 0

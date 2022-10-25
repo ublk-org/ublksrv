@@ -50,7 +50,7 @@ __run_nbd_dev_perf()
 	local backing_file=$4
 	local DEV=`__create_nbd_dev $backing_file`
 
-	echo -e "\tfio ($TYPE($file), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	echo -e "\tfio ($TYPE($file), libaio, dio, hw queues:$QUEUES)..."
 	__run_dev_perf_no_create $TYPE $JOBS $DEV
 
 	__remove_nbd_dev $DEV

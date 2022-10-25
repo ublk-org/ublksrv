@@ -34,7 +34,7 @@ __run_loop_dev_perf()
 	local backing_file=$4
 	local DEV=`__create_kernel_loop_dev $backing_file`
 
-	echo -e "\tfio (kernel_loop/$TYPE($file), libaio, bs 4k, dio, hw queues:$QUEUES)..."
+	echo -e "\tfio (kernel_loop/$TYPE($file), libaio, dio, hw queues:$QUEUES)..."
 	__run_dev_perf_no_create $TYPE $JOBS $DEV
 
 	__remove_kernel_loop_dev $DEV

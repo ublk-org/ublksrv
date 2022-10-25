@@ -17,6 +17,6 @@ QUEUES=`ls /sys/block/${DEV_NAME}/mq | wc -l`
 IOSCHED=`cat /sys/block/${DEV_NAME}/queue/scheduler | sed -n 's/.*\[\(.*\)\].*/\1/p'`
 JOBS=1
 
-echo -e "\tfio ($DEV, libaio, bs 4k, dio, io_jobs: $JOBS hw queues:$QUEUES, io_sched: $IOSCHED)..."
+echo -e "\tfio ($DEV, libaio, dio, io_jobs: $JOBS hw queues:$QUEUES, io_sched: $IOSCHED)..."
 __run_dev_perf_no_create $TYPE $JOBS $DEV
 
