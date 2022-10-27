@@ -4,7 +4,7 @@
 . common/fio_common
 . common/loop_common
 
-file=`_create_loop_backing_file "loop" 1G`
+file=`_create_loop_backing_file "loop" $LO_IMG_SZ`
 export T_TYPE_PARAMS=" -f $file --buffered_io"
 
 __run_dev_perf "loop" 1 1

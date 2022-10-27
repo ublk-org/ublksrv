@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT or GPL-2.0-only
 #!/bin/bash
 
+export LO_IMG_SZ=1G
+
 _create_loop_backing_file() {
 	local my_size=$2
 
