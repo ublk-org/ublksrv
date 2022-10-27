@@ -254,7 +254,7 @@ int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
 	std::string s;
 	int j_len;
 	char name[16];
-	char cpus[512];
+	char cpus[4096];
 
 	parse_json(j, jbuf);
 
