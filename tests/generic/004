@@ -4,7 +4,7 @@
 . common/fio_common
 . common/loop_common
 
-echo -e "\trun fio with delete ublk-loop test"
+echo -e "\trun fio with kill ubq_deamon and delete(NOWAIT) ublk-loop test"
 
 DEV=/dev/ublkb0
 BS=4k
@@ -18,13 +18,16 @@ NEED_GET_DATA=1
 RECOVERY=0
 RECOVERY_REISSUE=0
 
+
 ublk_run_delete_test()
 {
 	for CNT in `seq $LOOPS`; do
 		__create_ublk_dev "loop" $QUEUES $URING_COMP $NEED_GET_DATA $RECOVERY $RECOVERY_REISSUE
 		echo -e "\trun fio on ublk(uring_comp $URING_COMP, get_data $NEED_GET_DATA, recovery $RECOVERY, recovery_reissue $RECOVERY_REISSUE) with delete $CNT"
 		__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
-		sleep 4
+		sleep 2
+		queue_tid=`__ublk_get_queue_tid 0`
+		kill -9 $queue_tid
 		RES=`__remove_ublk_dev_return 0`
 		if [ $RES -ne 0 ]; then
 				echo -e "\tdelete ublk0 failed"
@@ -36,7 +39,7 @@ ublk_run_delete_test()
 	done
 }
 
-file=`_create_loop_backing_file "loop" 1G`
+file=`_create_loop_backing_file "loop" 1G` 
 export T_TYPE_PARAMS=" -f $file"
 
 for NEED_GET_DATA in `seq 0 1`; do

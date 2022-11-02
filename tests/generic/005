@@ -3,53 +3,60 @@
 
 . common/fio_common
 
-echo -e "\trun fio with kill ubq_deamon"
+echo -e "\trun fio with dev recovery, type 1:"
+echo -e "\t(1)kill all ubq_deamon, (2)recover with new ubq_daemon, (3)delete dev"
 
 DEV=/dev/ublkb0
 BS=4k
 RW=rw
 JOBS=4
 QUEUES=2
-RT=$TRUNTIME
+RT=$TRUNTIME*2
 LOOPS=4
 URING_COMP=1
 NEED_GET_DATA=1
-RECOVERY=0
+RECOVERY=1
 RECOVERY_REISSUE=0
 
-ublk_run_abort_test()
+ublk_run_recover_test()
 {
 	for CNT in `seq $LOOPS`; do
 		__create_ublk_dev "null" $QUEUES $URING_COMP $NEED_GET_DATA $RECOVERY $RECOVERY_REISSUE
 		echo -e "\trun fio with killing ublk(uring_comp $URING_COMP, get_data $NEED_GET_DATA, recovery $RECOVERY, recovery_reissue $RECOVERY_REISSUE) queue daemon $CNT"
 		__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 		sleep 2
-		queue_tid=`__ublk_get_queue_tid 0`
-		kill -9 $queue_tid
+		pid=`__ublk_get_pid`
+		kill -9 $pid
 		sleep 2
 		secs=0
 		while [ $secs -lt 10 ]; do
 			state=`__ublk_get_dev_state 0`
-			[ "$state" != "LIVE" ] && break
+			[ "$state" == "QUIESCED" ] && break
 			sleep 1
 			let secs++
 		done
-		[ $RECOVERY -ne 1 ] && [ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
-		[ $RECOVERY -eq 1 ] && [ "$state" != "QUIESCED" ] && echo "device isn't quiesced after killing queue daemon" && exit -1
+		secs=0
+		while [ $secs -lt 10 ]; do
+			RES=`__recover_ublk_dev 0`
+			[ $RES -eq 0 ] && break
+			sleep 1
+			let secs++
+		done
+		if [ $RES -ne 0 ]; then
+				echo -e "\trecover ublk0 failed"
+				exit -1
+		fi
+		sleep 2
 		RES=`__remove_ublk_dev_return 0`
 		if [ $RES -ne 0 ]; then
 				echo -e "\tdelete ublk0 failed"
 				exit -1
 		fi
 		wait
+		sleep 3
 	done
 }
 
-for NEED_GET_DATA in `seq 0 1`; do
-	ublk_run_abort_test
-done
-
-RECOVERY=1
 for RECOVERY_REISSUE in `seq 0 1`; do
-	ublk_run_abort_test
+		ublk_run_recover_test
 done

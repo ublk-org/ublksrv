@@ -168,6 +168,12 @@ __ublk_loop_backing_file() {
 	echo $file | xargs
 }
 
+__ublk_get_pid() {
+	eval $UBLK list > ${UBLK_TMP}
+	pid=`cat ${UBLK_TMP} | grep "pid" | awk '{print $7}'`
+	echo $pid
+}
+
 __ublk_get_queue_tid() {
 	QID=$1
 	eval $UBLK list > ${UBLK_TMP}
@@ -207,10 +213,21 @@ __create_ublk_dev()
 	nr_queues=$2
 	uring_comp=$3
 	need_get_data=$4
+	recovery=$5
+	recovery_reissue=$6
 
 	[ "$nr_queues" = "" ] && nr_queues=1
 
-	eval $UBLK add -t $ublk_type -q $nr_queues -u $uring_comp -g $need_get_data -d 128 ${T_TYPE_PARAMS} > /dev/null 2>&1
+	eval $UBLK add -t $ublk_type -q $nr_queues -u $uring_comp -g $need_get_data -d 128 -r $recovery -i $recovery_reissue ${T_TYPE_PARAMS} > /dev/null 2>&1
+}
+
+__recover_ublk_dev()
+{
+	dev_id=$1
+
+	eval $UBLK recover -n $dev_id
+	RES=$?
+	echo $RES
 }
 
 __get_cpu_utils()
@@ -261,9 +278,9 @@ __run_dev_perf()
 	DEV="/dev/ublkb0"
 
 	__remove_ublk_dev
-	__create_ublk_dev $TYPE $QUEUES $T_URING_COMP $T_NEED_GET_DATA
+	__create_ublk_dev $TYPE $QUEUES $T_URING_COMP $T_NEED_GET_DATA $T_RECOVERY $T_RECOVERY_REISSUE
 
-	echo -e "\tfio (ublk/$TYPE(${T_TYPE_PARAMS}), libaio, dio, hw queues:$QUEUES, io jobs: $JOBS, uring_comp: $T_URING_COMP, get_data: $T_NEED_GET_DATA)..."
+	echo -e "\tfio (ublk/$TYPE(${T_TYPE_PARAMS}), libaio, dio, hw queues:$QUEUES, io jobs: $JOBS, uring_comp: $T_URING_COMP, get_data: $T_NEED_GET_DATA, recovery $T_RECOVERY, recovery_reissue $T_RECOVERY_REISSUE)..."
 	__run_dev_perf_no_create $TYPE $JOBS $DEV
 
 	__remove_ublk_dev 0

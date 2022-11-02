@@ -49,6 +49,8 @@ export TRUNTIME=$2
 export UBLK_TMP_DIR=$TDIR
 export T_URING_COMP=0
 export T_NEED_GET_DATA=0
+export T_RECOVERY=0
+export T_RECOVERY_REISSUE=0
 export T_TYPE_PARAMS=""
 
 _ITEMS=($(echo ${TEST} | tr ':' '\n'))
