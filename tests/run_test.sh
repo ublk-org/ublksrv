@@ -51,6 +51,8 @@ export T_URING_COMP=0
 export T_NEED_GET_DATA=0
 export T_TYPE_PARAMS=""
 
+[ ! -d ${UBLK_TMP_DIR} ] && mkdir -p ${UBLK_TMP_DIR}
+
 _ITEMS=($(echo ${TEST} | tr ':' '\n'))
 for _ITEM in "${_ITEMS[@]}"; do
 	if [ -d ${_ITEM} ]; then
