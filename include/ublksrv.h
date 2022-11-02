@@ -114,6 +114,8 @@ struct ublksrv_ctrl_dev {
 
 	cpu_set_t *queues_cpuset;
 
+	const char *tgt_jbuf;
+
 	unsigned long reserved[4];
 };
 
@@ -371,6 +373,9 @@ extern int ublksrv_ctrl_set_params(struct ublksrv_ctrl_dev *dev,
 		struct ublk_params *params);
 extern int ublksrv_ctrl_get_params(struct ublksrv_ctrl_dev *dev,
 		struct ublk_params *params);
+extern int ublksrv_ctrl_start_recovery(struct ublksrv_ctrl_dev *dev);
+extern int ublksrv_ctrl_end_recovery(struct ublksrv_ctrl_dev *dev,
+		int daemon_pid);
 
 extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);

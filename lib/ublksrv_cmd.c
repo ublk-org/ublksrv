@@ -256,6 +256,8 @@ static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 		return "DEAD";
 	case UBLK_S_DEV_LIVE:
 		return "LIVE";
+	case UBLK_S_DEV_QUIESCED:
+		return "QUIESCED";
 	default:
 		return "UNKNOWN";
 	};
@@ -323,4 +325,30 @@ int ublksrv_ctrl_get_params(struct ublksrv_ctrl_dev *dev,
 	params->len = sizeof(*params);
 
 	return __ublksrv_ctrl_cmd(dev, &data);
+}
+
+int ublksrv_ctrl_start_recovery(struct ublksrv_ctrl_dev *dev)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_START_USER_RECOVERY,
+		.flags = 0,
+	};
+	int ret;
+
+	ret = __ublksrv_ctrl_cmd(dev, &data);
+	return ret;
+}
+
+int ublksrv_ctrl_end_recovery(struct ublksrv_ctrl_dev *dev, int daemon_pid)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_CMD_END_USER_RECOVERY,
+		.flags = CTRL_CMD_HAS_DATA,
+	};
+	int ret;
+
+	dev->dev_info.ublksrv_pid = data.data[0] = daemon_pid;
+
+	ret = __ublksrv_ctrl_cmd(dev, &data);
+	return ret;
 }
