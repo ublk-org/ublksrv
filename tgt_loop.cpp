@@ -88,6 +88,25 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		}
 	}
 
+	if (dev->ctrl_dev->tgt_jbuf) {
+		file = (char *)calloc(1, 4096);
+		if (ublksrv_json_read_target_str_info(dev->ctrl_dev->tgt_jbuf, 4096,
+				"backing_file", file)) {
+			syslog(LOG_ERR, "%s: read target backing file failed.\n",
+					__func__);
+			return -1;
+		}
+		long direct_io;
+
+		if(ublksrv_json_read_target_ulong_info(dev->ctrl_dev->tgt_jbuf,
+				"direct_io", &direct_io)) {
+			syslog(LOG_ERR, "%s: read target direct_io failed.\n",
+					__func__);
+			return -1;	
+		}
+		buffered_io = !direct_io;
+	}
+
 	if (!file)
 		return -1;
 
