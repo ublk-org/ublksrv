@@ -174,6 +174,15 @@ __ublk_dev_id() {
 	echo "$dev_id"
 }
 
+__ublk_get_pid() {
+	local dev=$1
+	local dev_id=`__ublk_dev_id $dev`
+
+	eval $UBLK list -n $dev_id > ${UBLK_TMP}
+	pid=`cat ${UBLK_TMP} | grep "pid" | awk '{print $7}'`
+	echo $pid
+}
+
 __ublk_get_queue_tid() {
 	local dev=$1
 	local qid=$2
@@ -230,6 +239,16 @@ __create_ublk_dev()
 	[ ${id} == "-" ] && echo "no free ublk device nodes" && exit -1
 	eval $UBLK add ${T_TYPE_PARAMS} -n $id > /dev/null 2>&1
 	echo "/dev/ublkb${id}"
+}
+
+__recover_ublk_dev()
+{
+	local dev=$1
+	local dev_id=`__ublk_dev_id $dev`
+
+	eval $UBLK recover -n $dev_id
+	RES=$?
+	echo $RES
 }
 
 __get_cpu_utils()
