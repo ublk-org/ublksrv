@@ -1,0 +1,15 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+. common/loop_common
+
+modprobe -r null_blk
+modprobe null_blk
+file="/dev/nullb0"
+export T_TYPE_PARAMS="-t loop -q 1 -f $file -z"
+
+# ublk-loop over block device
+__run_dev_perf 1
+
+modprobe -r null_blk

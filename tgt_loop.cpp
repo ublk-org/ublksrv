@@ -6,6 +6,47 @@
 #include <sys/epoll.h>
 #include "ublksrv_tgt.h"
 
+//supposed to be from kernel header
+#define IORING_OP_READ_SPLICE_BUF (IORING_OP_SENDMSG_ZC + 1)
+#define IORING_OP_WRITE_SPLICE_BUF (IORING_OP_SENDMSG_ZC + 2)
+
+static long use_zc;
+
+static inline void io_uring_prep_rw_zc(int op, struct io_uring_sqe *sqe, int fd,
+                         unsigned len, __u64 offset, int splice_fd,
+			 __u64 splice_offset)
+{
+        sqe->opcode = (__u8) op;
+        sqe->flags = 0;
+        sqe->ioprio = 0;
+        sqe->fd = fd;
+        sqe->off = offset;
+        sqe->splice_off_in = splice_offset;
+        sqe->len = len;
+        sqe->rw_flags = 0;
+        sqe->buf_index = 0;
+        sqe->personality = 0;
+        sqe->splice_fd_in = splice_fd;
+        sqe->addr3 = 0;
+        sqe->__pad2[0] = 0;
+}
+
+static void io_uring_prep_read_zc(struct io_uring_sqe *sqe, int fd,
+                         unsigned len, __u64 offset, int splice_fd,
+			 __u64 splice_offset)
+{
+	io_uring_prep_rw_zc(IORING_OP_READ_SPLICE_BUF, sqe, fd, len, offset,
+			splice_fd, splice_offset);
+}
+
+static void io_uring_prep_write_zc(struct io_uring_sqe *sqe, int fd,
+                         unsigned len, __u64 offset, int splice_fd,
+			 __u64 splice_offset)
+{
+	io_uring_prep_rw_zc(IORING_OP_WRITE_SPLICE_BUF, sqe, fd, len, offset,
+			splice_fd, splice_offset);
+}
+
 static bool backing_supports_discard(char *name)
 {
 	int fd;
@@ -61,6 +102,8 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 				__func__, ret);
 		return ret;
 	}
+
+	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 
 	ret = ublksrv_json_read_params(&p, jbuf);
 	if (ret) {
@@ -191,6 +234,8 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	tgt->fds[1] = fd;
 	p.basic.dev_sectors = bytes >> 9;
 
+	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
+
 	if (st.st_blksize && can_discard)
 		p.discard.discard_granularity = st.st_blksize;
 	else
@@ -251,9 +296,11 @@ static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
 static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
+	int splice_fd = q->dev->tgt.fds[0];
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
+	unsigned long long ublkc_off = ublk_pos(q->q_id, tag, 0);
 
 	if (!sqe)
 		return 0;
@@ -275,17 +322,29 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		break;
 	case UBLK_IO_OP_READ:
-		io_uring_prep_read(sqe, 1 /*fds[1]*/,
-				(void *)iod->addr,
-				iod->nr_sectors << 9,
-				iod->start_sector << 9);
+		if (!use_zc)
+			io_uring_prep_read(sqe, 1 /*fds[1]*/,
+					(void *)iod->addr,
+					iod->nr_sectors << 9,
+					iod->start_sector << 9);
+		else
+			io_uring_prep_read_zc(sqe, 1,
+					iod->nr_sectors << 9,
+					iod->start_sector << 9,
+					splice_fd, ublkc_off);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		break;
 	case UBLK_IO_OP_WRITE:
-		io_uring_prep_write(sqe, 1 /*fds[1]*/,
+		if (!use_zc)
+			io_uring_prep_write(sqe, 1 /*fds[1]*/,
 				(void *)iod->addr,
 				iod->nr_sectors << 9,
 				iod->start_sector << 9);
+		else
+			io_uring_prep_write_zc(sqe, 1,
+					iod->nr_sectors << 9,
+					iod->start_sector << 9,
+					splice_fd, ublkc_off);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		break;
 	default:
