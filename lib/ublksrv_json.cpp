@@ -147,6 +147,54 @@ int ublksrv_json_dump_params(const char *jbuf)
 	return 0;
 }
 
+int ublksrv_json_read_target_str_info(const char *jbuf, int len,
+		const char *name, char *val)
+{
+	json j;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	if (!j.contains("target"))
+		return -EINVAL;
+
+	auto tj = j["target"];
+
+	if (!tj.contains(name))
+		return -EINVAL;
+
+	std::string str = tj[std::string(name)];
+	if (str.length() < len) {
+		strcpy(val, str.c_str());
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+int ublksrv_json_read_target_ulong_info(const char *jbuf,
+		const char *name, long *val)
+{
+	json j;
+	std::string s;
+	int j_len;
+
+	parse_json(j, jbuf);
+
+	if (!j.contains("target"))
+		return -EINVAL;
+
+	auto tj = j["target"];
+
+	if (!tj.contains(name))
+		return -EINVAL;
+
+	*val = tj[std::string(name)];
+
+	return 0;
+}
+
 int ublksrv_json_write_target_str_info(char *jbuf, int len,
 		const char *name, const char *val)
 {
