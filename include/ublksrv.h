@@ -396,6 +396,11 @@ extern int ublksrv_json_read_queue_info(const char *jbuf, int qid,
 		unsigned *tid, char *affinity_buf, int len);
 extern int ublksrv_json_read_target_info(const char *jbuf, char *tgt_buf,
 		int len);
+extern int ublksrv_json_read_target_str_info(const char *jbuf, int len,
+		const char *name, char *val);
+
+extern int ublksrv_json_read_target_ulong_info(const char *jbuf,
+		const char *name, long *val);
 extern int ublksrv_json_write_target_str_info(char *jbuf, int len,
 		const char *name, const char *val);
 extern int ublksrv_json_write_target_long_info(char *jbuf, int len,
