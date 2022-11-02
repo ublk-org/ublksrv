@@ -6,6 +6,12 @@
 #include <sys/epoll.h>
 #include "ublksrv_tgt.h"
 
+//supposed to be from kernel header
+#define SPLICE_F_DIRECT (0x10)
+#define SPLICE_F_READ_TO_READ   (0x20)
+
+static bool use_zc = false;
+
 static bool backing_supports_discard(char *name)
 {
 	int fd;
@@ -193,6 +199,8 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	tgt->fds[1] = fd;
 	p.basic.dev_sectors = bytes >> 9;
 
+	use_zc = info->flags & UBLK_F_SPLICE_ZC;
+
 	if (st.st_blksize && can_discard)
 		p.discard.discard_granularity = st.st_blksize;
 	else
@@ -250,6 +258,22 @@ static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
        return mode;
 }
 
+static void loop_queue_tgt_zc_io(const struct ublksrv_queue *q,
+		struct io_uring_sqe *sqe, int tag,
+		const struct ublksrv_io_desc *iod)
+{
+	unsigned long long ublkc_off = ublk_pos(q->q_id, tag, 0);
+	unsigned flags = SPLICE_F_MOVE | SPLICE_F_DIRECT;
+
+	if (ublksrv_get_op(iod) == UBLK_IO_OP_READ)
+		flags |= SPLICE_F_READ_TO_READ;
+
+	io_uring_prep_splice(sqe, q->dev->tgt.fds[0], ublkc_off,
+			q->dev->tgt.fds[1], iod->start_sector << 9,
+			iod->nr_sectors << 9, flags);
+	sqe->opcode = IORING_OP_SPLICE;
+}
+
 static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
@@ -259,6 +283,12 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 
 	if (!sqe)
 		return 0;
+
+	if (use_zc && (ublk_op == UBLK_IO_OP_READ || ublk_op ==
+				UBLK_IO_OP_WRITE)) {
+		loop_queue_tgt_zc_io(q, sqe, tag, iod);
+		goto exit;
+	}
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_FLUSH:
@@ -289,7 +319,7 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 	default:
 		return -EINVAL;
 	}
-
+exit:
 	/* bit63 marks us as tgt io */
 	sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 
@@ -322,6 +352,11 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 		io->queued_tgt_io -= 1;
 
 		if (io->tgt_io_cqe->res == -EAGAIN)
+			goto again;
+#ifndef ERESTARTSYS
+#define ERESTARTSYS 512
+#endif
+		if (io->tgt_io_cqe->res == -ERESTARTSYS)
 			goto again;
 
 		ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);

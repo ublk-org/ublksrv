@@ -611,7 +611,7 @@ static int cmd_dev_add(int argc, char *argv[])
 			data.tgt_type = optarg;
 			break;
 		case 'z':
-			data.flags |= UBLK_F_SUPPORT_ZERO_COPY;
+			data.flags |= UBLK_F_SPLICE_ZC;
 			break;
 		case 'q':
 			data.nr_hw_queues = strtol(optarg, NULL, 10);

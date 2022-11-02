@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+#!/bin/bash
+
+. common/fio_common
+. common/loop_common
+
+file=`_create_loop_backing_file "loop" $LO_IMG_SZ`
+export T_TYPE_PARAMS=" -f $file --buffered_io -z"
+
+__run_dev_perf "loop" 1 1
+
+[ -f "$file" ] && rm -f $file

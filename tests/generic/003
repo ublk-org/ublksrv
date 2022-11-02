@@ -54,4 +54,7 @@ for TYPE in "loop" "qcow2"; do
 	ublk_run_mount_type $TYPE $MNT
 done
 
+export T_TYPE_PARAMS=" -f $file -z"
+ublk_run_mount_test 1 0
+
 rm -fr $MNT
