@@ -146,6 +146,52 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	return 0;
 }
 
+static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
+{
+	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
+	const char *jbuf = dev->ctrl_dev->recovery_jbuf;
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	int fd, ret;
+	long direct_io = 0;
+	char file[PATH_MAX];
+	struct ublk_params p;
+
+	ublk_assert(jbuf);
+	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
+	ublk_assert(type == UBLKSRV_TGT_TYPE_QCOW2);
+
+	ret = ublksrv_json_read_target_str_info(jbuf, PATH_MAX, "backing_file", file);
+	if (ret < 0) {
+		syslog(LOG_ERR, "%s: backing file can't be retrieved from jbuf %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	ret = ublksrv_json_read_params(&p, jbuf);
+	if (ret) {
+		syslog(LOG_ERR, "%s: read ublk params failed %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	fd = open(file, O_RDWR | O_DIRECT);
+	if (fd < 0) {
+		syslog(LOG_ERR, "%s: backing file %s can't be opened\n",
+				__func__, file);
+		return fd;
+	}
+
+	tgt->dev_size = p.basic.dev_sectors << 9;
+	tgt->extra_ios = QCOW2_PARA::META_MAX_TAGS;
+	tgt->tgt_ring_depth = info->queue_depth * 4;
+	tgt->iowq_max_workers[0] = 1;
+	tgt->nr_fds = 1;
+	tgt->fds[1] = fd;
+	dev->target_data = make_qcow2state(file, dev);
+
+	return 0;
+}
+
 static void qcow2_usage_for_add(void)
 {
 	printf("           qcow2: -f backing_file\n");
@@ -490,6 +536,7 @@ struct ublksrv_tgt_type  qcow2_tgt_type = {
 	.idle_fn	=  qcow2_idle,
 	.type	= UBLKSRV_TGT_TYPE_QCOW2,
 	.name	=  "qcow2",
+	.recovery_tgt = qcow2_recovery_tgt,
 };
 
 static void tgt_qcow2_init() __attribute__((constructor));

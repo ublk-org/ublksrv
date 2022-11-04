@@ -49,6 +49,31 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	return 0;
 }
 
+static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
+{
+	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
+	const char *jbuf = dev->ctrl_dev->recovery_jbuf;
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	int fd, ret;
+	struct ublk_params p;
+
+	ublk_assert(jbuf);
+	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
+	ublk_assert(type == UBLKSRV_TGT_TYPE_NULL);
+
+	ret = ublksrv_json_read_params(&p, jbuf);
+	if (ret) {
+		syslog(LOG_ERR, "%s: read ublk params failed %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	tgt->dev_size = p.basic.dev_sectors << 9;
+	tgt->tgt_ring_depth = info->queue_depth;
+	tgt->nr_fds = 0;
+	return 0;
+}
+
 static co_io_job __null_handle_io_async(struct ublksrv_queue *q,
 		struct ublk_io *io, int tag)
 {
@@ -73,6 +98,7 @@ struct ublksrv_tgt_type  null_tgt_type = {
 	.init_tgt = null_init_tgt,
 	.type	= UBLKSRV_TGT_TYPE_NULL,
 	.name	=  "null",
+	.recovery_tgt = null_recovery_tgt,
 };
 
 static void tgt_null_init() __attribute__((constructor));
