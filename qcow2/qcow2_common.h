@@ -5,12 +5,7 @@
 #include "ublksrv_priv.h"
 #include "ublksrv_tgt.h"
 
-#define qcow2_assert(x)  do { \
-	if (!(x)) {	\
-		syslog(LOG_ERR, "%s %d: assert!\n", __func__, __LINE__); \
-		assert(x);	\
-	}	\
-} while (0)
+#define qcow2_assert(x)  ublk_assert(x)
 
 enum QCOW2_PARA {
 #ifdef DEBUG_QCOW2_META_STRESS

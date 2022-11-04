@@ -117,6 +117,13 @@ static inline unsigned ilog2(unsigned x)
 	unsigned long __mptr = (unsigned long)(ptr);                    \
 	((type *)(__mptr - offsetof(type, member))); })
 
+#define ublk_assert(x)  do { \
+	if (!(x)) {	\
+		syslog(LOG_ERR, "%s %d: assert!\n", __func__, __LINE__); \
+		assert(x);	\
+	}	\
+} while (0)
+
 #ifdef __cplusplus
 }
 #endif
