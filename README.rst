@@ -149,6 +149,14 @@ run specified tests or test groups
 make test T=generic:loop/001:null
 
 
+Debug
+=====
+
+ublksrv is running as one daemon process, so most of debug messages won't be
+shown in terminal. If any issue is observed, please collect log via command
+of "journalctl | grep ublksrvd"
+
+
 License
 =======
 
