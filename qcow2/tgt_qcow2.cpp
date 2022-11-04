@@ -83,6 +83,11 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		return -EINVAL;
 	}
 
+	if (be64_to_cpu(header->nb_snapshots) != 0) {
+		syslog(LOG_ERR, "%s: not support snapshots\n", __func__);
+		return -EINVAL;
+	}
+
 	tgt_json.dev_size = tgt->dev_size = be64_to_cpu(header->size);
 	p.basic.dev_sectors = tgt->dev_size >> 9,
 	p.basic.chunk_sectors = 1 << (be32_to_cpu(header->cluster_bits) - 9);
