@@ -171,7 +171,8 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 static void loop_usage_for_add(void)
 {
-	printf("           loop: -f backing_file\n");
+	printf("           loop: -f backing_file [--buffered_io]\n");
+	printf("           	default is direct IO to backing file\n");
 }
 
 static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)

@@ -600,7 +600,7 @@ static void show_tgt_add_usage(unsigned int idx,
 		type->usage_for_add();
 }
 
-static void cmd_dev_add_usage(char *cmd)
+static void cmd_dev_add_usage(const char *cmd)
 {
 	struct tgt_types_name data = {
 		.pos = 0,
@@ -686,7 +686,7 @@ static int cmd_dev_del(int argc, char *argv[])
 	return ret;
 }
 
-static void cmd_dev_del_usage(char *cmd)
+static void cmd_dev_del_usage(const char *cmd)
 {
 	printf("%s del -n DEV_ID [-a | --all]\n", cmd);
 }
@@ -751,7 +751,7 @@ static int cmd_list_dev_info(int argc, char *argv[])
 	return ret;
 }
 
-static void cmd_dev_list_usage(char *cmd)
+static void cmd_dev_list_usage(const char *cmd)
 {
 	printf("%s list [-n DEV_ID]\n", cmd);
 }
@@ -760,10 +760,10 @@ int main(int argc, char *argv[])
 {
 	char *cmd;
 	int ret;
-	char exe[256];
+	char exe[PATH_MAX];
 
 	full_cmd = argv[0];
-	strncpy(exe, full_cmd, 256);
+	strncpy(exe, full_cmd, PATH_MAX);
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
@@ -777,9 +777,11 @@ int main(int argc, char *argv[])
 		ret = cmd_list_dev_info(argc, argv);
 
 	if (!strcmp(cmd, "help")) {
-		cmd_dev_add_usage(exe);
-		cmd_dev_del_usage(exe);
-		cmd_dev_list_usage(exe);
+		const char *cmd = "ublk";
+
+		cmd_dev_add_usage(cmd);
+		cmd_dev_del_usage(cmd);
+		cmd_dev_list_usage(cmd);
 	}
 
 	ublksrv_printf(stdout, "cmd %s: result %d\n", cmd, ret);
