@@ -69,7 +69,15 @@ static int __ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
 
 	optind = 0;     /* so that we can parse our arguments */
 	tgt->ops = ops;
-	ret = ops->init_tgt(dev, type, argc, argv);
+
+	if (dev->ctrl_dev->dev_info.state != UBLK_S_DEV_QUIESCED)
+		ret = ops->init_tgt(dev, type, argc, argv);
+	else {
+		if (ops->recovery_tgt)
+			ret = ops->recovery_tgt(dev, type);
+		else
+			ret = -ENOTSUP;
+	}
 	if (ret) {
 		tgt->ops = NULL;
 		return ret;

@@ -37,6 +37,61 @@ static bool backing_supports_discard(char *name)
 	return false;
 }
 
+static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
+{
+	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
+	const char *jbuf = dev->ctrl_dev->recovery_jbuf;
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	int fd, ret;
+	long direct_io = 0;
+	struct ublk_params p;
+	char file[PATH_MAX];
+
+	ublk_assert(jbuf);
+	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
+	ublk_assert(type == UBLKSRV_TGT_TYPE_LOOP);
+
+	ret = ublksrv_json_read_target_str_info(jbuf, PATH_MAX, "backing_file", file);
+	if (ret < 0) {
+		syslog(LOG_ERR, "%s: backing file can't be retrieved from jbuf %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	ret = ublksrv_json_read_target_ulong_info(jbuf, "direct_io",
+			&direct_io);
+	if (ret) {
+		syslog(LOG_ERR, "%s: read target direct_io failed %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	ret = ublksrv_json_read_params(&p, jbuf);
+	if (ret) {
+		syslog(LOG_ERR, "%s: read ublk params failed %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	fd = open(file, O_RDWR);
+	if (fd < 0) {
+		syslog(LOG_ERR, "%s: backing file %s can't be opened\n",
+				__func__, file);
+		return fd;
+	}
+
+	if (direct_io)
+		fcntl(fd, F_SETFL, O_DIRECT);
+
+	tgt->tgt_data = strdup(file);
+	tgt->dev_size = p.basic.dev_sectors << 9;
+	tgt->tgt_ring_depth = info->queue_depth;
+	tgt->nr_fds = 1;
+	tgt->fds[1] = fd;
+
+	return 0;
+}
+
 static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
@@ -319,6 +374,7 @@ struct ublksrv_tgt_type  loop_tgt_type = {
 	.deinit_tgt	=  loop_deinit_tgt,
 	.type	= UBLKSRV_TGT_TYPE_LOOP,
 	.name	=  "loop",
+	.recovery_tgt = loop_recovery_tgt,
 };
 
 static void tgt_loop_init() __attribute__((constructor));

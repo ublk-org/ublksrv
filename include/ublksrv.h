@@ -317,7 +317,10 @@ struct ublksrv_tgt_type {
 	unsigned pad;
 	const char *name;
 
-	unsigned long reserved[8];
+	/* recovery this target */
+	int (*recovery_tgt)(struct ublksrv_dev *, int type);
+
+	unsigned long reserved[7];
 };
 
 struct ublksrv_dev {
