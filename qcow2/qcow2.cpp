@@ -1001,6 +1001,10 @@ u64 Qcow2ClusterMapping::map_cluster(const qcow2_io_ctx_t &ioc, u64 offset,
 	}
 
 	l2->put_ref();
+
+	if (host_off & QCOW_OFLAG_COMPRESSED)
+		return (u64)-1;
+
 	return host_off + off_in_cls;
 }
 

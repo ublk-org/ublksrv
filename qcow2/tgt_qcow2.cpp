@@ -336,7 +336,11 @@ again:
 			__func__, tag, op, start, (iod->nr_sectors << 9),
 			mapped_start);
 
-	if (!mapped_start) {
+	if (mapped_start == -1) {
+		qcow2_log("%s: tag %d virt %llx op %d, unsupported format\n",
+				__func__, tag, start, op);
+		ret = -EIO;
+	} else if (!mapped_start) {
 		// write to unallocated cluster, so have to allocate first
 		if ((op == UBLK_IO_OP_READ) &&
 			l2_entry_read_as_zero(mapped_start)) {
