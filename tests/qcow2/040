@@ -4,7 +4,7 @@
 . common/fio_common
 . common/qcow2_common
 
-echo -e "\t check qcow2 image integrity after ubq_deamon is killed when running fio"
+echo "check qcow2 image integrity after ubq_deamon is killed when running fio"
 
 DEV=/dev/ublkb0
 BS=4k
