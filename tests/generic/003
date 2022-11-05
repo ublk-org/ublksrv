@@ -35,7 +35,7 @@ MNT=`mktemp -d`
 URING_COMP=1
 NEED_GET_DATA=1
 
-file=`_create_loop_backing_file "data" 1G`
+file=`_create_loop_image "data" 1G`
 
 for NEED_GET_DATA in `seq 0 1`; do
 	ublk_run_mount_test $URING_COMP $NEED_GET_DATA

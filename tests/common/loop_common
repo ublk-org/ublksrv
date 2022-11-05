@@ -3,7 +3,7 @@
 
 export LO_IMG_SZ=1G
 
-_create_loop_backing_file() {
+_create_loop_image() {
 	local type=$1
 	local my_size=$2
 
