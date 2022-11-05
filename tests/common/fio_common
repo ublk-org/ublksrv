@@ -260,3 +260,19 @@ __run_dev_perf()
 
 	__remove_ublk_dev 0
 }
+
+_create_image()
+{
+	local type=$1
+
+	shift 1
+
+	eval _create_${type}_image $@
+}
+
+_remove_image()
+{
+	local type=$1
+	shift 1
+	eval _remove_${type}_image $@
+}
