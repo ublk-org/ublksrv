@@ -7,12 +7,13 @@
 echo "run fs randwrite with verify over ublk-qcow2"
 
 file=`_create_qcow2_null_image "null" $QCOW2_IMG_SZ`
-export T_TYPE_PARAMS=" -f $file"
 
 QUEUES=1
 URING_COMP=0
 NEED_GET_DATA=0
-__create_ublk_dev "qcow2" $QUEUES $URING_COMP $NEED_GET_DATA
+
+export T_TYPE_PARAMS=" -f $file -u $URING_COMP -g $NEED_GET_DATA"
+__create_ublk_dev "qcow2" $QUEUES
 
 MNT=`mktemp -d`
 DEV=/dev/ublkb0

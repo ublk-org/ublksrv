@@ -47,8 +47,6 @@ fi
 
 export TRUNTIME=$2
 export UBLK_TMP_DIR=$TDIR
-export T_URING_COMP=0
-export T_NEED_GET_DATA=0
 export T_TYPE_PARAMS=""
 
 [ ! -d ${UBLK_TMP_DIR} ] && mkdir -p ${UBLK_TMP_DIR}

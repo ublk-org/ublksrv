@@ -4,9 +4,8 @@
 . common/loop_common
 
 file=`_create_loop_backing_file "loop" $LO_IMG_SZ`
-export T_TYPE_PARAMS=" -f $file"
+export T_TYPE_PARAMS=" -f $file -g 1"
 
-export T_NEED_GET_DATA=1
 __run_dev_perf "loop" 1 1
 
 [ -f "$file" ] && rm -f $file
