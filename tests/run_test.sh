@@ -32,7 +32,7 @@ run_test_grp() {
 
 run_test_all() {
 	local D=$1
-	local GRPS="generic null loop"
+	local GRPS="generic null loop qcow2"
 	for G in $GRPS; do
 			run_test_grp $D/$G
 	done
