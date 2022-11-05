@@ -11,7 +11,7 @@ ublk_run_mount_test()
 	local mnt=$1
 
 	ROOT_FSTYPE=`findmnt -l -o FSTYPE -n /`
-	echo -n -e "\tmount/umount ublk($T_TYPE_PARAMS) with fstype($ROOT_FSTYPE)..."
+	echo -n -e "\tmount/umount $dev(ublk $T_TYPE_PARAMS) with fstype($ROOT_FSTYPE)..."
 
 
 	wipefs -a $dev > /dev/null 2>&1

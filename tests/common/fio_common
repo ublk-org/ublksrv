@@ -168,16 +168,27 @@ __ublk_loop_backing_file() {
 	echo $file | xargs
 }
 
+__ublk_dev_id() {
+	local dev=$1
+	dev_id=`echo "$dev" | awk '{print substr($1, 11)}'`
+	echo "$dev_id"
+}
+
 __ublk_get_queue_tid() {
-	QID=$1
-	eval $UBLK list > ${UBLK_TMP}
-	q_tid=`cat ${UBLK_TMP} | grep "queue ${QID}" | awk '{print $4}'`
+	local dev=$1
+	local qid=$2
+	local dev_id=`__ublk_dev_id $dev`
+
+	eval $UBLK list -n ${dev_id} > ${UBLK_TMP}
+	q_tid=`cat ${UBLK_TMP} | grep "queue ${qid}" | awk '{print $4}'`
 	echo $q_tid
 }
 
 __ublk_get_dev_state() {
-	DEV_ID=$1
-	eval $UBLK list -n $DEV_ID > ${UBLK_TMP}
+	local dev=$1
+	local dev_id=`__ublk_dev_id $dev`
+
+	eval $UBLK list -n ${dev_id} > ${UBLK_TMP}
 	state=`cat ${UBLK_TMP} | grep "state" | awk '{print $11}'`
 	echo $state
 }
@@ -192,7 +203,7 @@ __remove_ublk_dev_return() {
 	if [ "$dev" == "*" ]; then
 		eval $UBLK del -a
 	else
-		dev_id=`echo "$dev" | awk '{print substr($1, 11)}'`
+		dev_id=`__ublk_dev_id $dev`
 		eval $UBLK del -n "$dev_id"
 	fi
 	RES=$?
@@ -203,10 +214,22 @@ __remove_ublk_dev() {
 	__remove_ublk_dev_return $@ > /dev/null 2>&1
 }
 
+__find_free_ublk_id()
+{
+	for id in `seq 0 64`; do
+		[ -c /dev/ublkc${id} ] && continue
+		echo $id
+		break
+	done
+	[ $id == "64" ] && echo "-"
+}
+
 __create_ublk_dev()
 {
-	eval $UBLK add ${T_TYPE_PARAMS} > /dev/null 2>&1
-	echo "/dev/ublkb0"
+	id=`__find_free_ublk_id`
+	[ ${id} == "-" ] && echo "no free ublk device nodes" && exit -1
+	eval $UBLK add ${T_TYPE_PARAMS} -n $id > /dev/null 2>&1
+	echo "/dev/ublkb${id}"
 }
 
 __get_cpu_utils()
@@ -253,10 +276,9 @@ __run_dev_perf()
 {
 	JOBS=$1
 
-	__remove_ublk_dev *
 	DEV=`__create_ublk_dev`
 
-	echo -e "\tublk ${T_TYPE_PARAMS}, fio: (libaio, dio, io jobs: $JOBS)..."
+	echo -e "\tublk ${T_TYPE_PARAMS}, fio: ($DEV libaio dio io jobs($JOBS))..."
 	__run_dev_perf_no_create "ublk" $JOBS $DEV
 
 	__remove_ublk_dev $DEV

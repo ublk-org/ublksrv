@@ -19,15 +19,15 @@ ublk_run_abort_test()
 	for CNT in `seq $LOOPS`; do
 		export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA"
 		DEV=`__create_ublk_dev`
-		echo -e "\trun fio with killing ublk($T_TYPE_PARAMS) queue daemon $CNT"
+		echo -e "\trun fio with killing $DEV(ublk $T_TYPE_PARAMS) queue daemon $CNT"
 		__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 		sleep 2
-		queue_tid=`__ublk_get_queue_tid 0`
+		queue_tid=`__ublk_get_queue_tid $DEV 0`
 		kill -9 $queue_tid
 		sleep 2
 		secs=0
 		while [ $secs -lt 10 ]; do
-			state=`__ublk_get_dev_state 0`
+			state=`__ublk_get_dev_state $DEV`
 			[ "$state" == "DEAD" ] && break
 			sleep 1
 			let secs++
@@ -35,7 +35,7 @@ ublk_run_abort_test()
 		[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
 		RES=`__remove_ublk_dev_return $DEV`
 		if [ $RES -ne 0 ]; then
-				echo -e "\tdelete ublk0 failed"
+				echo -e "\tdelete $DEV failed"
 				exit -1
 		fi
 		wait
