@@ -7,13 +7,12 @@
 
 ublk_run_mount_test()
 {
-	local dev=$1
-	local mnt=$2
+	local dev=`__create_ublk_dev`
+	local mnt=$1
 
 	ROOT_FSTYPE=`findmnt -l -o FSTYPE -n /`
 	echo -n -e "\tmount/umount ublk($T_TYPE_PARAMS) with fstype($ROOT_FSTYPE)..."
 
-	__create_ublk_dev
 
 	wipefs -a $dev > /dev/null 2>&1
 	eval mkfs.${ROOT_FSTYPE} $dev > /dev/null 2>&1
@@ -28,7 +27,7 @@ ublk_run_mount_test()
 	fi
 	umount $mnt > /dev/null 2>&1
 
-	__remove_ublk_dev 0
+	__remove_ublk_dev $dev
 }
 
 ublk_run_mount_type()
@@ -44,7 +43,7 @@ ublk_run_mount_type()
 
 	for NEED_GET_DATA in `seq 0 1`; do
 		export T_TYPE_PARAMS="-t $type -q $queues -g $NEED_GET_DATA -f $file"
-		ublk_run_mount_test $dev $mnt
+		ublk_run_mount_test $mnt
 	done
 	_remove_image ${type} $file
 }

@@ -188,10 +188,12 @@ __run_fio_perf() {
 }
 
 __remove_ublk_dev_return() {
-	if [ $# -eq 1 ]; then
-		eval $UBLK del -n $1
-	else
+	local dev="$1"
+	if [ "$dev" == "*" ]; then
 		eval $UBLK del -a
+	else
+		dev_id=`echo "$dev" | awk '{print substr($1, 11)}'`
+		eval $UBLK del -n "$dev_id"
 	fi
 	RES=$?
 	echo $RES
@@ -204,6 +206,7 @@ __remove_ublk_dev() {
 __create_ublk_dev()
 {
 	eval $UBLK add ${T_TYPE_PARAMS} > /dev/null 2>&1
+	echo "/dev/ublkb0"
 }
 
 __get_cpu_utils()
@@ -250,15 +253,13 @@ __run_dev_perf()
 {
 	JOBS=$1
 
-	DEV="/dev/ublkb0"
-
-	__remove_ublk_dev
-	__create_ublk_dev
+	__remove_ublk_dev *
+	DEV=`__create_ublk_dev`
 
 	echo -e "\tublk ${T_TYPE_PARAMS}, fio: (libaio, dio, io jobs: $JOBS)..."
 	__run_dev_perf_no_create "ublk" $JOBS $DEV
 
-	__remove_ublk_dev 0
+	__remove_ublk_dev $DEV
 }
 
 _create_image()

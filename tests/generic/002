@@ -5,7 +5,6 @@
 
 echo -e "\trun fio with kill ubq_deamon"
 
-DEV=/dev/ublkb0
 BS=4k
 RW=rw
 JOBS=4
@@ -19,9 +18,9 @@ ublk_run_abort_test()
 {
 	for CNT in `seq $LOOPS`; do
 		export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA"
-		__create_ublk_dev
+		DEV=`__create_ublk_dev`
 		echo -e "\trun fio with killing ublk($T_TYPE_PARAMS) queue daemon $CNT"
-		__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+		__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 		sleep 2
 		queue_tid=`__ublk_get_queue_tid 0`
 		kill -9 $queue_tid
@@ -34,7 +33,7 @@ ublk_run_abort_test()
 			let secs++
 		done
 		[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
-		RES=`__remove_ublk_dev_return 0`
+		RES=`__remove_ublk_dev_return $DEV`
 		if [ $RES -ne 0 ]; then
 				echo -e "\tdelete ublk0 failed"
 				exit -1

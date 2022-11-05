@@ -15,10 +15,9 @@ NEED_GET_DATA=0
 export T_TYPE_PARAMS="-t qcow2 -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -f $file"
 echo -e "\trun fio(fs randwrite with verify) over ublk($T_TYPE_PARAMS)"
 
-__create_ublk_dev
+DEV=`__create_ublk_dev`
 
 MNT=`mktemp -d`
-DEV=/dev/ublkb0
 
 mkfs.xfs -f $DEV > /dev/null 2>&1
 mount $DEV $MNT > /dev/null 2>&1
@@ -30,7 +29,7 @@ fio --size=128M --bsrange=4k-128k --runtime=20 --numjobs=12 --ioengine=libaio \
 	--overwrite=1 --rw=randwrite --verify=md5 > /dev/null 2>&1
 umount $MNT > /dev/null 2>&1
 
-RES=`__remove_ublk_dev_return 0`
+RES=`__remove_ublk_dev_return $DEV`
 if [ $RES -ne 0 ]; then
 	echo -e "\tdelete ublk0 failed"
 	exit -1
