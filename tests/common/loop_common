@@ -22,22 +22,19 @@ __remove_kernel_loop_dev() {
 }
 
 __create_kernel_loop_dev() {
-	local my_file=$1
-	losetup -f $my_file --direct-io=on > /dev/null 2>&1
-	local my_dev=`losetup -l | grep $my_file | awk '{print $1}'`
+	local my_file=`echo $T_TYPE_PARAMS | awk '{print $(NF)}'`
+	eval $T_TYPE $T_TYPE_PARAMS > /dev/null 2>&1
+	local my_dev=`losetup -l | grep "${my_file}" | awk '{print $1}'`
 	echo $my_dev
 }
 
 __run_loop_dev_perf()
 {
-	local TYPE=$1
-	local JOBS=$2
-	local QUEUES=$3
-	local backing_file=$4
-	local DEV=`__create_kernel_loop_dev $backing_file`
+	local JOBS=$1
+	local DEV=`__create_kernel_loop_dev`
 
-	echo -e "\tfio (kernel_loop/$TYPE($file), libaio, dio, hw queues:$QUEUES)..."
-	__run_dev_perf_no_create $TYPE $JOBS $DEV
+	echo -e "\t$T_TYPE $T_TYPE_PARAMS, fio: ($DEV libaio, dio, io jobs $JOBS)..."
+	__run_dev_perf_no_create "loop" $JOBS $DEV
 
 	__remove_kernel_loop_dev $DEV
 }

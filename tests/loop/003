@@ -6,6 +6,11 @@
 
 file=`_create_loop_backing_file "loop" $LO_IMG_SZ`
 
-__run_loop_dev_perf "kloop" 1 1 $file
+export T_TYPE="losetup"
+
+# '-f $file' has to be the last one
+export T_TYPE_PARAMS="--direct-io=on -f $file"
+
+__run_loop_dev_perf 1
 
 [ -f "$file" ] && rm -f $file
