@@ -12,7 +12,9 @@ QUEUES=1
 URING_COMP=0
 NEED_GET_DATA=0
 
-export T_TYPE_PARAMS="-t qcow2 -q $QUEUES -f $file -u $URING_COMP -g $NEED_GET_DATA"
+export T_TYPE_PARAMS="-t qcow2 -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -f $file"
+echo -e "\trun fio(fs randwrite with verify) over ublk($T_TYPE_PARAMS)"
+
 __create_ublk_dev
 
 MNT=`mktemp -d`
