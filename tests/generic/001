@@ -42,4 +42,4 @@ for NEED_GET_DATA in `seq 0 1`; do
 	ublk_run_delete_test
 done
 
-[ -f "$file" ] && rm -f $file
+_remove_loop_image $file

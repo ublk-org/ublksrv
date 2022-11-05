@@ -42,4 +42,5 @@ for NEED_GET_DATA in `seq 0 1`; do
 done
 
 rm -fr $MNT
-[ -f "$file" ] && rm -f $file
+
+_remove_loop_image $file

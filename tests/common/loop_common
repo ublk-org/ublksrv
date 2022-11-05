@@ -16,6 +16,12 @@ _create_loop_backing_file() {
 	echo $my_file
 }
 
+_remove_loop_image() {
+	local file=$1
+
+	[ -f "$file" ] && rm -f $file
+}
+
 __remove_kernel_loop_dev() {
 	local DEV=$1
 	losetup -d $DEV

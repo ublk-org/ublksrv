@@ -13,4 +13,4 @@ export T_TYPE_PARAMS="--direct-io=on -f $file"
 
 __run_loop_dev_perf 1
 
-[ -f "$file" ] && rm -f $file
+_remove_loop_image $file

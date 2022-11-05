@@ -9,4 +9,4 @@ export T_TYPE_PARAMS="-t loop -q 1 -f $file"
 
 __run_dev_perf 1
 
-[ -f "$file" ] && rm -f $file
+_remove_loop_image $file
