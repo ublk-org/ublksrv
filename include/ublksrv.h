@@ -51,7 +51,7 @@ extern "C" {
 #define	MAX_BUF_SIZE	(1024 << 10)
 
 #define	DEF_NR_HW_QUEUES 1
-#define	DEF_QD		256
+#define	DEF_QD		128
 #define	DEF_BUF_SIZE	(512 << 10)
 
 #define UBLKSRV_SHM_DIR	"ublksrv"

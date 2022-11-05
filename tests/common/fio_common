@@ -203,12 +203,7 @@ __remove_ublk_dev() {
 
 __create_ublk_dev()
 {
-	ublk_type=$1
-	nr_queues=$2
-
-	[ "$nr_queues" = "" ] && nr_queues=1
-
-	eval $UBLK add -t $ublk_type -q $nr_queues -d 128 ${T_TYPE_PARAMS} > /dev/null 2>&1
+	eval $UBLK add ${T_TYPE_PARAMS} > /dev/null 2>&1
 }
 
 __get_cpu_utils()
@@ -260,7 +255,7 @@ __run_dev_perf()
 	__remove_ublk_dev
 	__create_ublk_dev
 
-	echo -e "\tublk: ${T_TYPE_PARAMS}, fio: (libaio, dio, io jobs: $JOBS)..."
+	echo -e "\tublk ${T_TYPE_PARAMS}, fio: (libaio, dio, io jobs: $JOBS)..."
 	__run_dev_perf_no_create "ublk" $JOBS $DEV
 
 	__remove_ublk_dev 0
