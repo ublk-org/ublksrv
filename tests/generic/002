@@ -18,7 +18,7 @@ NEED_GET_DATA=1
 ublk_run_abort_test()
 {
 	for CNT in `seq $LOOPS`; do
-		export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -f $file"
+		export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA"
 		__create_ublk_dev
 		echo -e "\trun fio with killing ublk($T_TYPE_PARAMS) queue daemon $CNT"
 		__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
