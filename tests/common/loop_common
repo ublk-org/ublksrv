@@ -4,9 +4,10 @@
 export LO_IMG_SZ=1G
 
 _create_loop_backing_file() {
+	local type=$1
 	local my_size=$2
 
-	local my_file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_${my_size}_XXXXX`
+	local my_file=`mktemp -p ${UBLK_TMP_DIR}  ublk_loop_${type}_${my_size}_XXXXX`
 	truncate -s ${my_size} ${my_file}
 
 	my_size=`stat --printf="%s" ${my_file}`
