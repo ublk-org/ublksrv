@@ -40,6 +40,8 @@ run_test_all() {
 
 TEST=$1
 
+[ ! -c /dev/ublk-control ] && echo 'please run "modprobe ublk_drv" first' && exit -1
+
 TDIR=$3
 if [ "${TDIR:0:1}" != "/" ]; then
 	TDIR=`dirname $PWD`/${TDIR}
