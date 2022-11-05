@@ -38,6 +38,16 @@ _check_qcow2_image() {
 	[ $? -ne 0 ] && echo "qcow2 image $my_file is broken" && cat ${UBLK_TMP} && exit
 }
 
+_remove_qcow2_image() {
+	local file=$1
+
+	if [ -f "$file" ]; then
+		_check_qcow2_image $file
+		rm -f $file
+	fi
+}
+
+
 __remove_nbd_dev() {
 	local DEV=$1
 	sync $DEV

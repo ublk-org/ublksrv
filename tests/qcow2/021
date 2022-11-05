@@ -11,6 +11,4 @@ export T_TYPE_PARAMS="-t qcow2 -q 1 -f $file"
 
 __run_dev_perf 1
 
-_check_qcow2_image $file
-
-[ -f "$file" ] && rm -f $file
+_remove_qcow2_image $file

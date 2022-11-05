@@ -13,6 +13,4 @@ export T_TYPE_PARAMS="-c /dev/nbd11 -n --aio=native $file"
 
 __run_nbd_dev_perf 1
 
-_check_qcow2_image $file
-
-[ -f "$file" ] && rm -f $file
+_remove_qcow2_image $file

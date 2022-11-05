@@ -35,7 +35,7 @@ if [ $RES -ne 0 ]; then
 	echo -e "\tdelete ublk0 failed"
 	exit -1
 fi
-_check_qcow2_image $file
+
+_remove_qcow2_image $file
 
 rm -fr $MNT
-[ -f "$file" ] && rm -f $file
