@@ -6,7 +6,7 @@
 
 echo "run fs randwrite with verify over ublk-qcow2"
 
-file=`_create_qcow2_null_image "null" $QCOW2_IMG_SZ`
+file=`_create_qcow2_image "null" $QCOW2_IMG_SZ`
 
 QUEUES=1
 URING_COMP=0

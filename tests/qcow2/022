@@ -6,11 +6,7 @@
 
 echo "run perf test on pre-allocated qcow2 image via ublk"
 
-file=`_create_qcow2_null_image "data" $QCOW2_IMG_SZ`
-
-NBD_PARAMS="-c /dev/nbd11 -n --aio=native $file"
-_qcow2_image_alloc_data "$NBD_PARAMS"
-
+file=`_create_qcow2_image "data" $QCOW2_IMG_SZ`
 export T_TYPE_PARAMS="-t qcow2 -q 1 -f $file"
 
 __run_dev_perf 1

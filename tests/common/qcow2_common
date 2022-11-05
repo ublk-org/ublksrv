@@ -20,6 +20,18 @@ _qcow2_image_alloc_data() {
 	__remove_nbd_dev $my_dev
 }
 
+_create_qcow2_image() {
+	local type=$1
+	local size=$2
+
+	local file=`_create_qcow2_null_image $type $size`
+	if [ "$type" == "data" ]; then
+		local nbd_params="-c /dev/nbd11 -n --aio=native $file"
+		_qcow2_image_alloc_data "$nbd_params"
+	fi
+	echo $file
+}
+
 _check_qcow2_image() {
 	local my_file=$1
 	qemu-img check $my_file > ${UBLK_TMP} 2>&1

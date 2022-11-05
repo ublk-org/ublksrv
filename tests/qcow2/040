@@ -47,7 +47,7 @@ ublk_run_abort_test()
 	done
 }
 
-file=`_create_qcow2_null_image "null" 2G`
+file=`_create_qcow2_image "null" 2G`
 
 ublk_run_abort_test
 
