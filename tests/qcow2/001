@@ -8,7 +8,10 @@ echo "run perf test on empty qcow2 image via nbd"
 
 file=`_create_qcow2_null_image "null" $QCOW2_IMG_SZ`
 
-__run_nbd_dev_perf "nbd" 1 1 $file
+export T_TYPE="qemu-nbd"
+export T_TYPE_PARAMS="-c /dev/nbd11 -n --aio=native $file"
+
+__run_nbd_dev_perf 1
 
 _check_qcow2_image $file
 

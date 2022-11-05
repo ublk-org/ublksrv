@@ -11,15 +11,13 @@ _create_qcow2_null_image() {
 	echo $my_file
 }
 
-_create_qcow2_image() {
-	local my_file=`_create_qcow2_null_image "data" $1`
-	local my_dev=`__create_nbd_dev $my_file`
+_qcow2_image_alloc_data() {
+	local my_dev=`__create_nbd_dev "$1"`
 	local my_size=`blockdev --getsz $my_dev`
 	local my_count=`expr ${my_size} / 2048`
 
 	dd if=/dev/zero of=$my_dev bs=1M count=${my_count} oflag=direct > /dev/null 2>&1
 	__remove_nbd_dev $my_dev
-	echo $my_file
 }
 
 _check_qcow2_image() {
@@ -35,23 +33,21 @@ __remove_nbd_dev() {
 }
 
 __create_nbd_dev() {
-	local my_file=$1
+	local nbd_params="$1"
+	local DEV=`echo ${nbd_params} | awk '{ for(i=1; i<=NF; ++i) if (substr($i, 1, 8) == "/dev/nbd") printf $i}'`
 	modprobe nbd > /dev/null 2>&1
-	qemu-nbd -d /dev/nbd11 > /dev/null 2>&1
-	qemu-nbd -c /dev/nbd11 -n --aio=native $my_file > /dev/null 2>&1
-	echo "/dev/nbd11"
+	qemu-nbd -d $DEV > /dev/null 2>&1
+	eval qemu-nbd ${nbd_params} > /dev/null 2>&1
+	echo "$DEV"
 }
 
 __run_nbd_dev_perf()
 {
-	local TYPE=$1
-	local JOBS=$2
-	local QUEUES=$3
-	local backing_file=$4
-	local DEV=`__create_nbd_dev $backing_file`
+	local JOBS=$1
+	local DEV=`__create_nbd_dev "${T_TYPE_PARAMS}"`
 
-	echo -e "\tfio ($TYPE($file), libaio, dio, hw queues:$QUEUES)..."
-	__run_dev_perf_no_create $TYPE $JOBS $DEV
+	echo -e "\t$T_TYPE $T_TYPE_PARAMS, fio($DEV, libaio, dio, io jobs $JOB)..."
+	__run_dev_perf_no_create "nbd" $JOBS $DEV
 
 	__remove_nbd_dev $DEV
 }
