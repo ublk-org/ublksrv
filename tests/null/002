@@ -3,4 +3,6 @@
 
 . common/fio_common
 
-__run_dev_perf "null" 2 2
+export T_TYPE_PARAMS="-t null -q 2"
+
+__run_dev_perf 2

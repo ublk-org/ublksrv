@@ -7,9 +7,9 @@
 echo "run perf test on pre-allocated qcow2 image via ublk"
 
 file=`_create_qcow2_image $QCOW2_IMG_SZ`
-export T_TYPE_PARAMS=" -f $file"
+export T_TYPE_PARAMS="-t qcow2 -q 1 -f $file"
 
-__run_dev_perf "qcow2" 1 1
+__run_dev_perf 1
 
 _check_qcow2_image $file
 

@@ -7,8 +7,8 @@
 ublk_run_mount_test()
 {
 	echo -n -e "\tmount/umount ublk device with root fstype(uring_comp: $1, get_data: $2)..."
-	export T_TYPE_PARAMS=" -f $file -u $1 -g $2"
-	__create_ublk_dev "loop" $QUEUES
+	export T_TYPE_PARAMS="-t loop -q $QUEUES -f $file -u $1 -g $2"
+	__create_ublk_dev
 
 	ROOT_FSTYPE=`findmnt -l -o FSTYPE -n /`
 

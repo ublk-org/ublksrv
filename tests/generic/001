@@ -19,8 +19,8 @@ NEED_GET_DATA=1
 ublk_run_delete_test()
 {
 	for CNT in `seq $LOOPS`; do
-		export T_TYPE_PARAMS=" -f $file -u $URING_COMP -g $NEED_GET_DATA"
-		__create_ublk_dev "loop" $QUEUES
+		export T_TYPE_PARAMS="-t loop -q $QUEUES -f $file -u $URING_COMP -g $NEED_GET_DATA"
+		__create_ublk_dev
 		echo -e "\trun fio on ublk(uring_comp $URING_COMP, get_data $NEED_GET_DATA) with delete $CNT"
 		__run_fio_libaio "/dev/ublkb0" $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 		sleep 4
