@@ -2,6 +2,8 @@
 #!/bin/bash
 
 . common/fio_common
+. common/loop_common
+. common/qcow2_common
 
 echo -e "\trun fio with dev recovery, type 1:"
 echo -e "\t(1)kill all ubq_deamon, (2)recover with new ubq_daemon, (3)delete dev"
@@ -11,7 +13,7 @@ RW=rw
 JOBS=4
 QUEUES=2
 RT=$TRUNTIME*2
-LOOPS=4
+LOOPS=1
 URING_COMP=1
 NEED_GET_DATA=1
 RECOVERY=1
@@ -19,8 +21,23 @@ RECOVERY_REISSUE=0
 
 ublk_run_recover_test()
 {
+	local type=$1
+	local file=`_create_image $type "null" 256M`
+
+	if [ "$type" == "null" ]; then
+		local backing=""
+	else
+		local backing="-f $file"
+	fi
+
+	if [ "$type" == "qcow2" ]; then
+		QUEUES=1
+	else
+		QUEUES=2
+	fi
+
 	for CNT in `seq $LOOPS`; do
-		export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -r $RECOVERY -i $RECOVERY_REISSUE"
+		export T_TYPE_PARAMS="-t $type -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -r $RECOVERY -i $RECOVERY_REISSUE $backing"
 		DEV=`__create_ublk_dev`
 		echo -e "\trun fio with killing $DEV(ublk $T_TYPE_PARAMS) queue daemon $CNT"
 		__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
@@ -55,8 +72,11 @@ ublk_run_recover_test()
 		wait
 		sleep 3
 	done
+	_remove_image ${type} $file
 }
 
-for RECOVERY_REISSUE in `seq 0 1`; do
-		ublk_run_recover_test
+for TGT in $ALL_TGTS; do
+	for RECOVERY_REISSUE in `seq 0 1`; do
+			ublk_run_recover_test $TGT
+	done
 done
