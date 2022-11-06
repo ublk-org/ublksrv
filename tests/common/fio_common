@@ -303,6 +303,11 @@ __run_dev_perf()
 	__remove_ublk_dev $DEV
 }
 
+_create_null_image()
+{
+	echo ""
+}
+
 _create_image()
 {
 	local type=$1
@@ -310,6 +315,11 @@ _create_image()
 	shift 1
 
 	eval _create_${type}_image $@
+}
+
+_remove_null_image()
+{
+	echo "nothing" > /dev/null
 }
 
 _remove_image()

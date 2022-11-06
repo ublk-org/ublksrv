@@ -32,7 +32,7 @@ run_test_grp() {
 
 run_test_all() {
 	local D=$1
-	local GRPS="generic null loop qcow2"
+	local GRPS="generic $ALL_TGTS"
 	for G in $GRPS; do
 			run_test_grp $D/$G
 	done
@@ -47,6 +47,7 @@ if [ "${TDIR:0:1}" != "/" ]; then
 	TDIR=`dirname $PWD`/${TDIR}
 fi
 
+export ALL_TGTS="null loop qcow2"
 export TRUNTIME=$2
 export UBLK_TMP_DIR=$TDIR
 export T_TYPE_PARAMS=""
