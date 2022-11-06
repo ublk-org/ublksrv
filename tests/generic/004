@@ -42,10 +42,6 @@ ublk_run_delete_test()
 
 file=`_create_loop_image "data" 1G`
 
-for NEED_GET_DATA in `seq 0 1`; do
-	ublk_run_delete_test
-done
-
 RECOVERY=1
 for RECOVERY_REISSUE in `seq 0 1`; do
 	ublk_run_delete_test
