@@ -243,7 +243,7 @@ public:
 	}
 	virtual void dump() const
 	{
-		syslog(LOG_INFO,"%s: type %x len %d enc(offset %llx sz %lu)\n",
+		syslog(LOG_INFO,"%s: type %x len %d enc(offset %" PRIx64 " sz %" PRIu64 ")\n",
 				typeid(*this).name(), type, len,
 				enc_offset, enc_len);
 	}

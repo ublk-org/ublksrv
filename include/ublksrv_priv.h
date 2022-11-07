@@ -81,6 +81,11 @@ static inline void ublksrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op
 	addr[1] = 0;
 }
 
+static inline void ublksrv_log(int priority, const char *fmt, ...)
+	__attribute__ ((format (printf, 2, 3)));
+static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
+	__attribute__ ((format (printf, 2, 3)));
+
 #ifdef DEBUG
 static inline void ublksrv_log(int priority, const char *fmt, ...)
 {

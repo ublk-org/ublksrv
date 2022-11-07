@@ -298,7 +298,7 @@ static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
 
 	ublksrv_log(LOG_INFO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
-	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %llx %llx)"
+	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx) iof %x\n",
 			__func__, ublk_op, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, ublk_op, 1, sqe->user_data, io->flags);

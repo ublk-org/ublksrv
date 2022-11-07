@@ -313,7 +313,7 @@ T *slice_cache<T>::alloc_slice(Qcow2State &state, const qcow2_io_ctx_t &ioc,
 	}
 
 	if (virt_offset != t->virt_offset()) {
-		syslog(LOG_ERR, "%s %d: %s %llx/%llx parent_idx %d host_off %llx flags %x\n",
+		syslog(LOG_ERR, "%s %d: %s %" PRIx64 "/%" PRIx64 " parent_idx %d host_off %" PRIx64 " flags %x\n",
 			__func__, __LINE__, typeid(*t).name(),
 			virt_offset, t->virt_offset(), parent_idx,
 			host_offset, flags);
@@ -353,7 +353,7 @@ template <class T>
 void slice_cache<T>::dump(Qcow2State &qs) {
 	auto lru_list = slices.get_lru_list_ro();
 
-	syslog(LOG_INFO, "cache size %u, dirty cache size %u\n",
+	syslog(LOG_INFO, "cache size %zu, dirty cache size %zu\n",
 			slices.size(), evicted_slices.size());
 
 	//todo: use lrucache iterator to cut the loop time
@@ -834,7 +834,7 @@ Qcow2L2Table *Qcow2ClusterMapping::load_l2_slice(const qcow2_io_ctx_t &ioc, u64 
 		return l2;
 	}
 
-	ublksrv_log(LOG_INFO, "cache: alloc: key %llx val %p, update %d\n",
+	ublksrv_log(LOG_INFO, "cache: alloc: key %" PRIx64 " val %p, update %d\n",
 			start, l2, l2->get_update());
 	l2->load(state, ioc, QCOW2_PARA::L2_TABLE_SLICE_BYTES, false);
 	l2->add_waiter(ioc.get_tag());
@@ -857,7 +857,7 @@ Qcow2L2Table *Qcow2ClusterMapping::create_l2_map(const qcow2_io_ctx_t &ioc,
 		// l2 table isn't allocated yet, so create one and add it here
 		l2 = create_and_add_l2(ioc, offset);
 		if (!l2)
-			syslog(LOG_ERR, "%s: tag %d: allocate l2 failed for %llx\n",
+			syslog(LOG_ERR, "%s: tag %d: allocate l2 failed for %" PRIx64 "\n",
 				__func__, ioc.get_tag(), offset);
 	}
 	return l2;
