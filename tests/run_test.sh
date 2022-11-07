@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: MIT or GPL-2.0-only
 #!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
 
 DIR=$(cd "$(dirname "$0")";pwd)
 
