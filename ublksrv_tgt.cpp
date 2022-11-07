@@ -425,6 +425,9 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 	return daemon_pid;
 }
 
+//todo: resolve stack usage warning for mkpath/__mkpath
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
 static int __mkpath(char *dir, mode_t mode)
 {
 	struct stat sb;
@@ -444,6 +447,7 @@ static int mkpath(const char *dir)
 {
 	return __mkpath(strdupa(dir), 0700);
 }
+#pragma GCC diagnostic pop
 
 static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 		const char *jbuf)

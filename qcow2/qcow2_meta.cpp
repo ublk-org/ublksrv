@@ -9,7 +9,7 @@
 // side, another is for free side. This way guarantees that the returned slice
 // from alloc_slice is always valid
 Qcow2Meta::Qcow2Meta(Qcow2Header &h, u64 off, u32 sz, const char *name, u32 f):
-	offset(off), buf_sz(sz), header(h), flags(f), refcnt(2)
+	header(h), offset(off), buf_sz(sz), flags(f), refcnt(2)
 {
 	//used for implementing slice's ->reset() only
 	if (f & QCOW2_META_DONT_ALLOC_BUF)

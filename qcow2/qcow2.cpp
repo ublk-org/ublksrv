@@ -16,8 +16,9 @@ Qcow2Image:: ~Qcow2Image() {
 Qcow2State:: Qcow2State(const char *path, const struct ublksrv_dev *d):
 	min_bs_bits(9), dev(d), img(path), header(*this), l1_table(*this),
 	refcount_table(*this), cluster_allocator(*this),
+	cluster_map(*this),
 	meta_io_map(d->ctrl_dev->dev_info.nr_hw_queues),
-	cluster_map(*this), meta_flushing(*this)
+	meta_flushing(*this)
 {
 	u64 l1_bytes = get_l1_table_max_size();
 	u64 ref_table_bytes = get_refcount_table_act_size();
@@ -230,10 +231,12 @@ Qcow2State *make_qcow2state(const char *file, struct ublksrv_dev *dev)
 
 template <class T>
 slice_cache<T>::slice_cache(u8 slice_bits, u8 cluster_bits, u8 slice_virt_bits,
-		u32 max_size): slices(max_size >> slice_bits), evicted_slices({}),
+		u32 max_size):
 	slice_size_bits(slice_bits),
 	cluster_size_bits(cluster_bits),
-	slice_virt_size_bits(slice_virt_bits)
+	slice_virt_size_bits(slice_virt_bits),
+	slices(max_size >> slice_bits),
+	evicted_slices({})
 {
 }
 

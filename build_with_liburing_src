@@ -8,9 +8,10 @@
 autoreconf -i
 
 OPTS="-g -O0"
-LIBURING_DIR=/root/git/liburing	#replace with your own liburing path
+: "${LIBURING_DIR:=/root/git/liburing}"	#replace with your own liburing path
 PKG_CONFIG_PATH=${LIBURING_DIR} \
 ./configure \
+  --enable-gcc-warnings \
   CFLAGS="-I${LIBURING_DIR}/src/include $OPTS" \
   CXXFLAGS="-I${LIBURING_DIR}/src/include $OPTS" \
   LDFLAGS="-L${LIBURING_DIR}/src"
