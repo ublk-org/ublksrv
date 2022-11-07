@@ -310,13 +310,13 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 				typeid(*this).name());
 
 	if (off < offset || off >= offset + buf_sz) {
-		syslog(LOG_ERR, "%s %s: offset %llx is wrong\n", __func__,
+		syslog(LOG_ERR, "%s %s: offset %" PRIx64 " is wrong\n", __func__,
 				typeid(*this).name(), offset);
 		return -EINVAL;
 	}
 
 	if (len > offset + buf_sz - off) {
-		syslog(LOG_ERR, "%s %s: len %llx is wrong\n", __func__,
+		syslog(LOG_ERR, "%s %s: len %x is wrong\n", __func__,
 				typeid(*this).name(), len);
 		return -EINVAL;
 	}
@@ -373,7 +373,7 @@ Qcow2TopTable::Qcow2TopTable(Qcow2State &qs, u64 off, u32 buf_sz,
 	min_bs_bits(qs.min_bs_bits),
 	dirty(qs.get_l1_table_max_size() >> qs.min_bs_bits)
 {
-	ublksrv_log(LOG_INFO, "%s: %s dirty size %d %lu/%lu\n", __func__,
+	ublksrv_log(LOG_INFO, "%s: %s dirty size %zd %u/%u\n", __func__,
 			cls_name, dirty.size(),
 		qs.get_l1_table_max_size(),qs.min_bs_bits);
 	for (int i = 0; i < dirty.size(); i++)
@@ -493,7 +493,7 @@ int Qcow2L1Table::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc, u32 len, bool 
 
 void Qcow2L1Table::dump()
 {
-	syslog(LOG_INFO, "%s %s: sizeof %d\n", __func__, typeid(*this).name(),
+	syslog(LOG_INFO, "%s %s: sizeof %zd\n", __func__, typeid(*this).name(),
 			sizeof(*this));
 	for (int i = 0; i < header.get_l1_size(); i++)
 		syslog(LOG_INFO, "%d: %lx\n", i, get_entry(i));
@@ -536,7 +536,7 @@ void Qcow2RefcountTable::set_entry(u32 idx, u64 val) {
 
 void Qcow2RefcountTable::dump()
 {
-	syslog(LOG_INFO, "%s %s: sizeof %d\n", __func__, typeid(*this).name(),
+	syslog(LOG_INFO, "%s %s: sizeof %zd\n", __func__, typeid(*this).name(),
 			sizeof(*this));
 	for (int i = 0; i < data_len / 8; i++) {
 		u64 entry = get_entry(i);
@@ -671,8 +671,8 @@ int Qcow2SliceMeta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	sqe->user_data = build_user_data(tag, IORING_OP_READ, mio_id + 1, 1);
 	q->tgt_io_inflight += 1;
 
-	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llx %llx %llx)"
-				" (qid %d tag %u, cmd_op %u target: %d tgt_data %lu) iof %x\n",
+	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llx %x %llx)"
+				" (qid %d tag %u, cmd_op %u target: %d tgt_data %d) iof %x\n",
 			__func__, sqe->opcode, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, sqe->opcode, 1, mio_id + 1, io->flags);
 	meta_log("%s %s: loading %p tag %d off %lx sz %d flags %x ref %d\n",
@@ -934,7 +934,7 @@ void Qcow2RefcountBlock::dump()
 	if (!cnt)
 		return;
 
-	syslog(LOG_INFO, "%s %s: buf_sz %u offset %llx sizeof %d entries %u parent_idx %u virt_off %llx flags %x\n",
+	syslog(LOG_INFO, "%s %s: buf_sz %u offset %" PRIx64 " sizeof %zd entries %u parent_idx %u virt_off %" PRIx64 " flags %x\n",
 			__func__, typeid(*this).name(), buf_sz, offset, sizeof(*this),
 			cnt, parent_idx, virt_offset(),
 			flags);
@@ -1063,7 +1063,7 @@ void Qcow2L2Table::dump()
 	if (!cnt)
 		return;
 
-	syslog(LOG_INFO, "%s %s: buf_sz %u offset %llx sizeof %d entries %u parent_idx %u virt_off %llx flags %x\n",
+	syslog(LOG_INFO, "%s %s: buf_sz %u offset %" PRIx64 " sizeof %zd entries %u parent_idx %u virt_off %" PRIx64 " flags %x\n",
 			__func__, typeid(*this).name(), buf_sz, offset, sizeof(*this),
 			cnt, parent_idx, virt_offset(), flags);
 	qcow2_log("\t [%d] = %llx [%u] = %llx\n", f, get_entry(f), l,

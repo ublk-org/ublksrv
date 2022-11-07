@@ -47,7 +47,7 @@ static inline void ublksrv_ctrl_init_cmd(struct ublksrv_ctrl_dev *dev,
 
 	io_uring_sqe_set_data(sqe, cmd);
 
-	ublksrv_printf(stdout, "dev %d cmd_op %u, user_data %llx\n",
+	ublksrv_printf(stdout, "dev %d cmd_op %u, user_data %p\n",
 			dev->dev_info.dev_id, data->cmd_op, cmd);
 }
 

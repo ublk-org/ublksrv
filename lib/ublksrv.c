@@ -504,13 +504,13 @@ static int ublksrv_setup_eventfd(struct ublksrv_queue *q)
 	}
 
 	if (q->dev->tgt.tgt_ring_depth == 0) {
-		syslog(LOG_INFO, "%s ublk dev %d queue %d zero tgt queue depth",
+		syslog(LOG_INFO, "ublk dev %d queue %d zero tgt queue depth",
 			info->dev_id, q->q_id);
 		return -EINVAL;
 	}
 
 	if (!q->dev->tgt.ops->handle_event) {
-		syslog(LOG_INFO, "%s ublk dev %d/%d not define ->handle_event",
+		syslog(LOG_INFO, "ublk dev %d/%d not define ->handle_event",
 			info->dev_id, q->q_id);
 		return -EINVAL;
 	}

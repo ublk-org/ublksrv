@@ -538,7 +538,7 @@ public:
 	}
 	void set_state(u32 s) {
 		ublksrv_log(LOG_INFO, "%s: map %d slice_dirtied %u parent_blk_idx %d"
-				" parent_entry_idx %d %d->%d to_flush %d in_flight %d\n",
+				" parent_entry_idx %d %d->%d to_flush %zd in_flight %zd\n",
 				__func__, mapping, slice_dirtied,
 				parent_blk_idx, parent_entry_idx, state,
 				s, slices_to_flush.size(),
