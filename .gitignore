@@ -38,5 +38,7 @@ Makefile.in
 /missing
 /stamp-h1
 /tags
+/tests/.fio_perf
+/tests/tmp/
 /ublk
 /ublksrv.pc
