@@ -18,17 +18,17 @@ ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp qcow2/tgt_qcow2.cpp \
 			   qcow2/qcow2.cpp qcow2/qcow2_meta.cpp qcow2/utils.cpp \
 			   qcow2/qcow2_flush_meta.cpp
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
-ublk_CPPFLAGS = -I$(top_srcdir)/include
+ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include
 ublk_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
 demo_null_SOURCES = demo_null.c
 demo_null_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
-demo_null_CPPFLAGS = -I$(top_srcdir)/include
+demo_null_CPPFLAGS = $(demo_null_CFLAGS) -I$(top_srcdir)/include
 demo_null_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
 demo_event_SOURCES = demo_event.c
 demo_event_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
-demo_event_CPPFLAGS = -I$(top_srcdir)/include
+demo_event_CPPFLAGS = $(demo_event_CFLAGS) -I$(top_srcdir)/include
 demo_event_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
 pkgconfigdir = $(libdir)/pkgconfig

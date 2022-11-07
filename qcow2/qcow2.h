@@ -180,7 +180,7 @@ private:
 
 	friend class Qcow2State;
 
-	u32 l2_entries_order, cluster_bits;
+	u32 cluster_bits, l2_entries_order;
 
 	//l1/l2 entry alloc state
 	//

@@ -2,7 +2,7 @@
 #include "qcow2.h"
 
 MetaFlushingState::MetaFlushingState(Qcow2TopTable &t, bool is_mapping):
-	top(t), mapping(is_mapping)
+	mapping(is_mapping), top(t)
 {
 	state = qcow2_meta_flush::IDLE;
 	slice_dirtied = 0;
@@ -526,11 +526,13 @@ int MetaFlushingState::calc_refcount_dirty_blk_range(Qcow2State& qs,
 	return 0;
 }
 
-Qcow2MetaFlushing::Qcow2MetaFlushing(Qcow2State &qs): state(qs),
-	tags(QCOW2_PARA::META_MAX_TAGS), mapping_stat(qs.l1_table, true),
-	refcount_stat(qs.refcount_table, false),
+Qcow2MetaFlushing::Qcow2MetaFlushing(Qcow2State &qs):
+	tags(QCOW2_PARA::META_MAX_TAGS),
 	refcnt_blk_start(-1),
-	refcnt_blk_end(-1)
+	refcnt_blk_end(-1),
+	state(qs),
+	mapping_stat(qs.l1_table, true),
+	refcount_stat(qs.refcount_table, false)
 {
 	for (int i = 0; i < tags.size(); i++)
 		tags[i] = true;
