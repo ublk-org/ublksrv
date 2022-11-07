@@ -139,7 +139,7 @@ int sync_io_submitter(struct ublksrv_aio_ctx *ctx,
 				ublk_op, req->fd, req->id);
 		return -EINVAL;
 	}
-exit:
+
 	req->res = ret;
 	return 1;
 }
@@ -264,7 +264,6 @@ static void *demo_event_real_io_handler_fn(void *data)
 	struct epoll_event events[EPOLL_NR_EVENTS];
 	int epoll_fd = epoll_create(EPOLL_NR_EVENTS);
 	struct epoll_event read_event;
-	int ret;
 
 	if (epoll_fd < 0) {
 	        fprintf(stderr, "ublk dev %d create epoll fd failed\n", dev_id);
@@ -276,7 +275,7 @@ static void *demo_event_real_io_handler_fn(void *data)
 
 	read_event.events = EPOLLIN;
 	read_event.data.fd = ctx->efd;
-	ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ctx->efd, &read_event);
+	(void)epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ctx->efd, &read_event);
 
 	while (!ublksrv_aio_ctx_dead(ctx)) {
 		struct aio_list compl;
@@ -307,7 +306,6 @@ static void *demo_event_io_handler_fn(void *data)
 	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
-	unsigned long long ev_data = 1;
 
 	pthread_mutex_lock(&jbuf_lock);
 	ublksrv_json_write_queue_info(dev->ctrl_dev, jbuf, sizeof jbuf,
@@ -366,7 +364,6 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int dev_id = ctrl_dev->dev_info.dev_id;
 	int ret, i;
-	char buf[32];
 	struct ublksrv_dev *dev;
 	struct demo_queue_info *info_array;
 	void *thread_ret;
@@ -399,7 +396,6 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 		pthread_create(&io_thread, NULL, demo_event_uring_io_handler_fn,
 				aio_ctx);
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
-		int j;
 		info_array[i].dev = dev;
 		info_array[i].qid = i;
 
@@ -420,7 +416,6 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 
 	/* wait until we are terminated */
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
-		int j;
 		pthread_join(info_array[i].thread, &thread_ret);
 	}
 	ublksrv_aio_ctx_shutdown(aio_ctx);
@@ -437,9 +432,6 @@ fail:
 
 static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	int cnt = 0, daemon_pid;
-	int ret;
-
 	if (ublksrv_ctrl_get_affinity(ctrl_dev) < 0)
 		return -1;
 
@@ -533,9 +525,7 @@ int main(int argc, char *argv[])
 		.flags = 0,
 	};
 	struct ublksrv_ctrl_dev *dev;
-	char *type = NULL;
 	int ret, opt;
-	char *file = NULL;
 
 	while ((opt = getopt_long(argc, argv, "f:ga",
 				  longopts, NULL)) != -1) {

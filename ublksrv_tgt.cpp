@@ -267,7 +267,7 @@ static void ublksrv_io_handler(void *data)
 {
 	const struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
 	int dev_id = ctrl_dev->dev_info.dev_id;
-	int ret, i;
+	int i;
 	char buf[32];
 	struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
@@ -305,7 +305,6 @@ static void ublksrv_io_handler(void *data)
 	free(info_array);
 	free(jbuf);
 
-out_dev_deinit:
 	ublksrv_dev_deinit(dev);
 out:
 	syslog(LOG_INFO, "end ublksrv io daemon");
@@ -402,7 +401,6 @@ static int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
 static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int cnt = 0, daemon_pid;
-	int ret;
 
 	if (ublksrv_ctrl_get_affinity(ctrl_dev) < 0)
 		return -1;
@@ -483,9 +481,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
 	const struct ublksrv_tgt_type *tgt_type;
-	char *type = NULL;
-	int opt, ret, zcopy = 0;
-	int daemon_pid;
+	int opt, ret;
 	int uring_comp = 0;
 	int need_get_data = 0;
 	int user_recovery = 0;
@@ -690,7 +686,6 @@ static int cmd_dev_del(int argc, char *argv[])
 		{ "all",		0,	NULL, 'a' },
 		{ NULL }
 	};
-	struct ublksrv_ctrl_dev *dev;
 	int number = -1;
 	int opt, ret, i;
 
@@ -754,9 +749,8 @@ static int cmd_list_dev_info(int argc, char *argv[])
 		{ "verbose",		0,	NULL, 'v' },
 		{ NULL }
 	};
-	struct ublksrv_ctrl_dev *dev;
 	int number = -1;
-	int opt, ret, i;
+	int opt, i;
 	bool verbose = false;
 
 	while ((opt = getopt_long(argc, argv, "n:v",

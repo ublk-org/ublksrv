@@ -54,7 +54,7 @@ static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
 	const char *jbuf = dev->ctrl_dev->recovery_jbuf;
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	int fd, ret;
+	int ret;
 	struct ublk_params p;
 
 	ublk_assert(jbuf);

@@ -128,7 +128,7 @@ void MetaFlushingState::__write_slices(Qcow2State &qs,
 		return;
 
 	while (it != v1.cend()) {
-		int ret, tag;
+		int tag;
 		struct ublk_io_tgt *io;
 		Qcow2SliceMeta *m;
 
@@ -194,7 +194,7 @@ exit:
 void MetaFlushingState::__write_top(Qcow2State &qs,
 		struct ublksrv_queue *q)
 {
-	int ret, tag;
+	int tag;
 	struct ublk_io_tgt *io;
 
 	if (top.is_flushing(parent_blk_idx))
@@ -336,7 +336,7 @@ exit:
 void MetaFlushingState::__zero_my_cluster(Qcow2State &qs,
 		struct ublksrv_queue *q)
 {
-	int ret, tag;
+	int tag;
 	struct ublk_io_tgt *io;
 	Qcow2SliceMeta *m = slices_to_flush[0];
 	u64 cluster_off = m->get_offset() &
