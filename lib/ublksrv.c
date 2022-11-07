@@ -148,7 +148,10 @@ const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name)
 	int i;
 
 	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
-                const struct ublksrv_tgt_type  *type = tgt_list[i];
+		const struct ublksrv_tgt_type *type = tgt_list[i];
+
+		if (type == NULL)
+			continue;
 
 		if (!strcmp(type->name, name))
 			return type;
