@@ -15,8 +15,6 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		{ "file",		1,	NULL, 'f' },
 		{ NULL }
 	};
-	unsigned long long bytes;
-	struct stat st;
 	int jbuf_size;
 	char *jbuf;
 	int fd, opt, ret;
@@ -152,7 +150,6 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 	const char *jbuf = dev->ctrl_dev->recovery_jbuf;
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	int fd, ret;
-	long direct_io = 0;
 	char file[PATH_MAX];
 	struct ublk_params p;
 
@@ -422,7 +419,6 @@ queue_io:
 		}
 
 		if (ret > 0) {
-			u32 cqe_op;
 			u64 cluster_start = mapped_start &
 				~((1ULL << qs->header.cluster_bits) - 1);
 

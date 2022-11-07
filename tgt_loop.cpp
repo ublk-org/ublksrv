@@ -7,11 +7,6 @@
 #include "ublksrv_aio.h"
 #include "ublksrv_tgt.h"
 
-static const char *loop_tgt_backfile(struct ublksrv_tgt_info *tgt)
-{
-	return (const char *)tgt->tgt_data;
-}
-
 static bool backing_supports_discard(char *name)
 {
 	int fd;

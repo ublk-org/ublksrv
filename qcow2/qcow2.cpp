@@ -759,7 +759,6 @@ Qcow2L2Table *Qcow2ClusterMapping::create_and_add_l2(const qcow2_io_ctx_t &ioc,
 		u64 offset)
 {
 	const unsigned idx = l1_idx(offset);
-	int ret;
 	u64 l1_entry = state.l1_table.get_entry(idx);
 	u64 l2_cluster = -1;
 	struct ublksrv_queue *q = ublksrv_get_queue(state.dev, ioc.get_qid());
@@ -933,7 +932,6 @@ u64 Qcow2ClusterMapping::__map_cluster(const qcow2_io_ctx_t &ioc,
 			(QCOW2_PARA::L2_TABLE_SLICE_BYTES - 1)) >> 3;
 	u64 l2_entry;
 	int ret;
-	u64 host_offset;
 
 	qcow2_assert(l2->read_ref() > 0);
 	l2->check(state, __func__, __LINE__);

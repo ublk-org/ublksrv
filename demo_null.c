@@ -95,9 +95,7 @@ static void demo_null_set_parameters(struct ublksrv_ctrl_dev *cdev,
 
 static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	int dev_id = ctrl_dev->dev_info.dev_id;
 	int ret, i;
-	char buf[32];
 	struct ublksrv_dev *dev;
 	struct demo_queue_info *info_array;
 	void *thread_ret;
@@ -145,7 +143,6 @@ static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 
 static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	int cnt = 0, daemon_pid;
 	int ret;
 
 	if (ublksrv_ctrl_get_affinity(ctrl_dev) < 0)
@@ -222,7 +219,6 @@ int main(int argc, char *argv[])
 		.flags = 0,
 	};
 	struct ublksrv_ctrl_dev *dev;
-	char *type = NULL;
 	int ret;
 	static const struct option longopts[] = {
 		{ "buf",		1,	NULL, 'b' },

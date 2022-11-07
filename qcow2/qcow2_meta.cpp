@@ -789,7 +789,6 @@ exit:
 void Qcow2SliceMeta::wait_clusters(Qcow2State &qs,
 		const qcow2_io_ctx_t &ioc)
 {
-	unsigned cnt = 0;
 	for (int i = 0; i < get_nr_entries(); i++) {
 		u64 entry = get_entry(i);
 
