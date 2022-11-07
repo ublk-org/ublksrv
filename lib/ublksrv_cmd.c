@@ -101,7 +101,7 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 
 	dev->ctrl_fd = open(CTRL_DEV, O_RDWR);
 	if (dev->ctrl_fd < 0) {
-		fprintf(stderr, "conrol dev %s can't be opened\n", CTRL_DEV);
+		fprintf(stderr, "control dev %s can't be opened: %m\n", CTRL_DEV);
 		exit(dev->ctrl_fd);
 	}
 

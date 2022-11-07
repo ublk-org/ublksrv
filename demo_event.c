@@ -374,17 +374,22 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 
 	info_array = (struct demo_queue_info *)
 		calloc(sizeof(struct demo_queue_info), dinfo->nr_hw_queues);
+	if (!info_array)
+		return -ENOMEM;
 
 	dev = ublksrv_dev_init(ctrl_dev);
-	if (!dev)
+	if (!dev) {
+		free(info_array);
 		return -ENOMEM;
+	}
 	this_dev = dev;
 
 
 	aio_ctx = ublksrv_aio_ctx_init(dev, 0);
 	if (!aio_ctx) {
 		fprintf(stderr, "dev %d call ublk_aio_ctx_init failed\n", dev_id);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto fail;
 	}
 
 	if (!use_aio)

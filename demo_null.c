@@ -105,10 +105,14 @@ static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 
 	info_array = (struct demo_queue_info *)
 		calloc(sizeof(struct demo_queue_info), dinfo->nr_hw_queues);
+	if (!info_array)
+		return -ENOMEM;
 
 	dev = ublksrv_dev_init(ctrl_dev);
-	if (!dev)
+	if (!dev) {
+		free(info_array);
 		return -ENOMEM;
+	}
 
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
 		info_array[i].dev = dev;

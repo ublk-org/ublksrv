@@ -27,6 +27,10 @@ static char *mprintf(const char *fmt, ...)
 	ret = vasprintf(&str, fmt, args);
 	va_end(args);
 
+	if (ret < 0) {
+		return NULL;
+	}
+
 	return str;
 }
 
@@ -34,8 +38,7 @@ static char *pop_cmd(int *argc, char *argv[])
 {
 	char *cmd = argv[1];
 	if (*argc < 2) {
-		printf("%s: missing command\n", argv[0]);
-		exit(EXIT_FAILURE);
+		return NULL;
 	}
 
 	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
@@ -542,11 +545,15 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.flags |= UBLK_F_USER_RECOVERY;
 	if (user_recovery_reissue)
 		data.flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
-	if (data.tgt_type == NULL)
+	if (data.tgt_type == NULL) {
+		fprintf(stderr, "no dev type specified\n");
 		return -EINVAL;
+	}
 	tgt_type = ublksrv_find_tgt_type(data.tgt_type);
-	if (tgt_type == NULL)
+	if (tgt_type == NULL) {
+		fprintf(stderr, "unknown dev type: %s\n", data.tgt_type);
 		return -EINVAL;
+	}
 	data.flags |= tgt_type->ublk_flags;
 	data.ublksrv_flags |= tgt_type->ublksrv_flags;
 
@@ -651,7 +658,7 @@ static int __cmd_dev_del(int number, bool log)
 	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
 		if (log)
-			fprintf(stderr, "can't get dev info from %d\n", number);
+			fprintf(stderr, "can't get dev info from %d: %d\n", number, ret);
 		goto fail;
 	}
 
@@ -725,7 +732,7 @@ static int list_one_dev(int number, bool log, bool verbose)
 	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
 		if (log)
-			fprintf(stderr, "can't get dev info from %d\n", number);
+			fprintf(stderr, "can't get dev info from %d: %d\n", number, ret);
 	} else {
 		const char *buf = ublksrv_tgt_get_dev_data(dev);
 
@@ -770,7 +777,7 @@ static int cmd_list_dev_info(int argc, char *argv[])
 	for (i = 0; i < MAX_NR_UBLK_DEVS; i++)
 		list_one_dev(i, false, verbose);
 
-	return ret;
+	return 0;
 }
 
 static void cmd_dev_list_usage(const char *cmd)
@@ -887,8 +894,17 @@ static int cmd_dev_user_recover(int argc, char *argv[])
 	return __cmd_dev_user_recover(number, verbose);
 }
 
+static void cmd_usage(const char *cmd)
+{
+	cmd_dev_add_usage(cmd);
+	cmd_dev_del_usage(cmd);
+	cmd_dev_list_usage(cmd);
+}
+
 int main(int argc, char *argv[])
 {
+	const char *prog_name = "ublk";
+
 	char *cmd;
 	int ret;
 	char exe[PATH_MAX];
@@ -899,22 +915,27 @@ int main(int argc, char *argv[])
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
 	cmd = pop_cmd(&argc, argv);
+	if (cmd == NULL) {
+		printf("%s: missing command\n", argv[0]);
+		cmd_usage(prog_name);
+		return EXIT_FAILURE;
+	}
 
 	if (!strcmp(cmd, "add"))
 		ret = cmd_dev_add(argc, argv);
-	if (!strcmp(cmd, "del"))
+	else if (!strcmp(cmd, "del"))
 		ret = cmd_dev_del(argc, argv);
-	if (!strcmp(cmd, "list"))
+	else if (!strcmp(cmd, "list"))
 		ret = cmd_list_dev_info(argc, argv);
-	if (!strcmp(cmd, "recover"))
+	else if (!strcmp(cmd, "recover"))
 		ret = cmd_dev_user_recover(argc, argv);
-
-	if (!strcmp(cmd, "help")) {
-		const char *cmd = "ublk";
-
-		cmd_dev_add_usage(cmd);
-		cmd_dev_del_usage(cmd);
-		cmd_dev_list_usage(cmd);
+	else if (!strcmp(cmd, "help")) {
+		cmd_usage(prog_name);
+		ret = EXIT_SUCCESS;
+	} else {
+		fprintf(stderr, "unknown command: %s\n", cmd);
+		cmd_usage(prog_name);
+		ret = EXIT_FAILURE;
 	}
 
 	ublksrv_printf(stdout, "cmd %s: result %d\n", cmd, ret);
