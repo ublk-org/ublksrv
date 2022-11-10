@@ -168,6 +168,8 @@ public:
 		len = be32_to_cpu(buf[0]);
 	}
 
+	virtual ~Qcow2HeaderExt() {}
+
 	virtual void dump() const
 	{
 		syslog(LOG_INFO,"%s: type %x len %d\n",
