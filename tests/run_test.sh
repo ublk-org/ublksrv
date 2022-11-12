@@ -2,10 +2,17 @@
 # SPDX-License-Identifier: MIT or GPL-2.0-only
 
 DIR=$(cd "$(dirname "$0")";pwd)
+cd $DIR
 
 #. $DIR/common/fio_common
 
-export UBLK=${DIR}/../ublk
+: ${UBLK:=${DIR}/../ublk}
+if ! command -v "${UBLK}" &> /dev/null; then
+	echo "error: ublk command could not be found: ${UBLK}"
+	exit -1
+fi
+
+export UBLK
 export TEST_DIR=$DIR
 export UBLK_TMP=`mktemp /tmp/ublk_tmp_XXXXX`
 
@@ -38,11 +45,27 @@ run_test_all() {
 	done
 }
 
+display_usage() {
+	echo 'usage:'
+	echo '    run_test.sh <test> <test_running_time> <temp_dir>'
+}
+
 TEST=$1
+if [ -z "$TEST" ]; then
+	echo 'error: no test specified'
+	display_usage
+	exit -1
+fi
 
 [ ! -c /dev/ublk-control ] && echo 'please run "modprobe ublk_drv" first' && exit -1
 
 TDIR=$3
+if [ -z "$TDIR" ]; then
+	echo 'error: no temp dir specified'
+	display_usage
+	exit -1
+fi
+
 if [ "${TDIR:0:1}" != "/" ]; then
 	TDIR=`dirname $PWD`/${TDIR}
 fi
@@ -62,6 +85,9 @@ for _ITEM in "${_ITEMS[@]}"; do
 		run_test ${_ITEM}
 	elif [ `basename ${_ITEM}` = "all" ]; then
 		run_test_all `dirname ${_ITEM}`
+	else
+		echo "error: test suite not found: ${_ITEM}"
+		exit -1
 	fi
 done
 

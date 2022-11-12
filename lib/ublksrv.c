@@ -633,9 +633,14 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 
 	ublksrv_dev_init_io_cmds(dev, q);
 
+	/*
+	* N.B. PR_SET_IO_FLUSHER was added with Linux 5.6+.
+	*/
+#if defined(PR_SET_IO_FLUSHER)
 	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
 		syslog(LOG_INFO, "ublk dev %d queue %d set_io_flusher failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
+#endif
 
 	ublksrv_queue_adjust_uring_io_wq_workers(q);
 
