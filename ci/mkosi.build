@@ -1,0 +1,29 @@
+#!/usr/bin/bash
+
+#
+# This is a build script file for OS image generation using mkosi (https://github.com/systemd/mkosi).
+# It is invoked in a build environment, with the following set well-known variables:
+#
+#     $SRCDIR
+#     $DESTDIR
+#     $BUILDDIR
+#
+
+set -eo pipefail
+
+# Build newer version of liburing
+cd $SRCDIR
+git clone git://git.kernel.dk/liburing.git
+cd liburing
+./configure
+make -j$(nproc)
+make DESTDIR= install
+
+# Build in BUILDDIR and install to DESTDIR
+mkdir -p $BUILDDIR/ubdsrv
+LIBURING_DIR=$SRCDIR/liburing $SRCDIR/build_with_liburing_src
+make install
+
+# Copy tests into the dest
+mkdir -p $DESTDIR/usr/share
+cp -r $SRCDIR/tests $DESTDIR/usr/share/
