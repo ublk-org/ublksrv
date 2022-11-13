@@ -11,7 +11,7 @@ AC_USE_SYSTEM_EXTENSIONS
 AC_SYS_LARGEFILE
 
 dnl NB: Do not [quote] this parameter.
-AM_INIT_AUTOMAKE(foreign)
+AM_INIT_AUTOMAKE([foreign subdir-objects])
 LT_INIT
 
 AC_CANONICAL_HOST
