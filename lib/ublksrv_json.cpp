@@ -41,7 +41,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ublksrv_ctrl_dev_info,
 	pad1,
 	flags,
 	ublksrv_flags,
-	reserved0,
+	owner_uid,
+	owner_gid,
 	reserved1,
 	reserved2)
 
@@ -292,12 +293,13 @@ int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
 	std::string s;
 	char name[16];
 	char cpus[4096];
+	cpu_set_t *cpuset = ublksrv_get_queue_affinity(cdev, qid);
 
 	parse_json(j, jbuf);
 
 	snprintf(name, 16, "%d", qid);
 
-	ublksrv_build_cpu_str(cpus, 512, &cdev->queues_cpuset[qid]);
+	ublksrv_build_cpu_str(cpus, 512, cpuset);
 
 	j["queues"][std::string(name)]["qid"] = qid;
 	j["queues"][std::string(name)]["tid"] = ubq_daemon_tid;

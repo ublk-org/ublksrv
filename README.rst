@@ -127,7 +127,6 @@ list ublk devices
 
 - ublk list -v	#with all device info dumped
 
-
 test
 ====
 
