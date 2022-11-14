@@ -13,10 +13,26 @@ struct ublksrv_ctrl_cmd_data {
 	unsigned short cmd_op;
 	unsigned short flags;
 
-	__u64 data[2];
+	__u64 data[1];
+	__u16 dev_path_len;
+	__u16 pad;
+	__u32 reserved;
+
 	__u64 addr;
 	__u32 len;
 };
+
+#define ublk_un_privileged_prep_data(dev, data)	 \
+	char buf[UBLKC_PATH_MAX];			\
+	if (ublk_is_unprivileged(dev)) {			\
+		snprintf(buf, UBLKC_PATH_MAX, "%s%d", UBLKC_DEV, \
+			dev->dev_info.dev_id);			\
+		data.flags |= CTRL_CMD_HAS_BUF | CTRL_CMD_HAS_DATA;	\
+		data.len = sizeof(buf);	\
+		data.dev_path_len = UBLKC_PATH_MAX;	\
+		data.addr = (__u64)buf;	\
+	}
+
 
 /*******************ctrl dev operation ********************************/
 static inline void ublksrv_ctrl_init_cmd(struct ublksrv_ctrl_dev *dev,
@@ -37,7 +53,7 @@ static inline void ublksrv_ctrl_init_cmd(struct ublksrv_ctrl_dev *dev,
 
 	if (data->flags & CTRL_CMD_HAS_DATA) {
 		cmd->data[0] = data->data[0];
-		cmd->data[1] = data->data[1];
+		cmd->dev_path_len = data->dev_path_len;
 	}
 
 	cmd->dev_id = info->dev_id;
@@ -137,25 +153,38 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 		.cmd_op	= UBLK_CMD_GET_QUEUE_AFFINITY,
 		.flags	= CTRL_CMD_HAS_DATA | CTRL_CMD_HAS_BUF,
 	};
-	cpu_set_t *sets;
+	unsigned char *buf;
 	int i;
+	int len;
+	int path_len;
 
-	sets = (cpu_set_t *)calloc(sizeof(cpu_set_t), ctrl_dev->dev_info.nr_hw_queues);
-	if (!sets)
+	if (ublk_is_unprivileged(ctrl_dev))
+		path_len = UBLKC_PATH_MAX;
+	else
+		path_len = 0;
+
+	len = (sizeof(cpu_set_t) + path_len) * ctrl_dev->dev_info.nr_hw_queues;
+	buf = malloc(len);
+
+	if (!buf)
 		return -1;
 
 	for (i = 0; i < ctrl_dev->dev_info.nr_hw_queues; i++) {
 		data.data[0] = i;
-		data.data[1] = 0;
-		data.addr = (__u64)&sets[i];
-		data.len = sizeof(cpu_set_t);
+		data.dev_path_len = path_len;
+		data.len = sizeof(cpu_set_t) + path_len;
+		data.addr = (__u64)&buf[i * data.len];
+
+		if (path_len)
+			snprintf((char *)data.addr, UBLKC_PATH_MAX, "%s%d",
+					UBLKC_DEV, ctrl_dev->dev_info.dev_id);
 
 		if (__ublksrv_ctrl_cmd(ctrl_dev, &data) < 0) {
-			free(sets);
+			free(buf);
 			return -1;
 		}
 	}
-	ctrl_dev->queues_cpuset = sets;
+	ctrl_dev->queues_cpuset = (cpu_set_t *)buf;
 
 	return 0;
 }
@@ -184,6 +213,8 @@ int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev,
 		.flags	= CTRL_CMD_HAS_DATA,
 	};
 	int ret;
+
+	ublk_un_privileged_prep_data(ctrl_dev, data);
 
 	ctrl_dev->dev_info.ublksrv_pid = data.data[0] = daemon_pid;
 
@@ -223,19 +254,42 @@ int ublksrv_ctrl_del_dev(struct ublksrv_ctrl_dev *dev)
 		.flags = 0,
 	};
 
+	ublk_un_privileged_prep_data(dev, data);
+
 	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
 int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev)
 {
+	char buf[UBLKC_PATH_MAX + sizeof(dev->dev_info)];
 	struct ublksrv_ctrl_cmd_data data = {
+#ifdef UBLK_CMD_GET_DEV_INFO2
+		.cmd_op	= UBLK_CMD_GET_DEV_INFO2,
+#else
 		.cmd_op	= UBLK_CMD_GET_DEV_INFO,
+#endif
 		.flags	= CTRL_CMD_HAS_BUF,
 		.addr = (__u64)&dev->dev_info,
 		.len = sizeof(struct ublksrv_ctrl_dev_info),
 	};
+	bool has_dev_path = false;
+	int ret;
 
-	return __ublksrv_ctrl_cmd(dev, &data);
+	if (ublk_is_unprivileged(dev) || data.cmd_op == UBLK_CMD_GET_DEV_INFO2) {
+		snprintf(buf, UBLKC_PATH_MAX, "%s%d", UBLKC_DEV,
+			dev->dev_info.dev_id);
+		data.flags |= CTRL_CMD_HAS_BUF | CTRL_CMD_HAS_DATA;
+		data.len = sizeof(buf);
+		data.dev_path_len = UBLKC_PATH_MAX;
+		data.addr = (__u64)buf;
+		has_dev_path = true;
+	}
+
+	ret = __ublksrv_ctrl_cmd(dev, &data);
+	if (ret >= 0 && has_dev_path)
+		memcpy(&dev->dev_info, &buf[UBLKC_PATH_MAX],
+				sizeof(dev->dev_info));
+	return ret;
 }
 
 int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev)
@@ -244,6 +298,8 @@ int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev)
 		.cmd_op	= UBLK_CMD_STOP_DEV,
 	};
 	int ret;
+
+	ublk_un_privileged_prep_data(dev, data);
 
 	ret = __ublksrv_ctrl_cmd(dev, &data);
 	return ret;
@@ -283,9 +339,10 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
                         info->max_io_buf_bytes,
 			info->ublksrv_pid, info->flags,
 			ublksrv_dev_state_desc(dev));
-	printf("\tublkc: %u:%d ublkb: %u:%u\n",
+	printf("\tublkc: %u:%d ublkb: %u:%u owner: %u:%u\n",
 			p.devt.char_major, p.devt.char_minor,
-			p.devt.disk_major, p.devt.disk_minor);
+			p.devt.disk_major, p.devt.disk_minor,
+			info->owner_uid, info->owner_gid);
 
 	if (jbuf) {
 		char buf[512];
@@ -312,8 +369,19 @@ int ublksrv_ctrl_set_params(struct ublksrv_ctrl_dev *dev,
 		.addr = (__u64)params,
 		.len = sizeof(*params),
 	};
+	char buf[UBLKC_PATH_MAX + sizeof(*params)];
 
 	params->len = sizeof(*params);
+
+	if (ublk_is_unprivileged(dev)) {
+		snprintf(buf, UBLKC_PATH_MAX, "%s%d", UBLKC_DEV,
+			dev->dev_info.dev_id);
+		memcpy(&buf[UBLKC_PATH_MAX], params, sizeof(*params));
+		data.flags |= CTRL_CMD_HAS_BUF | CTRL_CMD_HAS_DATA;
+		data.len = sizeof(buf);
+		data.dev_path_len = UBLKC_PATH_MAX;
+		data.addr = (__u64)buf;
+	}
 
 	return __ublksrv_ctrl_cmd(dev, &data);
 }
@@ -327,10 +395,26 @@ int ublksrv_ctrl_get_params(struct ublksrv_ctrl_dev *dev,
 		.addr = (__u64)params,
 		.len = sizeof(*params),
 	};
+	char buf[UBLKC_PATH_MAX + sizeof(*params)];
+	int ret;
 
 	params->len = sizeof(*params);
 
-	return __ublksrv_ctrl_cmd(dev, &data);
+	if (ublk_is_unprivileged(dev)) {
+		snprintf(buf, UBLKC_PATH_MAX, "%s%d", UBLKC_DEV,
+			dev->dev_info.dev_id);
+		memcpy(&buf[UBLKC_PATH_MAX], params, sizeof(*params));
+		data.flags |= CTRL_CMD_HAS_BUF | CTRL_CMD_HAS_DATA;
+		data.len = sizeof(buf);
+		data.dev_path_len = UBLKC_PATH_MAX;
+		data.addr = (__u64)buf;
+	}
+
+	ret = __ublksrv_ctrl_cmd(dev, &data);
+	if (ret >= 0 && ublk_is_unprivileged(dev))
+		memcpy(params, &buf[UBLKC_PATH_MAX], sizeof(*params));
+
+	return 0;
 }
 
 int ublksrv_ctrl_start_recovery(struct ublksrv_ctrl_dev *dev)
@@ -340,6 +424,8 @@ int ublksrv_ctrl_start_recovery(struct ublksrv_ctrl_dev *dev)
 		.flags = 0,
 	};
 	int ret;
+
+	ublk_un_privileged_prep_data(dev, data);
 
 	ret = __ublksrv_ctrl_cmd(dev, &data);
 	return ret;
@@ -352,6 +438,8 @@ int ublksrv_ctrl_end_recovery(struct ublksrv_ctrl_dev *dev, int daemon_pid)
 		.flags = CTRL_CMD_HAS_DATA,
 	};
 	int ret;
+
+	ublk_un_privileged_prep_data(dev, data);
 
 	dev->dev_info.ublksrv_pid = data.data[0] = daemon_pid;
 

@@ -128,6 +128,35 @@ list ublk devices
 - ublk list -v	#with all device info dumped
 
 
+un-privileged mode
+==================
+
+At default, controling ublk device needs privileged user, since
+/dev/ublk-control is permitted for administrator only, and this
+is called privileged mode.
+
+For un-privilege mode, /dev/ublk-control needs to be allowed for
+all users, so the following udev rule need to be added:
+
+KERNEL=="ublk-control", MODE="0666", OPTIONS+="static_node=ublk-control"
+
+Also when new ublk device is added, we need ublk to change device
+ownership to the device's real owner, so the following rule(
+``util/ublk_add_dev.rules``) is needed:
+
+KERNEL=="ublkc*",RUN+="ublk_chown.sh %k"
+KERNEL=="ublkb*",RUN+="ublk_chown.sh %k"
+
+``ublk_chown.sh`` can be found under ``util/`` too.
+
+With the above two administrator changes, un-privileged user can
+create/delete/list/use ublk device, also anyone which isn't permitted
+can't access and control this ublk devices(ublkc*/ublkb*)
+
+Un-privileged user can pass '--un-previleged=1' to 'ublk add' for creating
+un-privileged ublk device, then the created ublk device is only available
+for the owner and administrator.
+
 test
 ====
 

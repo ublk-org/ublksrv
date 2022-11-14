@@ -561,6 +561,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "need_get_data",	1,	NULL, 'g' },
 		{ "user_recovery",	1,	NULL, 'r'},
 		{ "user_recovery_reissue",	1,	NULL, 'i'},
+		{ "un_privileged",	1,	NULL, 'o'},
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -571,6 +572,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	int need_get_data = 0;
 	int user_recovery = 0;
 	int user_recovery_reissue = 0;
+	int un_privileged = 0;
 	const char *dump_buf;
 
 	data.queue_depth = DEF_QD;
@@ -580,9 +582,12 @@ static int cmd_dev_add(int argc, char *argv[])
 
 	mkpath(data.run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:i:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:o:i:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
+		case 'o':
+			un_privileged = strtol(optarg, NULL, 10);
+			break;
 		case 'n':
 			data.dev_id = strtol(optarg, NULL, 10);
 			break;
@@ -625,6 +630,9 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.flags |= UBLK_F_USER_RECOVERY;
 	if (user_recovery_reissue)
 		data.flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
+	if (un_privileged)
+		data.flags |= UBLK_F_UNPRIVILEGED_DEV;
+
 	if (data.tgt_type == NULL) {
 		fprintf(stderr, "no dev type specified\n");
 		return -EINVAL;
@@ -725,7 +733,7 @@ static void cmd_dev_add_usage(const char *cmd)
 
 	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH "
 			"-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY "
-			"-i USER_RECOVERY_REISSUE\n",
+			"-i USER_RECOVERY_REISSUE -o UN_PRIVILEGED\n",
 			cmd, data.names);
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
