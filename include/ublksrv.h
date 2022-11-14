@@ -52,7 +52,8 @@ struct ublksrv_dev_data {
 	const char	*run_dir;
 	unsigned long	flags;
 	unsigned long	ublksrv_flags;
-	unsigned long   reserved[7];
+	unsigned int    uid, gid;
+	unsigned long   reserved[6];
 };
 
 /*

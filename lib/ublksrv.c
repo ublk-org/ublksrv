@@ -44,8 +44,6 @@ static inline struct ublksrv_io_desc *ublksrv_get_iod(
  * all sqes have been free, exit itself. Then STOP_DEV returns.
  */
 
-#define UBLKC_DEV	"/dev/ublkc"
-
 /*
  * If ublksrv queue is idle in the past 20 seconds, start to discard
  * pages mapped to io buffer via madivise(MADV_DONTNEED), so these
@@ -436,7 +434,7 @@ static void ublksrv_set_sched_affinity(struct _ublksrv_dev *dev,
 {
 	const struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
 	unsigned dev_id = cdev->dev_info.dev_id;
-	cpu_set_t *cpuset = &cdev->queues_cpuset[q_id];
+	cpu_set_t *cpuset = ublksrv_get_queue_affinity(cdev, q_id);
 	pthread_t thread = pthread_self();
 	int ret;
 

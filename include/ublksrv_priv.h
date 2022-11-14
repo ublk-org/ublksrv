@@ -24,6 +24,11 @@
 #include "ublksrv.h"
 #include "ublksrv_aio.h"
 
+
+/* todo: relace the hardcode name with /dev/char/maj:min */
+#define UBLKC_DEV	"/dev/ublkc"
+#define UBLKC_PATH_MAX	32
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -147,6 +152,22 @@ struct _ublksrv_dev {
 
 #define local_to_tdev(d)	((struct ublksrv_dev *)(d))
 #define tdev_to_local(d)	((struct _ublksrv_dev *)(d))
+
+static inline bool ublk_is_unprivileged(const struct ublksrv_ctrl_dev *ctrl_dev)
+{
+	return !!(ctrl_dev->dev_info.flags & UBLK_F_UNPRIVILEGED_DEV);
+}
+
+static inline cpu_set_t *ublksrv_get_queue_affinity(
+		const struct ublksrv_ctrl_dev *dev, int qid)
+{
+	unsigned char *buf = (unsigned char *)&dev->queues_cpuset[qid];
+
+	if (ublk_is_unprivileged(dev))
+		return (cpu_set_t *)&buf[UBLKC_PATH_MAX];
+
+	return &dev->queues_cpuset[qid];
+}
 
 static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
 {
