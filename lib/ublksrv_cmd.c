@@ -266,11 +266,14 @@ static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 {
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
-	int i;
+	int i, ret;
 	struct ublk_params p;
 
-	if (jbuf)
-		ublksrv_json_read_params(&p, jbuf);
+	ret = ublksrv_ctrl_get_params(dev, &p);
+	if (ret < 0) {
+		fprintf(stderr, "failed to get params %m\n");
+		return;
+	}
 
 	printf("dev id %d: nr_hw_queues %d queue_depth %d block size %d dev_capacity %lld\n",
 			info->dev_id,
@@ -280,6 +283,9 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
                         info->max_io_buf_bytes,
 			info->ublksrv_pid, info->flags,
 			ublksrv_dev_state_desc(dev));
+	printf("\tublkc: %u:%d ublkb: %u:%u\n",
+			p.devt.char_major, p.devt.char_minor,
+			p.devt.disk_major, p.devt.disk_minor);
 
 	if (jbuf) {
 		char buf[512];
