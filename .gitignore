@@ -26,6 +26,7 @@ Makefile.in
 /configure
 /demo_event
 /demo_null
+/ublk_user_id
 /depcomp
 /install-sh
 /libtool

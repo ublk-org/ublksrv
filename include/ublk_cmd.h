@@ -118,7 +118,8 @@ struct ublksrv_ctrl_dev_info {
 	/* For ublksrv internal use, invisible to ublk driver */
 	__u64	ublksrv_flags;
 
-	__u64	reserved0;
+	__u32	owner_uid;
+	__u32	owner_gid;
 	__u64	reserved1;
 	__u64   reserved2;
 };

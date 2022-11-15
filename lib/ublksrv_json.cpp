@@ -41,7 +41,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ublksrv_ctrl_dev_info,
 	pad1,
 	flags,
 	ublksrv_flags,
-	reserved0,
+	owner_uid,
+	owner_gid,
 	reserved1,
 	reserved2)
 
