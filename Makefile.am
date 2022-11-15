@@ -11,8 +11,9 @@ SUBDIRS = include lib tests
 
 AM_CXXFLAGS = -fcoroutines -std=c++20
 
-sbin_PROGRAMS = ublk
+sbin_PROGRAMS = ublk ublk_user_id
 noinst_PROGRAMS = demo_null demo_event
+dist_sbin_SCRIPTS = util/ublk_chown.sh
 
 ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp qcow2/tgt_qcow2.cpp \
 			   qcow2/qcow2.cpp qcow2/qcow2_meta.cpp qcow2/utils.cpp \
@@ -30,6 +31,11 @@ demo_event_SOURCES = demo_event.c
 demo_event_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 demo_event_CPPFLAGS = $(demo_event_CFLAGS) -I$(top_srcdir)/include
 demo_event_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
+
+ublk_user_id_SOURCES = util/ublk_user_id.c
+ublk_user_id_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
+ublk_user_id_CPPFLAGS = $(ublk_user_id_CFLAGS) -I$(top_srcdir)/include
+ublk_user_id_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ublksrv.pc
