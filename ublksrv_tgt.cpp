@@ -473,10 +473,29 @@ static int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
 
 static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	int cnt = 0, daemon_pid;
+	int cnt = 0, daemon_pid, ret;
+	unsigned int max_time = 1000000, wait = 0;
 
-	if (ublksrv_ctrl_get_affinity(ctrl_dev) < 0)
+	/*
+	 * Wait until ublk device ownership is setup by udev
+	 */
+	while (wait < max_time) {
+		ret = ublksrv_ctrl_get_affinity(ctrl_dev);
+		if (ret == -EACCES || ret == -EPERM) {
+			usleep(10000);
+			wait += 10000;
+			continue;
+		} else if (ret <= 0)
+			break;
+	}
+	if (ret < 0) {
+		const struct ublksrv_ctrl_dev_info *dinfo =
+			ublksrv_ctrl_get_dev_info(ctrl_dev);
+
+		fprintf(stderr, "dev %d get affinity failed %d\n",
+				dinfo->dev_id, ret);
 		return -1;
+	}
 
 	switch (fork()) {
 	case -1:
