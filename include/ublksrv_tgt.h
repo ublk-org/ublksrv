@@ -34,7 +34,7 @@ static inline unsigned ilog2(unsigned x)
 }
 
 #define MAX_NR_UBLK_DEVS	128
-#define UBLKSRV_PID_DIR  "/var/run/ublksrvd"
+#define UBLKSRV_PID_DIR  "/tmp/ublksrvd"
 
 /* json device data is stored at this offset of pid file */
 #define JSON_OFFSET   32
