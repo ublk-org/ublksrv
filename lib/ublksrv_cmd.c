@@ -156,7 +156,7 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 		.flags	= CTRL_CMD_HAS_DATA | CTRL_CMD_HAS_BUF,
 	};
 	unsigned char *buf;
-	int i;
+	int i, ret;
 	int len;
 	int path_len;
 
@@ -169,7 +169,7 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 	buf = malloc(len);
 
 	if (!buf)
-		return -1;
+		return -ENOMEM;
 
 	for (i = 0; i < ctrl_dev->dev_info.nr_hw_queues; i++) {
 		data.data[0] = i;
@@ -181,9 +181,10 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 			snprintf((char *)data.addr, UBLKC_PATH_MAX, "%s%d",
 					UBLKC_DEV, ctrl_dev->dev_info.dev_id);
 
-		if (__ublksrv_ctrl_cmd(ctrl_dev, &data) < 0) {
+		ret = __ublksrv_ctrl_cmd(ctrl_dev, &data);
+		if (ret < 0) {
 			free(buf);
-			return -1;
+			return ret;
 		}
 	}
 	ctrl_dev->queues_cpuset = (cpu_set_t *)buf;
