@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT or GPL-2.0-only
 # Udev rules for ublk devices.
 
+KERNEL=="ublk-control", MODE="0666", OPTIONS+="static_node=ublk-control"
 KERNEL=="ublkc*",RUN+="/usr/local/sbin/ublk_chown.sh %k"
 KERNEL=="ublkb*",RUN+="/usr/local/sbin/ublk_chown.sh %k"
