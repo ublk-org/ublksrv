@@ -464,9 +464,14 @@ void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset)
 	int i, offset = 0;
 
 	for (i = 0; i < nr_cores; i++) {
+		int n;
+
 		if (!CPU_ISSET(i, cpuset))
 			continue;
-		offset += snprintf(&buf[offset], len - offset, "%d ", i);
+		n = snprintf(&buf[offset], len - offset, "%d ", i);
+		if (n < 0 || n >= len - offset)
+			break;
+		offset += n;
 	}
 }
 
