@@ -141,13 +141,15 @@ all users, so the following udev rule need to be added:
 KERNEL=="ublk-control", MODE="0666", OPTIONS+="static_node=ublk-control"
 
 Also when new ublk device is added, we need ublk to change device
-ownership to the device's real owner, so the following rule(
-``util/ublk_add_dev.rules``) is needed:
+ownership to the device's real owner, so the following rules are
+needed:
 
 KERNEL=="ublkc*",RUN+="ublk_chown.sh %k"
 KERNEL=="ublkb*",RUN+="ublk_chown.sh %k"
 
 ``ublk_chown.sh`` can be found under ``util/`` too.
+
+``util/ublk_dev.rules`` includes the above rules.
 
 With the above two administrator changes, un-privileged user can
 create/delete/list/use ublk device, also anyone which isn't permitted
