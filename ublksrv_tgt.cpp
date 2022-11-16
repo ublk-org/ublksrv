@@ -509,6 +509,8 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 static int __mkpath(char *dir, mode_t mode)
 {
 	struct stat sb;
+	int ret;
+	mode_t mask;
 
 	if (!dir)
 		return -EINVAL;
@@ -518,12 +520,16 @@ static int __mkpath(char *dir, mode_t mode)
 
 	__mkpath(dirname(strdupa(dir)), mode);
 
-	return mkdir(dir, mode);
+	mask = umask(0);
+	ret = mkdir(dir, mode);
+	umask(mask);
+
+	return ret;
 }
 
 static int mkpath(const char *dir)
 {
-	return __mkpath(strdupa(dir), 0700);
+	return __mkpath(strdupa(dir), S_IRWXU | S_IRWXG | S_IRWXO);
 }
 #pragma GCC diagnostic pop
 
