@@ -570,6 +570,7 @@ static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 
 static int cmd_dev_add(int argc, char *argv[])
 {
+	int un_privileged = 0;
 	static const struct option longopts[] = {
 		{ "type",		1,	NULL, 't' },
 		{ "number",		1,	NULL, 'n' },
@@ -580,7 +581,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "need_get_data",	1,	NULL, 'g' },
 		{ "user_recovery",	1,	NULL, 'r'},
 		{ "user_recovery_reissue",	1,	NULL, 'i'},
-		{ "un_privileged",	1,	NULL, 'o'},
+		{ "un_privileged",	0,	&un_privileged, 1},
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -591,7 +592,6 @@ static int cmd_dev_add(int argc, char *argv[])
 	int need_get_data = 0;
 	int user_recovery = 0;
 	int user_recovery_reissue = 0;
-	int un_privileged = 0;
 	const char *dump_buf;
 
 	data.queue_depth = DEF_QD;
@@ -601,12 +601,9 @@ static int cmd_dev_add(int argc, char *argv[])
 
 	mkpath(data.run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:o:i:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:i:z",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
-		case 'o':
-			un_privileged = strtol(optarg, NULL, 10);
-			break;
 		case 'n':
 			data.dev_id = strtol(optarg, NULL, 10);
 			break;
@@ -755,7 +752,7 @@ static void cmd_dev_add_usage(const char *cmd)
 
 	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH "
 			"-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY "
-			"-i USER_RECOVERY_REISSUE -o UN_PRIVILEGED\n",
+			"-i USER_RECOVERY_REISSUE --un_privileged\n",
 			cmd, data.names);
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }

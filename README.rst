@@ -155,7 +155,7 @@ With the above two administrator changes, un-privileged user can
 create/delete/list/use ublk device, also anyone which isn't permitted
 can't access and control this ublk devices(ublkc*/ublkb*)
 
-Un-privileged user can pass '--un-previleged=1' to 'ublk add' for creating
+Un-privileged user can pass '--un-previleged' to 'ublk add' for creating
 un-privileged ublk device, then the created ublk device is only available
 for the owner and administrator.
 
