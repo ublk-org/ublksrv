@@ -212,13 +212,14 @@ static int reap_uring(struct ublksrv_aio_ctx *ctx, struct aio_list *list, int
 static void *demo_event_uring_io_handler_fn(void *data)
 {
 	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
-	unsigned dev_id = ctx->dev->ctrl_dev->dev_info.dev_id;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ctx->dev->ctrl_dev);
+	unsigned dev_id = info->dev_id;
 	struct io_uring ring;
 	unsigned qd;
 	int ret;
 
-	qd = ctx->dev->ctrl_dev->dev_info.queue_depth *
-		ctx->dev->ctrl_dev->dev_info.nr_hw_queues * 2;
+	qd = info->queue_depth * info->nr_hw_queues * 2;
 
 	io_uring_queue_init(qd, &ring, 0);
 	ret = io_uring_register_eventfd(&ring, ctx->efd);
@@ -258,8 +259,10 @@ static void *demo_event_uring_io_handler_fn(void *data)
 static void *demo_event_real_io_handler_fn(void *data)
 {
 	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ctx->dev->ctrl_dev);
 
-	unsigned dev_id = ctx->dev->ctrl_dev->dev_info.dev_id;
+	unsigned dev_id = info->dev_id;
 	struct epoll_event events[EPOLL_NR_EVENTS];
 	int epoll_fd = epoll_create(EPOLL_NR_EVENTS);
 	struct epoll_event read_event;
@@ -302,7 +305,9 @@ static void *demo_event_io_handler_fn(void *data)
 {
 	struct demo_queue_info *info = (struct demo_queue_info *)data;
 	struct ublksrv_dev *dev = info->dev;
-	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
+	const struct ublksrv_ctrl_dev_info *dinfo =
+		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
 
@@ -314,7 +319,7 @@ static void *demo_event_io_handler_fn(void *data)
 	q = ublksrv_queue_init(dev, q_id, info);
 	if (!q) {
 		fprintf(stderr, "ublk dev %d queue %d init queue failed\n",
-				dev->ctrl_dev->dev_info.dev_id, q_id);
+				dinfo->dev_id, q_id);
 		return NULL;
 	}
 	info->q = q;
@@ -334,7 +339,8 @@ static void *demo_event_io_handler_fn(void *data)
 static void demo_event_set_parameters(struct ublksrv_ctrl_dev *cdev,
 		const struct ublksrv_dev *dev)
  {
-	struct ublksrv_ctrl_dev_info *info = &cdev->dev_info;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(cdev);
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
 		.basic = {
@@ -361,12 +367,13 @@ static void demo_event_set_parameters(struct ublksrv_ctrl_dev *cdev,
 
 static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	int dev_id = ctrl_dev->dev_info.dev_id;
+	const struct ublksrv_ctrl_dev_info *dinfo =
+		ublksrv_ctrl_get_dev_info(ctrl_dev);
+	int dev_id = dinfo->dev_id;
 	int ret, i;
 	struct ublksrv_dev *dev;
 	struct demo_queue_info *info_array;
 	void *thread_ret;
-	struct ublksrv_ctrl_dev_info *dinfo = &ctrl_dev->dev_info;
 
 	info_array = (struct demo_queue_info *)
 		calloc(sizeof(struct demo_queue_info), dinfo->nr_hw_queues);
@@ -440,7 +447,8 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
-	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,

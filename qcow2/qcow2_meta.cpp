@@ -814,7 +814,7 @@ void Qcow2SliceMeta::wait_clusters(Qcow2State &qs,
 
 void Qcow2SliceMeta::reclaim_me()
 {
-	unsigned queues = header.qs.dev->ctrl_dev->dev_info.nr_hw_queues;
+	unsigned queues = header.qs.dev_info->nr_hw_queues;
 
 	meta_log("%s: %p off %llx flags %x\n", __func__,
 			this, get_offset(), flags);

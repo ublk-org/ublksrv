@@ -37,7 +37,9 @@ static void *demo_null_io_handler_fn(void *data)
 {
 	struct demo_queue_info *info = (struct demo_queue_info *)data;
 	struct ublksrv_dev *dev = info->dev;
-	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
+	const struct ublksrv_ctrl_dev_info *dinfo =
+		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
 
@@ -50,7 +52,7 @@ static void *demo_null_io_handler_fn(void *data)
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
 		fprintf(stderr, "ublk dev %d queue %d init queue failed\n",
-				dev->ctrl_dev->dev_info.dev_id, q_id);
+				dinfo->dev_id, q_id);
 		return NULL;
 	}
 
@@ -69,7 +71,8 @@ static void *demo_null_io_handler_fn(void *data)
 static void demo_null_set_parameters(struct ublksrv_ctrl_dev *cdev,
 		const struct ublksrv_dev *dev)
  {
-	struct ublksrv_ctrl_dev_info *info = &cdev->dev_info;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(cdev);
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
 		.basic = {
@@ -99,7 +102,8 @@ static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 	struct ublksrv_dev *dev;
 	struct demo_queue_info *info_array;
 	void *thread_ret;
-	struct ublksrv_ctrl_dev_info *dinfo = &ctrl_dev->dev_info;
+	const struct ublksrv_ctrl_dev_info *dinfo =
+		ublksrv_ctrl_get_dev_info(ctrl_dev);
 
 	info_array = (struct demo_queue_info *)
 		calloc(sizeof(struct demo_queue_info), dinfo->nr_hw_queues);
@@ -158,7 +162,8 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
-	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,

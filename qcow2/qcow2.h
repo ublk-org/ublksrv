@@ -607,6 +607,7 @@ class Qcow2State {
 private:
 	std::vector <Qcow2SliceMeta *> freed_slices;
 public:
+	const struct ublksrv_ctrl_dev_info *dev_info;
 	unsigned min_bs_bits;
 	struct meta_mapping {
 		int nr;

@@ -141,16 +141,19 @@ static int ublksrv_tgt_store_dev_data(struct ublksrv_dev *dev,
 
 static char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev)
 {
-	int dev_id = cdev->dev_info.dev_id;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(cdev);
+	int dev_id = info->dev_id;
 	struct stat st;
 	char pid_file[256];
 	char *buf;
 	int size, fd, ret;
+	const char *run_dir = ublksrv_ctrl_get_run_dir(cdev);
 
-	if (!cdev->run_dir)
+	if (!run_dir)
 		return 0;
 
-	snprintf(pid_file, 256, "%s/%d.pid", cdev->run_dir, dev_id);
+	snprintf(pid_file, 256, "%s/%d.pid", run_dir, dev_id);
 	fd = open(pid_file, O_RDONLY);
 
 	if (fd <= 0)
@@ -177,14 +180,16 @@ static void *ublksrv_io_handler_fn(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
 	struct ublksrv_dev *dev = info->dev;
-	unsigned dev_id = dev->ctrl_dev->dev_info.dev_id;
+	const struct ublksrv_ctrl_dev_info *dinfo =
+		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
 	int ret;
 	int buf_size;
 	char *buf;
 	const char *jbuf;
-	bool recoverying = dev->ctrl_dev->dev_info.state == UBLK_S_DEV_QUIESCED;
+	bool recoverying = dinfo->state == UBLK_S_DEV_QUIESCED;
 
 	pthread_mutex_lock(&jbuf_lock);
 
@@ -204,14 +209,14 @@ static void *ublksrv_io_handler_fn(void *data)
 	 * A bit ugly to store json buffer to pid file here, but no easy
 	 * way to do it in control task side, so far, so good
 	 */
-	if (queues_stored == dev->ctrl_dev->dev_info.nr_hw_queues)
+	if (queues_stored == dinfo->nr_hw_queues)
 		ublksrv_tgt_store_dev_data(dev, jbuf);
 	pthread_mutex_unlock(&jbuf_lock);
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
 		syslog(LOG_INFO, "ublk dev %d queue %d init queue failed",
-				dev->ctrl_dev->dev_info.dev_id, q_id);
+				dev_id, q_id);
 		return NULL;
 	}
 
@@ -254,7 +259,9 @@ static void setup_pthread_sigmask()
 static void ublksrv_drain_fetch_commands(struct ublksrv_dev *dev,
 		struct ublksrv_queue_info *info)
 {
-	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
+	const struct ublksrv_ctrl_dev_info *dinfo =
+		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+	unsigned nr_queues = dinfo->nr_hw_queues;
 	int i;
 	void *ret;
 
@@ -266,7 +273,9 @@ static void ublksrv_drain_fetch_commands(struct ublksrv_dev *dev,
 static void ublksrv_io_handler(void *data)
 {
 	const struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
-	int dev_id = ctrl_dev->dev_info.dev_id;
+	const struct ublksrv_ctrl_dev_info *dinfo =
+		ublksrv_ctrl_get_dev_info(ctrl_dev);
+	int dev_id = dinfo->dev_id;
 	int i;
 	char buf[32];
 	struct ublksrv_dev *dev;
@@ -290,9 +299,9 @@ static void ublksrv_io_handler(void *data)
 
 	info_array = (struct ublksrv_queue_info *)calloc(sizeof(
 				struct ublksrv_queue_info),
-			ctrl_dev->dev_info.nr_hw_queues);
+			dinfo->nr_hw_queues);
 
-	for (i = 0; i < ctrl_dev->dev_info.nr_hw_queues; i++) {
+	for (i = 0; i < dinfo->nr_hw_queues; i++) {
 		info_array[i].dev = dev;
 		info_array[i].qid = i;
 		pthread_create(&info_array[i].thread, NULL,
@@ -331,6 +340,9 @@ static int ublksrv_check_dev_data(const char *buf, int size)
 static int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
 		bool check_data)
 {
+	const char *run_dir = ublksrv_ctrl_get_run_dir(ctrl_dev);
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ctrl_dev);
 	int ret = -1, pid_fd;
 	char path[256];
 	char *buf = NULL;
@@ -338,8 +350,10 @@ static int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
 	int daemon_pid;
 	struct stat st;
 
-	snprintf(path, 256, "%s/%d.pid", ctrl_dev->run_dir,
-			ctrl_dev->dev_info.dev_id);
+	if (!run_dir)
+		return -EINVAL;
+
+	snprintf(path, 256, "%s/%d.pid", run_dir, info->dev_id);
 
 	pid_fd = open(path, O_RDONLY);
 	if (pid_fd < 0)
@@ -452,7 +466,9 @@ static int mkpath(const char *dir)
 static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 		const char *jbuf)
 {
-	int dev_id = cdev->dev_info.dev_id;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(cdev);
+	int dev_id = info->dev_id;
 	struct ublk_params p;
 	int ret;
 
@@ -572,7 +588,11 @@ static int cmd_dev_add(int argc, char *argv[])
 		goto fail;
 	}
 
-	data.dev_id = dev->dev_info.dev_id;
+	{
+		const struct ublksrv_ctrl_dev_info *info =
+			ublksrv_ctrl_get_dev_info(dev);
+		data.dev_id = info->dev_id;
+	}
 	ret = ublksrv_start_daemon(dev);
 	if (ret <= 0) {
 		fprintf(stderr, "start dev %d daemon failed, ret %d\n",

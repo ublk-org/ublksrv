@@ -8,7 +8,8 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
 	struct ublksrv_tgt_base_json tgt_json = {
@@ -51,7 +52,8 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 {
-	const struct ublksrv_ctrl_dev_info  *info = &dev->ctrl_dev->dev_info;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
 	const char *jbuf = dev->ctrl_dev->recovery_jbuf;
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	int ret;

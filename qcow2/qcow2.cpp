@@ -14,10 +14,11 @@ Qcow2Image:: ~Qcow2Image() {
 }
 
 Qcow2State:: Qcow2State(const char *path, const struct ublksrv_dev *d):
+	dev_info(ublksrv_ctrl_get_dev_info(d->ctrl_dev)),
 	min_bs_bits(9), dev(d), img(path), header(*this), l1_table(*this),
 	refcount_table(*this), cluster_allocator(*this),
 	cluster_map(*this),
-	meta_io_map(d->ctrl_dev->dev_info.nr_hw_queues),
+	meta_io_map(dev_info->nr_hw_queues),
 	meta_flushing(*this)
 {
 	u64 l1_bytes = get_l1_table_max_size();
