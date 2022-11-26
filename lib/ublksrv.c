@@ -336,7 +336,8 @@ static void ublksrv_submit_fetch_commands(struct ublksrv_queue *q)
 
 static int ublksrv_queue_is_done(struct ublksrv_queue *q)
 {
-	return (q->state & UBLKSRV_QUEUE_STOPPING) && (!q->cmd_inflight && !q->tgt_io_inflight);
+	return (q->state & UBLKSRV_QUEUE_STOPPING) &&
+		!io_uring_sq_ready(&q->ring);
 }
 
 /* used for allocating zero copy vma space */
