@@ -267,7 +267,6 @@ static inline int __ublksrv_queue_event(struct ublksrv_queue *q)
 
 		io_uring_prep_poll_add(sqe, q->efd, POLLIN);
 		io_uring_sqe_set_data64(sqe, user_data);
-		q->tgt_io_inflight += 1;
 	}
 	return 0;
 }
@@ -583,7 +582,6 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	q->q_depth = depth;
 	q->io_cmd_buf = NULL;
 	q->cmd_inflight = 0;
-	q->tgt_io_inflight = 0;
 	q->tid = gettid();
 
 	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
@@ -793,7 +791,6 @@ static inline void ublksrv_handle_tgt_cqe(struct ublksrv_queue *q,
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
 
-	q->tgt_io_inflight -= 1;
 	if (cqe->res < 0 && cqe->res != -EAGAIN) {
 		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %u tag %u, cmd_op %u\n",
 			__func__, cqe->res, q->q_id,

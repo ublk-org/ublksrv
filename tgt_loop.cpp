@@ -289,8 +289,6 @@ static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
 	/* bit63 marks us as tgt io */
 	sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 
-	q->tgt_io_inflight += 1;
-
 	ublksrv_log(LOG_INFO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"

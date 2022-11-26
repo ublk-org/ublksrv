@@ -214,7 +214,6 @@ static inline int qcow2_queue_tgt_fsync(struct ublksrv_queue *q, unsigned io_op,
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
 			__func__, io_op, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, io_op, 1, sqe->user_data);
-	q->tgt_io_inflight += 1;
 	return 1;
 }
 
@@ -239,7 +238,6 @@ static inline int qcow2_queue_tgt_zero_cluster(const Qcow2State *qs,
 				" (qid %d tag %u, target: %d, user_data %llx)\n",
 			__func__, IORING_OP_FALLOCATE, offset,
 			sqe->len, sqe->addr, q->q_id, tag, 1, sqe->user_data);
-	q->tgt_io_inflight += 1;
 	return 1;
 }
 
@@ -263,7 +261,6 @@ static inline int qcow2_queue_tgt_rw_fast(struct ublksrv_queue *q,
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
 			__func__, io_op, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, io_op, 1, sqe->user_data);
-	q->tgt_io_inflight += 1;
 
 	return 1;
 

@@ -338,7 +338,6 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 		io_uring_prep_fsync(sqe2, fd, IORING_FSYNC_DATASYNC);
 		sqe2->user_data = build_user_data(0xffff, IORING_OP_FSYNC, 0, 1);
 		sqe2->flags |= IOSQE_IO_LINK;
-		q->tgt_io_inflight += 1;
 	}
 
 	mio_id = qs.add_meta_io(qid, this);
@@ -346,7 +345,6 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	io_uring_prep_write(sqe, fd, (void *)((u64)addr + (off - offset)),
 			len, off);
 	sqe->user_data = build_user_data(tag, IORING_OP_WRITE, mio_id + 1, 1);
-	q->tgt_io_inflight += 1;
 	meta_log("%s %s: flushing %p tag %d off %lx sz %d flags %x refcnt %d\n",
 			__func__, typeid(*this).name(), this, tag, off,
 			len, flags, read_ref());
@@ -624,7 +622,6 @@ int Qcow2SliceMeta::zero_my_cluster(Qcow2State &qs,
 			(1ULL << qs.header.cluster_bits));
 	sqe->user_data = build_user_data(tag,
 			IORING_OP_FALLOCATE, mio_id + 1, 1);
-	q->tgt_io_inflight += 1;
 	meta_log("%s %s: zeroing %p tag %d off %lx sz %d flags %x ref %d\n",
 			__func__, typeid(*this).name(), this, tag, cluster_off,
 			(1ULL << qs.header.cluster_bits), flags, refcnt);
@@ -669,7 +666,6 @@ int Qcow2SliceMeta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	sqe->flags = IOSQE_FIXED_FILE;
 	/* meta io id starts from one and zero is reserved for plain ublk io */
 	sqe->user_data = build_user_data(tag, IORING_OP_READ, mio_id + 1, 1);
-	q->tgt_io_inflight += 1;
 
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llx %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d tgt_data %d) iof %x\n",

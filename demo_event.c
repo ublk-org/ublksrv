@@ -34,9 +34,8 @@ static char jbuf[4096];
 static void sig_handler(int sig)
 {
 	struct ublksrv_queue *q = this_dev->__queues[0];
-	fprintf(stderr, "got signal %d, stopping %d, %d %d\n", sig,
-			(q->state & UBLKSRV_QUEUE_STOPPING),
-			q->cmd_inflight, q->tgt_io_inflight);
+	fprintf(stderr, "got signal %d, stopping %d\n", sig,
+			(q->state & UBLKSRV_QUEUE_STOPPING));
 	ublksrv_ctrl_stop_dev(this_ctrl_dev);
 }
 
