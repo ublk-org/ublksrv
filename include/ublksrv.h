@@ -384,6 +384,9 @@ extern int ublksrv_ctrl_get_params(struct ublksrv_ctrl_dev *dev,
 extern int ublksrv_ctrl_start_recovery(struct ublksrv_ctrl_dev *dev);
 extern int ublksrv_ctrl_end_recovery(struct ublksrv_ctrl_dev *dev,
 		int daemon_pid);
+extern const struct ublksrv_ctrl_dev_info *ublksrv_ctrl_get_dev_info(
+		const struct ublksrv_ctrl_dev *dev);
+extern const char *ublksrv_ctrl_get_run_dir(const struct ublksrv_ctrl_dev *dev);
 
 extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);

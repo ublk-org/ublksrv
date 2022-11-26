@@ -352,3 +352,14 @@ int ublksrv_ctrl_end_recovery(struct ublksrv_ctrl_dev *dev, int daemon_pid)
 	ret = __ublksrv_ctrl_cmd(dev, &data);
 	return ret;
 }
+
+const struct ublksrv_ctrl_dev_info *ublksrv_ctrl_get_dev_info(
+		const struct ublksrv_ctrl_dev *dev)
+{
+	return &dev->dev_info;
+}
+
+const char *ublksrv_ctrl_get_run_dir(const struct ublksrv_ctrl_dev *dev)
+{
+	return dev->run_dir;
+}
