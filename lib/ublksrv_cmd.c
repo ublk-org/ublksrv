@@ -363,3 +363,15 @@ const char *ublksrv_ctrl_get_run_dir(const struct ublksrv_ctrl_dev *dev)
 {
 	return dev->run_dir;
 }
+
+void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
+		const char *tgt_type, const char *recovery_jbuf)
+{
+	dev->tgt_type = tgt_type;
+	dev->recovery_jbuf = recovery_jbuf;
+}
+
+const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev)
+{
+	return dev->recovery_jbuf;
+}
