@@ -201,7 +201,7 @@ static void *ublksrv_io_handler_fn(void *data)
 		} while (ret < 0);
 		jbuf = buf;
 	} else {
-		jbuf = dev->ctrl_dev->recovery_jbuf;
+		jbuf = ublksrv_ctrl_get_recovery_jbuf(dev->ctrl_dev);
 	}
 	queues_stored++;
 
@@ -863,8 +863,7 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 		goto fail;
 	}
 
-	dev->tgt_type = tgt_json.name;
-	dev->recovery_jbuf = buf;
+	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, buf);
 
 	ret = ublksrv_start_daemon(dev);
 	if (ret < 0) {

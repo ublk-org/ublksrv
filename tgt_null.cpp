@@ -52,9 +52,9 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 {
+	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(dev->ctrl_dev);
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
-	const char *jbuf = dev->ctrl_dev->recovery_jbuf;
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	int ret;
 	struct ublk_params p;
