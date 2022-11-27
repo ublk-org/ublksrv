@@ -789,9 +789,10 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 		.dev_id = number,
 		.run_dir = UBLKSRV_PID_DIR,
 	};
+	struct ublksrv_ctrl_dev_info  dev_info;
 	struct ublksrv_ctrl_dev *dev;
 	struct ublksrv_tgt_base_json tgt_json = {0};
-	const char *buf;
+	char *buf = NULL;
 	char pid_file[64];
 	int ret;
 
@@ -810,18 +811,25 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 		goto fail;
 	}
 
-	ret = ublksrv_json_read_dev_info(buf, &dev->dev_info);
+	ret = ublksrv_json_read_dev_info(buf, &dev_info);
 	if (ret < 0) {
 		fprintf(stderr, "can't read dev info for %d\n", number);
 		goto fail;
 	}
+
+	if (dev_info.dev_id != number) {
+		fprintf(stderr, "dev id doesn't match read %d for dev %d\n",
+				dev_info.dev_id, number);
+		goto fail;
+	}
+
 	ret = ublksrv_json_read_target_base_info(buf, &tgt_json);
 	if (ret < 0) {
 		fprintf(stderr, "can't read dev info for %d\n", number);
 		goto fail;
 	}
 
-	snprintf(pid_file, 64, "%s/%d.pid", dev->run_dir, dev->dev_info.dev_id);
+	snprintf(pid_file, 64, "%s/%d.pid", data.run_dir, number);
 	ret = unlink(pid_file);
 	if (ret < 0) {
 		fprintf(stderr, "can't delete old pid_file for %d, error:%s\n",
@@ -857,11 +865,13 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 	}
 
 	if (verbose) {
+		free(buf);
 		buf = ublksrv_tgt_get_dev_data(dev);
 		ublksrv_ctrl_dump(dev, buf);
 	}
 
  fail:
+	free(buf);
 	ublksrv_ctrl_deinit(dev);
 	return ret;
 }
