@@ -180,8 +180,9 @@ static void *ublksrv_io_handler_fn(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
 	struct ublksrv_dev *dev = info->dev;
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	const struct ublksrv_ctrl_dev_info *dinfo =
-		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(cdev);
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
@@ -196,12 +197,12 @@ static void *ublksrv_io_handler_fn(void *data)
 	if (!recoverying) {
 		do {
 			buf = __ublksrv_tgt_realloc_json_buf(dev, &buf_size);
-			ret = ublksrv_json_write_queue_info(dev->ctrl_dev, buf, buf_size,
+			ret = ublksrv_json_write_queue_info(cdev, buf, buf_size,
 					q_id, gettid());
 		} while (ret < 0);
 		jbuf = buf;
 	} else {
-		jbuf = ublksrv_ctrl_get_recovery_jbuf(dev->ctrl_dev);
+		jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
 	}
 	queues_stored++;
 
@@ -260,7 +261,7 @@ static void ublksrv_drain_fetch_commands(struct ublksrv_dev *dev,
 		struct ublksrv_queue_info *info)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
-		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	unsigned nr_queues = dinfo->nr_hw_queues;
 	int i;
 	void *ret;

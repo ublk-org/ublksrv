@@ -213,7 +213,7 @@ static void *demo_event_uring_io_handler_fn(void *data)
 {
 	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ctx->dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(ctx->dev));
 	unsigned dev_id = info->dev_id;
 	struct io_uring ring;
 	unsigned qd;
@@ -260,7 +260,7 @@ static void *demo_event_real_io_handler_fn(void *data)
 {
 	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ctx->dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(ctx->dev));
 
 	unsigned dev_id = info->dev_id;
 	struct epoll_event events[EPOLL_NR_EVENTS];
@@ -306,13 +306,13 @@ static void *demo_event_io_handler_fn(void *data)
 	struct demo_queue_info *info = (struct demo_queue_info *)data;
 	struct ublksrv_dev *dev = info->dev;
 	const struct ublksrv_ctrl_dev_info *dinfo =
-		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
 	struct ublksrv_queue *q;
 
 	pthread_mutex_lock(&jbuf_lock);
-	ublksrv_json_write_queue_info(dev->ctrl_dev, jbuf, sizeof jbuf,
+	ublksrv_json_write_queue_info(ublksrv_get_ctrl_dev(dev), jbuf, sizeof jbuf,
 			q_id, gettid());
 	pthread_mutex_unlock(&jbuf_lock);
 
@@ -448,7 +448,7 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,
@@ -482,7 +482,7 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
-	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, sizeof jbuf);
+	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, sizeof jbuf);
 	ublksrv_json_write_target_base_info(jbuf, sizeof jbuf, &tgt_json);
 
 	return 0;

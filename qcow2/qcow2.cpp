@@ -14,7 +14,7 @@ Qcow2Image:: ~Qcow2Image() {
 }
 
 Qcow2State:: Qcow2State(const char *path, const struct ublksrv_dev *d):
-	dev_info(ublksrv_ctrl_get_dev_info(d->ctrl_dev)),
+	dev_info(ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(d))),
 	min_bs_bits(9), dev(d), img(path), header(*this), l1_table(*this),
 	refcount_table(*this), cluster_allocator(*this),
 	cluster_map(*this),

@@ -9,7 +9,7 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
 	struct ublksrv_tgt_base_json tgt_json = {
@@ -38,7 +38,7 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
-	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, jbuf_size);
+	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
 	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
 
 	do {
@@ -52,9 +52,10 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 {
-	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(dev->ctrl_dev);
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(cdev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	int ret;
 	struct ublk_params p;

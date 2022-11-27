@@ -11,7 +11,7 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	static const struct option lo_longopts[] = {
 		{ "file",		1,	NULL, 'f' },
 		{ NULL }
@@ -98,7 +98,7 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	dev->target_data = qs = make_qcow2state(file, dev);
 
 	jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	ublksrv_json_write_dev_info(dev->ctrl_dev, jbuf, jbuf_size);
+	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
 	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
 	do {
 		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
@@ -147,9 +147,10 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 {
-	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(dev->ctrl_dev);
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(dev->ctrl_dev);
+		ublksrv_ctrl_get_dev_info(cdev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	int fd, ret;
 	char file[PATH_MAX];
