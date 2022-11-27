@@ -438,6 +438,9 @@ extern int ublksrv_json_write_params(const struct ublk_params *p,
 extern int ublksrv_json_dump_params(const char *jbuf);
 extern int ublksrv_json_get_length(const char *jbuf);
 
+extern const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
+		const struct ublksrv_dev *dev);
+
 static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 {
 	return q->private_data;

@@ -1000,3 +1000,9 @@ void ublksrv_apply_oom_protection()
 		close(fd);
 	}
 }
+
+const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
+		const struct ublksrv_dev *dev)
+{
+	return dev->ctrl_dev;
+}
