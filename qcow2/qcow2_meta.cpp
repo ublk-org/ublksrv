@@ -635,7 +635,6 @@ int Qcow2SliceMeta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	u32 qid = ioc.get_qid();
 	u32 tag = ioc.get_tag();
 	struct ublksrv_queue *q = ublksrv_get_queue(qs.dev, qid);
-	struct ublk_io *io = &q->ios[tag];
 	struct io_uring_sqe *sqe;
 	int mio_id;
 
@@ -668,9 +667,9 @@ int Qcow2SliceMeta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	sqe->user_data = build_user_data(tag, IORING_OP_READ, mio_id + 1, 1);
 
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llx %x %llx)"
-				" (qid %d tag %u, cmd_op %u target: %d tgt_data %d) iof %x\n",
+				" (qid %d tag %u, cmd_op %u target: %d tgt_data %d)\n",
 			__func__, sqe->opcode, sqe->off, sqe->len, sqe->addr,
-			q->q_id, tag, sqe->opcode, 1, mio_id + 1, io->flags);
+			q->q_id, tag, sqe->opcode, 1, mio_id + 1);
 	meta_log("%s %s: loading %p tag %d off %lx sz %d flags %x ref %d\n",
 			__func__, typeid(*this).name(), this, tag,
 			offset, buf_sz, flags, refcnt);

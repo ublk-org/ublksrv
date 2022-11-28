@@ -112,10 +112,16 @@ struct co_io_job {
 } while (0)
 
 struct ublk_io_tgt {
-	char __reserved[sizeof(struct ublk_io) - sizeof(co_handle_type)];
 	co_handle_type co;
+	struct io_uring_cqe *tgt_io_cqe;
+	int queued_tgt_io;	/* obsolete */
 };
 
-static_assert(sizeof(struct ublk_io_tgt) == sizeof(struct ublk_io), "ublk_io is defined as wrong");
+static inline struct ublk_io_tgt *ublk_get_io_tgt_data(struct ublk_io *io)
+{
+	return (struct ublk_io_tgt *)io->private_data;
+}
+
+//static_assert(sizeof(struct ublk_io_tgt) == sizeof(struct ublk_io), "ublk_io is defined as wrong");
 
 #endif

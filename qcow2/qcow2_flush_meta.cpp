@@ -50,7 +50,7 @@ void MetaFlushingState::add_slice_to_flush(Qcow2SliceMeta *m)
 
 co_io_job MetaFlushingState::__write_slice_co(Qcow2State &qs,
 		struct ublksrv_queue *q, Qcow2SliceMeta *m,
-		struct ublk_io *io, int tag)
+		struct ublk_io_tgt *io, int tag)
 {
 	int ret;
 	qcow2_io_ctx_t ioc(tag, q->q_id);
@@ -135,18 +135,18 @@ void MetaFlushingState::__write_slices(Qcow2State &qs,
 		tag = qs.meta_flushing.alloc_tag(q);
 		if (tag == -1)
 			return;
-		io = (struct ublk_io_tgt *)&q->ios[tag];
 		m = *it;
 		it = v1.erase(it);
 		m->get_ref();
-		io->co = __write_slice_co(qs, q, m, (struct ublk_io *)io, tag);
+		io = ublk_get_io_tgt_data(&q->ios[tag]);
+		io->co = __write_slice_co(qs, q, m, io, tag);
 	}
 }
 
 //todo: run fsync before flushing top table, and global fsync should be
 //fine, given top table seldom becomes dirty
 co_io_job MetaFlushingState::__write_top_co(Qcow2State &qs,
-		struct ublksrv_queue *q, struct ublk_io *io, int tag)
+		struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag)
 {
 	int ret;
 	qcow2_io_ctx_t ioc(tag, q->q_id);
@@ -204,8 +204,8 @@ void MetaFlushingState::__write_top(Qcow2State &qs,
 	if (tag == -1)
 		return;
 
-	io = (struct ublk_io_tgt *)&q->ios[tag];
-	io->co = __write_top_co(qs, q, (struct ublk_io *)io, tag);
+	io = ublk_get_io_tgt_data(&q->ios[tag]);
+	io->co = __write_top_co(qs, q, io, tag);
 }
 
 void MetaFlushingState::__done(Qcow2State &qs, struct ublksrv_queue *q)
@@ -277,7 +277,7 @@ void MetaFlushingState::__prep_write_slice(Qcow2State &qs,
 }
 
 co_io_job MetaFlushingState::__zero_my_cluster_co(Qcow2State &qs,
-		struct ublksrv_queue *q, struct ublk_io *io, int tag,
+		struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag,
 		Qcow2SliceMeta *m)
 
 {
@@ -352,8 +352,8 @@ void MetaFlushingState::__zero_my_cluster(Qcow2State &qs,
 		return;
 
 	m->get_ref();
-	io = (struct ublk_io_tgt *)&q->ios[tag];
-	io->co = __zero_my_cluster_co(qs, q, (struct ublk_io *)io, tag, m);
+	io = ublk_get_io_tgt_data(&q->ios[tag]);
+	io->co = __zero_my_cluster_co(qs, q, io, tag, m);
 }
 
 void MetaFlushingState::run_flush(Qcow2State &qs,

@@ -513,17 +513,17 @@ private:
 
 	void __zero_my_cluster(Qcow2State &qs, struct ublksrv_queue *q);
 	co_io_job __zero_my_cluster_co(Qcow2State &qs,
-		struct ublksrv_queue *q, struct ublk_io *io, int tag,
+		struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag,
 		Qcow2SliceMeta *m);
 
 	void __write_slices(Qcow2State &qs, struct ublksrv_queue *q);
 	co_io_job __write_slice_co(Qcow2State &qs,
 		struct ublksrv_queue *q, Qcow2SliceMeta *m,
-		struct ublk_io *io, int tag);
+		struct ublk_io_tgt *io, int tag);
 
 	void __write_top(Qcow2State &qs, struct ublksrv_queue *q);
 	co_io_job  __write_top_co(Qcow2State &qs, struct ublksrv_queue *q,
-			struct ublk_io *io, int tag);
+			struct ublk_io_tgt *io, int tag);
 
 	void __done(Qcow2State &qs, struct ublksrv_queue *q);
 	bool __need_flush(int queued);

@@ -335,7 +335,7 @@ static inline bool l2_entry_read_as_zero(u64 entry)
 }
 
 static co_io_job __qcow2_handle_io_async(struct ublksrv_queue *q,
-		struct ublk_io *io, int tag)
+		struct ublk_io_tgt *io, int tag)
 {
 	Qcow2State *qs = dev_to_qcow2state(q->dev);
 	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
@@ -462,9 +462,9 @@ exit:
 
 static int qcow2_handle_io_async(struct ublksrv_queue *q, int tag)
 {
-	struct ublk_io_tgt *io = (struct ublk_io_tgt *)&q->ios[tag];
+	struct ublk_io_tgt *io = ublk_get_io_tgt_data(&q->ios[tag]);
 
-	io->co = __qcow2_handle_io_async(q, (struct ublk_io *)io, tag);
+	io->co = __qcow2_handle_io_async(q, io, tag);
 	return 0;
 }
 
@@ -483,7 +483,6 @@ static void qcow2_deinit_tgt(struct ublksrv_dev *dev)
 static void qcow2_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
-	struct ublk_io *io = &q->ios[tag];
 
 	qcow2_io_log("%s: res %d qid %u tag %u, cmd_op %u\n",
 			__func__, cqe->res, q->q_id,
@@ -492,8 +491,9 @@ static void qcow2_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 	//special tag is ignored, so far it is used in sending
 	//fsync during flushing meta
 	if (tag != 0xffff) {
+		struct ublk_io_tgt *io = ublk_get_io_tgt_data(&q->ios[tag]);
 		io->tgt_io_cqe = cqe;
-		((struct ublk_io_tgt *)io)->co.resume();
+		io->co.resume();
 	}
 }
 

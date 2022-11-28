@@ -249,8 +249,8 @@ static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
        return mode;
 }
 
-static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
-		int tag)
+static int loop_queue_tgt_io(struct ublksrv_queue *q,
+		struct ublk_io_tgt *io, int tag)
 {
 	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
 	struct io_uring_sqe *sqe = io_uring_get_sqe(&q->ring);
@@ -295,15 +295,15 @@ static int loop_queue_tgt_io(struct ublksrv_queue *q, struct ublk_io *io,
 	ublksrv_log(LOG_INFO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
-				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx) iof %x\n",
+				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
 			__func__, ublk_op, sqe->off, sqe->len, sqe->addr,
-			q->q_id, tag, ublk_op, 1, sqe->user_data, io->flags);
+			q->q_id, tag, ublk_op, 1, sqe->user_data);
 
 	return 1;
 }
 
 static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
-		struct ublk_io *io, int tag)
+		struct ublk_io_tgt *io, int tag)
 {
 	struct io_uring_cqe *cqe;
 	int ret;
@@ -334,16 +334,16 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 
 static int loop_handle_io_async(struct ublksrv_queue *q, int tag)
 {
-	struct ublk_io_tgt *io = (struct ublk_io_tgt *)&q->ios[tag];
+	struct ublk_io_tgt *io = ublk_get_io_tgt_data(&q->ios[tag]);
 
-	io->co = __loop_handle_io_async(q, (struct ublk_io *)io, tag);
+	io->co = __loop_handle_io_async(q, io, tag);
 	return 0;
 }
 
 static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 {
 	int tag = user_data_to_tag(cqe->user_data);
-	struct ublk_io *io = &q->ios[tag];
+	struct ublk_io_tgt *io = ublk_get_io_tgt_data(&q->ios[tag]);
 
 	if (!io->queued_tgt_io)
 		syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",

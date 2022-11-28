@@ -133,15 +133,11 @@ struct ublk_io {
 #define UBLKSRV_NEED_GET_DATA		(1UL << 3)
 	unsigned int flags;
 
-	union {
-		/* result is updated after all target ios are done */
-		unsigned int result;
+	/* result is updated after all target ios are done */
+	unsigned int result;
 
-		/* current completed target io cqe */
-		int queued_tgt_io;
-	};
-	struct io_uring_cqe *tgt_io_cqe;
-	unsigned long io_data;
+	/* todo: inline private data */
+	void *private_data;
 };
 
 struct ublksrv_queue {
@@ -193,6 +189,11 @@ struct ublksrv_queue {
 	struct ublk_io ios[0];
 };
 
+static inline void *ublk_io_private_data(const struct ublksrv_queue *q, int tag)
+{
+	return q->ios[tag].private_data;
+}
+
 #define  UBLKSRV_TGT_MAX_FDS	32
 enum {
 	/* evaluate communication cost, ublksrv_null vs /dev/nullb0 */
@@ -221,7 +222,7 @@ struct ublksrv_tgt_info {
 	 * ublk_io instances can be assigned for these extra IOs.
 	 */
 	unsigned int extra_ios;
-	unsigned int pad;
+	unsigned int io_data_size;
 	const struct ublksrv_tgt_type *ops;
 
 	/*

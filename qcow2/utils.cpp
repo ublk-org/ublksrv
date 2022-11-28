@@ -44,7 +44,8 @@ void IOWaiters::__mapping_meta_wakeup_all(struct ublksrv_queue *q,
 		ublksrv_log(LOG_INFO, "%s: %d my tag %d tag %d idx %x\n",
 				__func__, __LINE__, my_tag, tag, idx);
 		if (all || idx == entry_idx) {
-			struct ublk_io *__io = (struct ublk_io *)&q->ios[tag];
+			struct ublk_io_tgt *__io =
+				ublk_get_io_tgt_data(&q->ios[tag]);
 
 			it = tags.erase(it);
 			__io->tgt_io_cqe = NULL;

@@ -428,6 +428,7 @@ static int ublksrv_queue_cmd_buf_sz(struct ublksrv_queue *q)
 void ublksrv_queue_deinit(struct ublksrv_queue *q)
 {
 	int i;
+	int nr_ios = q->dev->tgt.extra_ios + q->q_depth;
 
 	if (q->efd > 0)
 		close(q->efd);
@@ -443,7 +444,7 @@ void ublksrv_queue_deinit(struct ublksrv_queue *q)
 		munmap(q->io_cmd_buf, ublksrv_queue_cmd_buf_sz(q));
 		q->io_cmd_buf = NULL;
 	}
-	for (i = 0; i < q->q_depth; i++) {
+	for (i = 0; i < nr_ios; i++) {
 		if (q->ios[i].buf_addr) {
 			if (q->dev->tgt.ops->free_io_buf)
 				q->dev->tgt.ops->free_io_buf(q,
@@ -452,6 +453,7 @@ void ublksrv_queue_deinit(struct ublksrv_queue *q)
 				free(q->ios[i].buf_addr);
 			q->ios[i].buf_addr = NULL;
 		}
+		free(q->ios[i].private_data);
 	}
 	q->dev->__queues[q->q_id] = NULL;
 	free(q);
@@ -563,6 +565,8 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	unsigned long off;
 	int ring_depth = depth + dev->tgt.tgt_ring_depth;
 	unsigned nr_ios = depth + dev->tgt.extra_ios;
+	int io_data_size = round_up(dev->tgt.io_data_size,
+			sizeof(unsigned long));
 
 	/*
 	 * Too many extra ios
@@ -596,7 +600,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	}
 
 	io_buf_size = ctrl_dev->dev_info.max_io_buf_bytes;
-	for (i = 0; i < depth; i++) {
+	for (i = 0; i < nr_ios; i++) {
 		q->ios[i].buf_addr = NULL;
 		if (dev->tgt.ops->alloc_io_buf)
 			q->ios[i].buf_addr = dev->tgt.ops->alloc_io_buf(q,
@@ -615,6 +619,9 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 			goto fail;
 		}
 		q->ios[i].flags = UBLKSRV_NEED_FETCH_RQ | UBLKSRV_IO_FREE;
+		q->ios[i].private_data = malloc(io_data_size);
+
+		ublk_assert(io_data_size ^ (unsigned long)q->ios[i].private_data);
 	}
 
 	ret = ublksrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128 |
