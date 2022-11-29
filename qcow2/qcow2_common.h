@@ -2,7 +2,6 @@
 #ifndef UBLK_QCOW2_COMMON_H_
 #define UBLK_QCOW2_COMMON_H_
 
-#include "ublksrv_priv.h"
 #include "ublksrv_tgt.h"
 
 #define qcow2_assert(x)  ublk_assert(x)

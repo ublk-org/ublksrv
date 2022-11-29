@@ -8,8 +8,7 @@
 #include <iostream>
 #include <type_traits>
 
-//we are free to use the private definition
-#include "ublksrv_priv.h"
+#include "ublksrv.h"
 
 #define ublk_assert(x)  do { \
 	if (!(x)) {	\

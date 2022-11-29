@@ -87,42 +87,6 @@ static inline void ublksrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op
 	addr[1] = 0;
 }
 
-static inline void ublksrv_log(int priority, const char *fmt, ...)
-	__attribute__ ((format (printf, 2, 3)));
-static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
-	__attribute__ ((format (printf, 2, 3)));
-
-#ifdef DEBUG
-static inline void ublksrv_log(int priority, const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vsyslog(priority, fmt, ap);
-}
-
-static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stream, fmt, ap);
-}
-#else
-static inline void ublksrv_log(int priority, const char *fmt, ...) { }
-static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
-#endif
-
-#define round_up(val, rnd) \
-	(((val) + ((rnd) - 1)) & ~((rnd) - 1))
-
-#ifndef offsetof
-#define offsetof(TYPE, MEMBER)  ((size_t)&((TYPE *)0)->MEMBER)
-#endif
-#define container_of(ptr, type, member) ({                              \
-	unsigned long __mptr = (unsigned long)(ptr);                    \
-	((type *)(__mptr - offsetof(type, member))); })
-
 #ifdef __cplusplus
 }
 #endif
