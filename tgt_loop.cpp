@@ -357,7 +357,7 @@ static void loop_tgt_io_done(const struct ublksrv_queue *q,
 	io->co.resume();
 }
 
-static void loop_deinit_tgt(struct ublksrv_dev *dev)
+static void loop_deinit_tgt(const struct ublksrv_dev *dev)
 {
 	fsync(dev->tgt.fds[1]);
 	close(dev->tgt.fds[1]);

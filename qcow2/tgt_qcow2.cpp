@@ -469,7 +469,7 @@ static int qcow2_handle_io_async(const struct ublksrv_queue *q,
 	return 0;
 }
 
-static void qcow2_deinit_tgt(struct ublksrv_dev *dev)
+static void qcow2_deinit_tgt(const struct ublksrv_dev *dev)
 {
 	Qcow2State *qs = dev_to_qcow2state(dev);
 

@@ -318,7 +318,7 @@ struct ublksrv_tgt_type {
 			char *argv[]);
 
 	/* deinitialize this target */
-	void (*deinit_tgt)(struct ublksrv_dev *);
+	void (*deinit_tgt)(const struct ublksrv_dev *);
 
 	void *(*alloc_io_buf)(const struct ublksrv_queue *q, int tag, int size);
 	void (*free_io_buf)(const struct ublksrv_queue *q, void *buf, int tag);
