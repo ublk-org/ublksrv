@@ -451,6 +451,8 @@ static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 	return q->private_data;
 }
 
+extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
+
 extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data);
 extern void ublksrv_queue_deinit(struct ublksrv_queue *q);

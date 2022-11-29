@@ -1031,3 +1031,8 @@ void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag)
 {
 	return q->ios[tag].data.private_data;
 }
+
+unsigned int ublksrv_queue_state(const struct ublksrv_queue *q)
+{
+	return q->state;
+}
