@@ -321,7 +321,7 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 		return -EINVAL;
 	}
 
-	sqe = io_uring_get_sqe(&q->ring);
+	sqe = io_uring_get_sqe(q->ring_ptr);
 	if (!sqe) {
 		syslog(LOG_ERR, "%s %s: not get sqe allocated",
 				__func__, typeid(*this).name());
@@ -329,7 +329,7 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	}
 
 	if (run_fsync) {
-		sqe2 = io_uring_get_sqe(&q->ring);
+		sqe2 = io_uring_get_sqe(q->ring_ptr);
 		if (!sqe2) {
 			syslog(LOG_ERR, "%s %s: not get sqe2 allocated",
 				__func__, typeid(*this).name());
@@ -607,7 +607,7 @@ int Qcow2SliceMeta::zero_my_cluster(Qcow2State &qs,
 		throw MetaUpdateException();
 	}
 
-	sqe = io_uring_get_sqe(&q->ring);
+	sqe = io_uring_get_sqe(q->ring_ptr);
 	if (!sqe) {
 		qcow2_log("%s: tag %d offset %llx op %d, no sqe for zeroing\n",
 			__func__, tag, offset, IORING_OP_FALLOCATE);
@@ -650,7 +650,7 @@ int Qcow2SliceMeta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 		return -EINVAL;
 	}
 
-	sqe = io_uring_get_sqe(&q->ring);
+	sqe = io_uring_get_sqe(q->ring_ptr);
 	if (!sqe) {
 		syslog(LOG_ERR, "%s %s: not get sqe allocated",
 				__func__, typeid(*this).name());

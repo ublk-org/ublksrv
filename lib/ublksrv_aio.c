@@ -56,7 +56,7 @@ again:
 }
 
 static void move_to_queue_complete_list(struct ublksrv_aio_ctx *ctx,
-		struct ublksrv_queue *q, struct aio_list *list)
+		struct _ublksrv_queue *q, struct aio_list *list)
 {
 	struct ublksrv_aio_list *compl;
 
@@ -74,16 +74,18 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 {
 	struct aio_list this, others;
 	struct ublksrv_aio *req = NULL;
-	struct ublksrv_queue *this_q = NULL;
+	struct _ublksrv_queue *this_q = NULL;
 
 	if (aio_list_empty(completed))
 		return;
 
 	if (ctx->flags & UBLKSRV_AIO_QUEUE_WIDE) {
-		this_q = ublksrv_get_queue(ctx->dev,
+		struct ublksrv_queue *tq = ublksrv_get_queue(ctx->dev,
 				ublksrv_aio_qid(completed->head->id));
+
+		this_q = tq_to_local(tq);
 		move_to_queue_complete_list(ctx, this_q, completed);
-		ublksrv_queue_send_event(this_q);
+		ublksrv_queue_send_event(tq);
 		return;
 	}
 
@@ -92,22 +94,22 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 
 	while (!aio_list_empty(completed)) {
 		struct ublksrv_aio_list *compl;
-
-		this_q = ublksrv_get_queue(ctx->dev,
+		struct ublksrv_queue *tq = ublksrv_get_queue(ctx->dev,
 				ublksrv_aio_qid(completed->head->id));
 
+		this_q = tq_to_local(tq);
 		while (req = aio_list_pop(completed)) {
 			struct ublksrv_queue *q = ublksrv_get_queue(ctx->dev,
 					ublksrv_aio_qid(req->id));
 
-			if (q == this_q)
+			if (q == local_to_tq(this_q))
 				aio_list_add(&this, req);
 			else
 				aio_list_add(&others, req);
 		}
 
 		move_to_queue_complete_list(ctx, this_q, &this);
-		ublksrv_queue_send_event(this_q);
+		ublksrv_queue_send_event(tq);
 		aio_list_splice(&others, completed);
 	}
 }
@@ -173,7 +175,7 @@ void ublksrv_aio_free_req(struct ublksrv_aio_ctx *ctx, struct ublksrv_aio *req)
 	free(req);
 }
 
-static bool ublksrv_aio_add_ctx_for_submit(struct ublksrv_queue *q,
+static bool ublksrv_aio_add_ctx_for_submit(struct _ublksrv_queue *q,
 		struct ublksrv_aio_ctx *ctx)
 {
 	int i = 0;
@@ -192,7 +194,7 @@ static bool ublksrv_aio_add_ctx_for_submit(struct ublksrv_queue *q,
 }
 
 void ublksrv_aio_submit_req(struct ublksrv_aio_ctx *ctx,
-		struct ublksrv_queue *q, struct ublksrv_aio *req)
+		struct ublksrv_queue *tq, struct ublksrv_aio *req)
 {
 	unsigned long long data = 1;
 
@@ -200,7 +202,7 @@ void ublksrv_aio_submit_req(struct ublksrv_aio_ctx *ctx,
 	aio_list_add(&ctx->submit.list, req);
 	pthread_spin_unlock(&ctx->submit.lock);
 
-	if (!ublksrv_aio_add_ctx_for_submit(q, ctx))
+	if (!ublksrv_aio_add_ctx_for_submit(tq_to_local(tq), ctx))
 		write(ctx->efd, &data, 8);
 }
 

@@ -6,7 +6,7 @@
 #include "ublksrv_aio.h"
 
 static inline struct ublksrv_io_desc *ublksrv_get_iod(
-		const struct ublksrv_queue *q, int tag)
+		const struct _ublksrv_queue *q, int tag)
 {
         return (struct ublksrv_io_desc *)
                 &(q->io_cmd_buf[tag * sizeof(struct ublksrv_io_desc)]);
@@ -183,7 +183,7 @@ void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
 	}
 }
 
-static inline int ublksrv_queue_io_cmd(struct ublksrv_queue *q,
+static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 		struct ublk_io *io, unsigned tag)
 {
 	struct ublksrv_io_cmd *cmd;
@@ -243,8 +243,10 @@ static inline int ublksrv_queue_io_cmd(struct ublksrv_queue *q,
 	return 1;
 }
 
-int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res)
+int ublksrv_complete_io(struct ublksrv_queue *tq, unsigned tag, int res)
 {
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
 	struct ublk_io *io = &q->ios[tag];
 
 	ublksrv_mark_io_done(io, res);
@@ -256,7 +258,7 @@ int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res)
  * eventfd is treated as special target IO which has to be queued
  * when queue is setup
  */
-static inline int __ublksrv_queue_event(struct ublksrv_queue *q)
+static inline int __ublksrv_queue_event(struct _ublksrv_queue *q)
 {
 	if (q->efd > 0) {
 		struct io_uring_sqe *sqe;
@@ -282,8 +284,10 @@ static inline int __ublksrv_queue_event(struct ublksrv_queue *q)
  * This API is supposed to be called in ->handle_event() after current
  * events are handled.
  */
-int ublksrv_queue_handled_event(struct ublksrv_queue *q)
+int ublksrv_queue_handled_event(struct ublksrv_queue *tq)
 {
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
 	if (q->efd > 0) {
 		unsigned long long data;
 		const int cnt = sizeof(uint64_t);
@@ -309,8 +313,10 @@ int ublksrv_queue_handled_event(struct ublksrv_queue *q)
  *
  * This API is usually called from other context.
  */
-int ublksrv_queue_send_event(struct ublksrv_queue *q)
+int ublksrv_queue_send_event(struct ublksrv_queue *tq)
 {
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
 	if (q->efd > 0) {
 		unsigned long long data = 1;
 		const int cnt = sizeof(uint64_t);
@@ -330,7 +336,7 @@ int ublksrv_queue_send_event(struct ublksrv_queue *q)
  *
  * todo: queue io commands with batching
  */
-static void ublksrv_submit_fetch_commands(struct ublksrv_queue *q)
+static void ublksrv_submit_fetch_commands(struct _ublksrv_queue *q)
 {
 	int i = 0;
 
@@ -340,7 +346,7 @@ static void ublksrv_submit_fetch_commands(struct ublksrv_queue *q)
 	__ublksrv_queue_event(q);
 }
 
-static int ublksrv_queue_is_done(struct ublksrv_queue *q)
+static int ublksrv_queue_is_done(struct _ublksrv_queue *q)
 {
 	return (q->state & UBLKSRV_QUEUE_STOPPING) &&
 		!io_uring_sq_ready(&q->ring);
@@ -399,7 +405,8 @@ static int ublksrv_dev_init_io_bufs(struct ublksrv_dev *dev)
 	dev->io_buf_start = (char *)addr;
 
 	for (i = 0; i < nr_queues; i++) {
-		struct ublksrv_queue *q = ublksrv_get_queue(dev, i);
+		struct _ublksrv_queue *q = (struct _ublksrv_queue *)
+			ublksrv_get_queue(dev, i);
 
 		q->io_buf = dev->io_buf_start + i * ublk_queue_io_buf_size(dev);
 	}
@@ -407,7 +414,7 @@ static int ublksrv_dev_init_io_bufs(struct ublksrv_dev *dev)
 	return 0;
 }
 
-static void ublksrv_dev_init_io_cmds(struct ublksrv_dev *dev, struct ublksrv_queue *q)
+static void ublksrv_dev_init_io_cmds(struct ublksrv_dev *dev, struct _ublksrv_queue *q)
 {
 	struct io_uring *r = &q->ring;
 	struct io_uring_sqe *sqe;
@@ -424,7 +431,7 @@ static void ublksrv_dev_init_io_cmds(struct ublksrv_dev *dev, struct ublksrv_que
 	}
 }
 
-static int ublksrv_queue_cmd_buf_sz(struct ublksrv_queue *q)
+static int ublksrv_queue_cmd_buf_sz(struct _ublksrv_queue *q)
 {
 	int size =  q->q_depth * sizeof(struct ublksrv_io_desc);
 	unsigned int page_sz = getpagesize();
@@ -432,8 +439,9 @@ static int ublksrv_queue_cmd_buf_sz(struct ublksrv_queue *q)
 	return round_up(size, page_sz);
 }
 
-void ublksrv_queue_deinit(struct ublksrv_queue *q)
+void ublksrv_queue_deinit(struct ublksrv_queue *tq)
 {
+	struct _ublksrv_queue *q = tq_to_local(tq);
 	int i;
 	int nr_ios = q->dev->tgt.extra_ios + q->q_depth;
 
@@ -454,7 +462,7 @@ void ublksrv_queue_deinit(struct ublksrv_queue *q)
 	for (i = 0; i < nr_ios; i++) {
 		if (q->ios[i].buf_addr) {
 			if (q->dev->tgt.ops->free_io_buf)
-				q->dev->tgt.ops->free_io_buf(q,
+				q->dev->tgt.ops->free_io_buf(tq,
 						q->ios[i].buf_addr, i);
 			else
 				free(q->ios[i].buf_addr);
@@ -499,7 +507,7 @@ static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
 				dev_id, q_id);
 }
 
-static void ublksrv_kill_eventfd(struct ublksrv_queue *q)
+static void ublksrv_kill_eventfd(struct _ublksrv_queue *q)
 {
 	if ((q->state & UBLKSRV_QUEUE_STOPPING) && q->efd > 0) {
 		unsigned long long data = 1;
@@ -508,7 +516,7 @@ static void ublksrv_kill_eventfd(struct ublksrv_queue *q)
 	}
 }
 
-static int ublksrv_setup_eventfd(struct ublksrv_queue *q)
+static int ublksrv_setup_eventfd(struct _ublksrv_queue *q)
 {
 	const struct ublksrv_ctrl_dev_info *info = &q->dev->ctrl_dev->dev_info;
 
@@ -535,7 +543,7 @@ static int ublksrv_setup_eventfd(struct ublksrv_queue *q)
 	return 0;
 }
 
-static void ublksrv_queue_adjust_uring_io_wq_workers(struct ublksrv_queue *q)
+static void ublksrv_queue_adjust_uring_io_wq_workers(struct _ublksrv_queue *q)
 {
 	struct ublksrv_dev *dev = q->dev;
 	unsigned int val[2] = {0, 0};
@@ -564,7 +572,7 @@ static void ublksrv_queue_adjust_uring_io_wq_workers(struct ublksrv_queue *q)
 struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data)
 {
-	struct ublksrv_queue *q;
+	struct _ublksrv_queue *q;
 	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	int depth = ctrl_dev->dev_info.queue_depth;
 	int i, ret = -1;
@@ -581,7 +589,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	if (nr_ios > depth * 3)
 		return NULL;
 
-	q = (struct ublksrv_queue *)malloc(sizeof(struct ublksrv_queue) +
+	q = (struct _ublksrv_queue *)malloc(sizeof(struct _ublksrv_queue) +
 			sizeof(struct ublk_io) * nr_ios);
 	dev->__queues[q_id] = q;
 
@@ -610,7 +618,8 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	for (i = 0; i < nr_ios; i++) {
 		q->ios[i].buf_addr = NULL;
 		if (dev->tgt.ops->alloc_io_buf)
-			q->ios[i].buf_addr = dev->tgt.ops->alloc_io_buf(q,
+			q->ios[i].buf_addr =
+				dev->tgt.ops->alloc_io_buf(local_to_tq(q),
 					i, io_buf_size);
 		else
 			if (posix_memalign((void **)&q->ios[i].buf_addr,
@@ -644,6 +653,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		goto fail;
 	}
 
+	q->ring_ptr = &q->ring;
 	io_uring_register_ring_fd(&q->ring);
 
 	ret = io_uring_register_files(&q->ring, dev->tgt.fds,
@@ -684,9 +694,9 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	/* submit all io commands to ublk driver */
 	ublksrv_submit_fetch_commands(q);
 
-	return q;
+	return (struct ublksrv_queue *)q;
  fail:
-	ublksrv_queue_deinit(q);
+	ublksrv_queue_deinit(local_to_tq(q));
 	syslog(LOG_INFO, "ublk dev %d queue %d failed",
 			ctrl_dev->dev_info.dev_id, q_id);
 	return NULL;
@@ -805,7 +815,7 @@ fail:
 }
 
 /* Be careful, target io may not have one ublk_io associated with  */
-static inline void ublksrv_handle_tgt_cqe(struct ublksrv_queue *q,
+static inline void ublksrv_handle_tgt_cqe(struct _ublksrv_queue *q,
 		struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
@@ -819,17 +829,18 @@ static inline void ublksrv_handle_tgt_cqe(struct ublksrv_queue *q,
 
 	if (is_eventfd_io(cqe->user_data)) {
 		if (q->tgt_ops->handle_event)
-			q->tgt_ops->handle_event(q);
+			q->tgt_ops->handle_event(local_to_tq(q));
 	} else {
 		if (q->tgt_ops->tgt_io_done)
-			q->tgt_ops->tgt_io_done(q, &q->ios[tag].data, cqe);
+			q->tgt_ops->tgt_io_done(local_to_tq(q),
+					&q->ios[tag].data, cqe);
 	}
 }
 
 static void ublksrv_handle_cqe(struct io_uring *r,
 		struct io_uring_cqe *cqe, void *data)
 {
-	struct ublksrv_queue *q = container_of(r, struct ublksrv_queue, ring);
+	struct _ublksrv_queue *q = container_of(r, struct _ublksrv_queue, ring);
 	unsigned tag = user_data_to_tag(cqe->user_data);
 	unsigned cmd_op = user_data_to_op(cqe->user_data);
 	int fetch = (cqe->res != UBLK_IO_RES_ABORT) &&
@@ -864,7 +875,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	 */
 	if (cqe->res == UBLK_IO_RES_OK) {
 		ublk_assert(tag < q->q_depth);
-		q->tgt_ops->handle_io_async(q, &io->data);
+		q->tgt_ops->handle_io_async(local_to_tq(q), &io->data);
 	} else if (cqe->res == UBLK_IO_RES_NEED_GET_DATA) {
 		io->flags |= UBLKSRV_NEED_GET_DATA | UBLKSRV_IO_FREE;
 		ublksrv_queue_io_cmd(q, io, tag);
@@ -896,7 +907,7 @@ static int ublksrv_reap_events_uring(struct io_uring *r)
 	return count;
 }
 
-static void ublksrv_queue_discard_io_pages(struct ublksrv_queue *q)
+static void ublksrv_queue_discard_io_pages(struct _ublksrv_queue *q)
 {
 	const struct ublksrv_ctrl_dev *cdev = q->dev->ctrl_dev;
 	unsigned int io_buf_size = cdev->dev_info.max_io_buf_bytes;
@@ -906,7 +917,7 @@ static void ublksrv_queue_discard_io_pages(struct ublksrv_queue *q)
 		madvise(q->ios[i].buf_addr, io_buf_size, MADV_DONTNEED);
 }
 
-static void ublksrv_queue_idle_enter(struct ublksrv_queue *q)
+static void ublksrv_queue_idle_enter(struct _ublksrv_queue *q)
 {
 	if (q->state & UBLKSRV_QUEUE_IDLE)
 		return;
@@ -917,26 +928,26 @@ static void ublksrv_queue_idle_enter(struct ublksrv_queue *q)
 	q->state |= UBLKSRV_QUEUE_IDLE;
 
 	if (q->tgt_ops->idle_fn)
-		q->tgt_ops->idle_fn(q, true);
+		q->tgt_ops->idle_fn(local_to_tq(q), true);
 }
 
-static inline void ublksrv_queue_idle_exit(struct ublksrv_queue *q)
+static inline void ublksrv_queue_idle_exit(struct _ublksrv_queue *q)
 {
 	if (q->state & UBLKSRV_QUEUE_IDLE) {
 		ublksrv_log(LOG_INFO, "dev%d-q%d: exit idle %x\n",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id, q->state);
 		q->state &= ~UBLKSRV_QUEUE_IDLE;
 		if (q->tgt_ops->idle_fn)
-			q->tgt_ops->idle_fn(q, false);
+			q->tgt_ops->idle_fn(local_to_tq(q), false);
 	}
 }
 
-static void ublksrv_reset_aio_batch(struct ublksrv_queue *q)
+static void ublksrv_reset_aio_batch(struct _ublksrv_queue *q)
 {
 	q->nr_ctxs = 0;
 }
 
-static void ublksrv_submit_aio_batch(struct ublksrv_queue *q)
+static void ublksrv_submit_aio_batch(struct _ublksrv_queue *q)
 {
 	int i;
 
@@ -948,8 +959,9 @@ static void ublksrv_submit_aio_batch(struct ublksrv_queue *q)
 	}
 }
 
-int ublksrv_process_io(struct ublksrv_queue *q)
+int ublksrv_process_io(struct ublksrv_queue *tq)
 {
+	struct _ublksrv_queue *q = tq_to_local(tq);
 	int ret, reapped;
 	struct __kernel_timespec ts = {
 		.tv_sec = UBLKSRV_IO_IDLE_SECS,
@@ -975,7 +987,7 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 	ublksrv_submit_aio_batch(q);
 
 	if (q->tgt_ops->handle_io_background)
-		q->tgt_ops->handle_io_background(q,
+		q->tgt_ops->handle_io_background(local_to_tq(q),
 				io_uring_sq_ready(&q->ring));
 
 	ublksrv_log(LOG_INFO, "submit result %d, reapped %d stop %d idle %d",
@@ -998,7 +1010,7 @@ int ublksrv_process_io(struct ublksrv_queue *q)
 struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id)
 {
-	return dev->__queues[q_id];
+	return (struct ublksrv_queue *)dev->__queues[q_id];
 }
 
 /* called in ublksrv process context */
@@ -1027,12 +1039,14 @@ const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 	return dev->ctrl_dev;
 }
 
-void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag)
+void *ublksrv_io_private_data(const struct ublksrv_queue *tq, int tag)
 {
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
 	return q->ios[tag].data.private_data;
 }
 
 unsigned int ublksrv_queue_state(const struct ublksrv_queue *q)
 {
-	return q->state;
+	return tq_to_local(q)->state;
 }

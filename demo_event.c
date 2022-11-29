@@ -157,11 +157,6 @@ static int io_submit_worker(struct ublksrv_aio_ctx *ctx,
 	return 1;
 }
 
-static inline int is_eventfd_io(__u64 user_data)
-{
-        return user_data == 0;
-}
-
 static int queue_event(struct ublksrv_aio_ctx *ctx)
 {
 	struct io_uring *ring = (struct io_uring *)ctx->ctx_data;
@@ -326,7 +321,7 @@ static void *demo_event_io_handler_fn(void *data)
 	}
 	info->q = q;
 
-	fprintf(stdout, "tid %d: ublk dev %d queue %d started\n", q->tid,
+	fprintf(stdout, "tid %d: ublk dev %d queue %d started\n", gettid(),
 			dev_id, q->q_id);
 	do {
 		if (ublksrv_process_io(q) < 0)

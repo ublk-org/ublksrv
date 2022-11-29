@@ -202,7 +202,7 @@ static inline int qcow2_queue_tgt_fsync(struct ublksrv_queue *q, unsigned io_op,
 		int tag, u32 len, u64 offset)
 {
 	int fd = q->dev->tgt.fds[1];
-	struct io_uring_sqe *sqe = io_uring_get_sqe(&q->ring);
+	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 
 	if (!sqe) {
 		qcow2_log("%s: tag %d offset %llx op %d, no sqe\n",
@@ -225,7 +225,7 @@ static inline int qcow2_queue_tgt_zero_cluster(const Qcow2State *qs,
 {
 	int mode = FALLOC_FL_ZERO_RANGE;
 	int fd = q->dev->tgt.fds[1];
-	struct io_uring_sqe *sqe = io_uring_get_sqe(&q->ring);
+	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 
 	if (!sqe) {
 		qcow2_log("%s: tag %d offset %llx op %d, no sqe for zeroing\n",
@@ -248,7 +248,7 @@ static inline int qcow2_queue_tgt_rw_fast(struct ublksrv_queue *q,
 		unsigned io_op, int tag, u64 offset,
 		const struct ublksrv_io_desc *iod)
 {
-	struct io_uring_sqe *sqe = io_uring_get_sqe(&q->ring);
+	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 
 	if (!sqe) {
 		qcow2_log("%s: tag %d offset %llx op %d, no sqe for rw\n",

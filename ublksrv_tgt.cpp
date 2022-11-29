@@ -221,7 +221,7 @@ static void *ublksrv_io_handler_fn(void *data)
 		return NULL;
 	}
 
-	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", q->tid,
+	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", gettid(),
 			dev_id, q->q_id);
 	do {
 		if (ublksrv_process_io(q) < 0)

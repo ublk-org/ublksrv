@@ -56,7 +56,7 @@ static void *demo_null_io_handler_fn(void *data)
 		return NULL;
 	}
 
-	fprintf(stdout, "tid %d: ublk dev %d queue %d started\n", q->tid,
+	fprintf(stdout, "tid %d: ublk dev %d queue %d started\n", gettid(),
 			dev_id, q->q_id);
 	do {
 		if (ublksrv_process_io(q) < 0)

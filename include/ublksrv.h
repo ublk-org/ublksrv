@@ -145,10 +145,12 @@ struct ublk_io {
 	struct ublk_io_data  data;
 };
 
-struct ublksrv_queue {
+struct _ublksrv_queue {
 	int q_id;
 	int q_depth;
 
+	struct io_uring *ring_ptr;
+	struct ublksrv_dev *dev;
 	void *private_data;
 
 	/*
@@ -182,7 +184,6 @@ struct ublksrv_queue {
 	 */
 	struct io_uring ring;
 
-	struct ublksrv_dev *dev;
 	unsigned  tid;
 
 #define UBLKSRV_NR_CTX_BATCH 4
@@ -194,10 +195,14 @@ struct ublksrv_queue {
 	struct ublk_io ios[0];
 };
 
-static inline void *ublk_io_private_data(const struct ublksrv_queue *q, int tag)
-{
-	return q->ios[tag].data.private_data;
-}
+struct ublksrv_queue {
+	int q_id;
+	int q_depth;
+
+	struct io_uring *ring_ptr;
+	struct ublksrv_dev *dev;
+	void *private_data;
+};
 
 #define  UBLKSRV_TGT_MAX_FDS	32
 enum {
@@ -335,7 +340,7 @@ struct ublksrv_tgt_type {
 struct ublksrv_dev {
 	struct ublksrv_tgt_info tgt;
 
-	struct ublksrv_queue *__queues[MAX_NR_HW_QUEUES];
+	struct _ublksrv_queue *__queues[MAX_NR_HW_QUEUES];
 	char	*io_buf_start;
 	pthread_t *thread;
 	int cdev_fd;

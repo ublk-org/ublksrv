@@ -11,6 +11,9 @@
 extern "C" {
 #endif
 
+#define local_to_tq(q)	((struct ublksrv_queue *)(q))
+#define tq_to_local(q)	((struct _ublksrv_queue *)(q))
+
 int create_pid_file(const char *pid_file, int *pid_fd);
 
 extern void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset);
