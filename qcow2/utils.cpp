@@ -23,7 +23,7 @@ void IOWaiters::add_waiter_idx(unsigned tag, unsigned entry_idx) {
  * qcow2_tgt_io_done() will wakeup for current IO, that isn't covered
  * by here.
  */
-void IOWaiters::__mapping_meta_wakeup_all(struct ublksrv_queue *q,
+void IOWaiters::__mapping_meta_wakeup_all(const struct ublksrv_queue *q,
 		unsigned my_tag, unsigned entry_idx, bool all) {
 	std::unordered_set<unsigned> tags(move(io_waiters));
 	std::unordered_set<unsigned>::const_iterator it = tags.cbegin();
@@ -70,11 +70,11 @@ void IOWaiters::__mapping_meta_wakeup_all(struct ublksrv_queue *q,
 			__func__, __LINE__, this, my_tag);
 }
 
-void IOWaiters::wakeup_all(struct ublksrv_queue *q, unsigned my_tag) {
+void IOWaiters::wakeup_all(const struct ublksrv_queue *q, unsigned my_tag) {
 	__mapping_meta_wakeup_all(q, my_tag, 0x3fffff, true);
 }
 
-void IOWaiters::wakeup_all_idx(struct ublksrv_queue *q, unsigned my_tag,
+void IOWaiters::wakeup_all_idx(const struct ublksrv_queue *q, unsigned my_tag,
 		unsigned entry_idx) {
 	__mapping_meta_wakeup_all(q, my_tag, entry_idx, false);
 }

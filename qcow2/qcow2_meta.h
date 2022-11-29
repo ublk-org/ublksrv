@@ -382,11 +382,11 @@ public:
 		io_waiters.add_waiter_idx(tag, entry_idx);
 	}
 
-	void wakeup_all(struct ublksrv_queue *q, unsigned my_tag) {
+	void wakeup_all(const struct ublksrv_queue *q, unsigned my_tag) {
 		io_waiters.wakeup_all(q, my_tag);
 	}
 
-	void wakeup_all_idx(struct ublksrv_queue *q,
+	void wakeup_all_idx(const struct ublksrv_queue *q,
 			unsigned my_tag, unsigned entry_idx) {
 		io_waiters.wakeup_all_idx(q, my_tag, entry_idx);
 	}
@@ -398,7 +398,7 @@ public:
 
 	//both load() and flush() should be async, and done() needs to be called
 	//after both load() and flush() meta IO are done.
-	virtual void io_done(Qcow2State &qs, struct ublksrv_queue *q,
+	virtual void io_done(Qcow2State &qs, const struct ublksrv_queue *q,
 			const struct io_uring_cqe *cqe);
 };
 
@@ -469,7 +469,7 @@ public:
 	bool prep_flush(const qcow2_io_ctx_t &ioc, u32 blk_idx);
 	void unprep_flush(u32 blk_idx);
 
-	virtual void io_done(Qcow2State &qs, struct ublksrv_queue *q,
+	virtual void io_done(Qcow2State &qs, const struct ublksrv_queue *q,
 			const struct io_uring_cqe *);
 	virtual int flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc, u64 off, u32 len);
 	bool has_dirty_slices(Qcow2State &qs, int idx);
@@ -572,7 +572,7 @@ public:
 
 	//both load() and flush() should be async, and done() needs to be called
 	//after both load() and flush() meta IO are done.
-	virtual void io_done(Qcow2State &qs, struct ublksrv_queue *q,
+	virtual void io_done(Qcow2State &qs, const struct ublksrv_queue *q,
 			const struct io_uring_cqe *cqe);
 	int zero_my_cluster(Qcow2State &qs, const qcow2_io_ctx_t &ioc);
 
@@ -617,10 +617,10 @@ public:
 			((u64)slice_idx << slice_virt_bits);
 	}
 #ifdef DEBUG_QCOW2_META_VALIDATE
-	void io_done_validate(Qcow2State &qs, struct ublksrv_queue *q,
+	void io_done_validate(Qcow2State &qs, const struct ublksrv_queue *q,
 			const struct io_uring_cqe *cqe);
 #else
-	void io_done_validate(Qcow2State &qs, struct ublksrv_queue *q,
+	void io_done_validate(Qcow2State &qs, const struct ublksrv_queue *q,
 			const struct io_uring_cqe *cqe) {}
 #endif
 };
@@ -746,7 +746,7 @@ public:
 	virtual void dump();
 	virtual void get_dirty_range(u64 *start, u64 *end);
 	//virtual int flush(Qcow2State &qs, qcow2_io_ctx_t ioc, bool auto_free = false);
-	virtual void io_done(Qcow2State &qs, struct ublksrv_queue *q,
+	virtual void io_done(Qcow2State &qs, const struct ublksrv_queue *q,
 			const struct io_uring_cqe *cqe);
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void check(Qcow2State &qs, const char *func, int line);

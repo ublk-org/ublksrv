@@ -184,7 +184,7 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	return 0;
 }
 
-static int demo_handle_io_async(struct ublksrv_queue *q,
+static int demo_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
 	const struct ublksrv_io_desc *iod = data->iod;
@@ -194,12 +194,12 @@ static int demo_handle_io_async(struct ublksrv_queue *q,
 	return 0;
 }
 
-void *null_alloc_io_buf(struct ublksrv_queue *q, int tag, int size)
+void *null_alloc_io_buf(const struct ublksrv_queue *q, int tag, int size)
 {
 	return malloc(size);
 }
 
-void null_free_io_buf(struct ublksrv_queue *q, void *buf, int tag)
+void null_free_io_buf(const struct ublksrv_queue *q, void *buf, int tag)
 {
 	free(buf);
 }

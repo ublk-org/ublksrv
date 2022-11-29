@@ -249,7 +249,7 @@ static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
        return mode;
 }
 
-static int loop_queue_tgt_io(struct ublksrv_queue *q,
+static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	const struct ublksrv_io_desc *iod = data->iod;
@@ -302,7 +302,7 @@ static int loop_queue_tgt_io(struct ublksrv_queue *q,
 	return 1;
 }
 
-static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
+static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	int ret;
@@ -331,7 +331,7 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 	}
 }
 
-static int loop_handle_io_async(struct ublksrv_queue *q,
+static int loop_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
@@ -340,7 +340,7 @@ static int loop_handle_io_async(struct ublksrv_queue *q,
 	return 0;
 }
 
-static void loop_tgt_io_done(struct ublksrv_queue *q,
+static void loop_tgt_io_done(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct io_uring_cqe *cqe)
 {

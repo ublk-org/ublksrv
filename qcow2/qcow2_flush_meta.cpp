@@ -49,7 +49,7 @@ void MetaFlushingState::add_slice_to_flush(Qcow2SliceMeta *m)
 }
 
 co_io_job MetaFlushingState::__write_slice_co(Qcow2State &qs,
-		struct ublksrv_queue *q, Qcow2SliceMeta *m,
+		const struct ublksrv_queue *q, Qcow2SliceMeta *m,
 		struct ublk_io_tgt *io, int tag)
 {
 	int ret;
@@ -116,7 +116,7 @@ exit:
 }
 
 void MetaFlushingState::__write_slices(Qcow2State &qs,
-		struct ublksrv_queue *q)
+		const struct ublksrv_queue *q)
 {
 	std::vector<Qcow2SliceMeta *> &v1 = slices_to_flush;
 	std::vector<Qcow2SliceMeta *>::const_iterator it = v1.cbegin();
@@ -146,7 +146,7 @@ void MetaFlushingState::__write_slices(Qcow2State &qs,
 //todo: run fsync before flushing top table, and global fsync should be
 //fine, given top table seldom becomes dirty
 co_io_job MetaFlushingState::__write_top_co(Qcow2State &qs,
-		struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag)
+		const struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag)
 {
 	int ret;
 	qcow2_io_ctx_t ioc(tag, q->q_id);
@@ -192,7 +192,7 @@ exit:
 }
 
 void MetaFlushingState::__write_top(Qcow2State &qs,
-		struct ublksrv_queue *q)
+		const struct ublksrv_queue *q)
 {
 	int tag;
 	struct ublk_io_tgt *io;
@@ -208,7 +208,7 @@ void MetaFlushingState::__write_top(Qcow2State &qs,
 	io->co = __write_top_co(qs, q, io, tag);
 }
 
-void MetaFlushingState::__done(Qcow2State &qs, struct ublksrv_queue *q)
+void MetaFlushingState::__done(Qcow2State &qs, const struct ublksrv_queue *q)
 {
 	set_state(qcow2_meta_flush::IDLE);
 	last_flush = std::chrono::system_clock::now();
@@ -223,7 +223,7 @@ void MetaFlushingState::mark_no_update()
 }
 
 void MetaFlushingState::__prep_write_slice(Qcow2State &qs,
-		struct ublksrv_queue *q)
+		const struct ublksrv_queue *q)
 {
 	u64 entry;
 	u64 idx = -1;
@@ -277,7 +277,7 @@ void MetaFlushingState::__prep_write_slice(Qcow2State &qs,
 }
 
 co_io_job MetaFlushingState::__zero_my_cluster_co(Qcow2State &qs,
-		struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag,
+		const struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag,
 		Qcow2SliceMeta *m)
 
 {
@@ -334,7 +334,7 @@ exit:
 
 
 void MetaFlushingState::__zero_my_cluster(Qcow2State &qs,
-		struct ublksrv_queue *q)
+		const struct ublksrv_queue *q)
 {
 	int tag;
 	struct ublk_io_tgt *io;
@@ -357,7 +357,7 @@ void MetaFlushingState::__zero_my_cluster(Qcow2State &qs,
 }
 
 void MetaFlushingState::run_flush(Qcow2State &qs,
-		struct ublksrv_queue *q, int top_blk_idx)
+		const struct ublksrv_queue *q, int top_blk_idx)
 {
 	if (state == qcow2_meta_flush::IDLE) {
 		if (top_blk_idx >= 0 && top_blk_idx < top.dirty_blk_size()) {
@@ -538,7 +538,7 @@ Qcow2MetaFlushing::Qcow2MetaFlushing(Qcow2State &qs):
 		tags[i] = true;
 }
 
-int Qcow2MetaFlushing::alloc_tag(struct ublksrv_queue *q) {
+int Qcow2MetaFlushing::alloc_tag(const struct ublksrv_queue *q) {
 	for (size_t i = 0; i < tags.size(); i++) {
 		if (tags[i]) {
 			tags[i] = false;
@@ -548,7 +548,7 @@ int Qcow2MetaFlushing::alloc_tag(struct ublksrv_queue *q) {
 	return -1;
 }
 
-void Qcow2MetaFlushing::free_tag(struct ublksrv_queue *q, int tag) {
+void Qcow2MetaFlushing::free_tag(const struct ublksrv_queue *q, int tag) {
 	int depth = q->q_depth;
 
 	qcow2_assert(tag >= depth && tag < depth + tags.size());
@@ -566,7 +566,7 @@ void Qcow2MetaFlushing::dump()
 }
 
 bool Qcow2MetaFlushing::handle_mapping_dependency_start_end(Qcow2State *qs,
-		struct ublksrv_queue *q)
+		const struct ublksrv_queue *q)
 {
 	if (refcount_stat.get_state() == qcow2_meta_flush::IDLE &&
 			(refcnt_blk_start == refcnt_blk_end)) {
@@ -597,7 +597,7 @@ bool Qcow2MetaFlushing::handle_mapping_dependency_start_end(Qcow2State *qs,
 }
 
 void Qcow2MetaFlushing::handle_mapping_dependency(Qcow2State *qs,
-		struct ublksrv_queue *q)
+		const struct ublksrv_queue *q)
 {
 	qcow2_assert(mapping_stat.get_state() == qcow2_meta_flush::WAIT);
 
@@ -621,7 +621,7 @@ bool Qcow2MetaFlushing::is_flushing()
 			refcount_stat.get_state() != qcow2_meta_flush::IDLE;
 }
 
-void Qcow2MetaFlushing::run_flush(struct ublksrv_queue *q, int queued)
+void Qcow2MetaFlushing::run_flush(const struct ublksrv_queue *q, int queued)
 {
 	Qcow2State *qs = dev_to_qcow2state(q->dev);
 	bool need_flush;

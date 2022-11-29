@@ -253,14 +253,14 @@ struct ublksrv_tgt_type {
 	 * has to be implemented. Otherwise, target can implement
 	 * ->handle_event() for processing io completion there.
 	 */
-	int (*handle_io_async)(struct ublksrv_queue *,
+	int (*handle_io_async)(const struct ublksrv_queue *,
 			const struct ublk_io_data *io);
 
 	/*
 	 * target io is handled by our io_uring, and once the target io
 	 * is completed, this callback is called
 	 */
-	void (*tgt_io_done)(struct ublksrv_queue *,
+	void (*tgt_io_done)(const struct ublksrv_queue *,
 			const struct ublk_io_data *io,
 			const struct io_uring_cqe *);
 
@@ -287,7 +287,7 @@ struct ublksrv_tgt_type {
 	 * queue & submit the eventfd io immediately for getting
 	 * notification from future event.
 	 */
-	void (*handle_event)(struct ublksrv_queue *);
+	void (*handle_event)(const struct ublksrv_queue *);
 
 	/*
 	 * One typical use case is to flush meta data, which is usually done
@@ -299,7 +299,7 @@ struct ublksrv_tgt_type {
 	 * @nr_queued_io: count of queued IOs in ublksrv_reap_events_uring of
 	 * this time
 	 */
-	void (*handle_io_background)(struct ublksrv_queue *, int
+	void (*handle_io_background)(const struct ublksrv_queue *, int
 			nr_queued_io);
 
 	/*
@@ -320,10 +320,10 @@ struct ublksrv_tgt_type {
 	/* deinitialize this target */
 	void (*deinit_tgt)(struct ublksrv_dev *);
 
-	void *(*alloc_io_buf)(struct ublksrv_queue *q, int tag, int size);
-	void (*free_io_buf)(struct ublksrv_queue *q, void *buf, int tag);
+	void *(*alloc_io_buf)(const struct ublksrv_queue *q, int tag, int size);
+	void (*free_io_buf)(const struct ublksrv_queue *q, void *buf, int tag);
 
-	void (*idle_fn)(struct ublksrv_queue *q, bool enter);
+	void (*idle_fn)(const struct ublksrv_queue *q, bool enter);
 
 	int  type;
 	unsigned ublk_flags;	//flags required for ublk driver
@@ -461,13 +461,13 @@ extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
 extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data);
 extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
-extern int ublksrv_queue_handled_event(struct ublksrv_queue *q);
+extern int ublksrv_queue_handled_event(const struct ublksrv_queue *q);
 extern int ublksrv_queue_send_event(struct ublksrv_queue *q);
 extern struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id);
 
 extern int ublksrv_process_io(struct ublksrv_queue *q);
-extern int ublksrv_complete_io(struct ublksrv_queue *q, unsigned tag, int res);
+extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
 
 extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
 extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);

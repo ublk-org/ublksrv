@@ -243,7 +243,7 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 	return 1;
 }
 
-int ublksrv_complete_io(struct ublksrv_queue *tq, unsigned tag, int res)
+int ublksrv_complete_io(const struct ublksrv_queue *tq, unsigned tag, int res)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
 
@@ -284,7 +284,7 @@ static inline int __ublksrv_queue_event(struct _ublksrv_queue *q)
  * This API is supposed to be called in ->handle_event() after current
  * events are handled.
  */
-int ublksrv_queue_handled_event(struct ublksrv_queue *tq)
+int ublksrv_queue_handled_event(const struct ublksrv_queue *tq)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
 

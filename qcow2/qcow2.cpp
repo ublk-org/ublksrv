@@ -167,7 +167,7 @@ void Qcow2State::dump_meta()
 }
 
 //todo: allocate from slices from reclaim_slices
-void Qcow2State::kill_slices(struct ublksrv_queue *q)
+void Qcow2State::kill_slices(const struct ublksrv_queue *q)
 {
 	std::vector<Qcow2SliceMeta *> tmp(move(freed_slices));
 
@@ -542,7 +542,7 @@ void Qcow2ClusterAllocator::alloc_cluster_zeroing(const qcow2_io_ctx_t &ioc,
 			it->second->get_purpose());
 }
 
-void Qcow2ClusterAllocator::alloc_cluster_zeroed(struct ublksrv_queue *q,
+void Qcow2ClusterAllocator::alloc_cluster_zeroed(const struct ublksrv_queue *q,
 		int tag, u64 cluster_offset)
 {
 	auto it = alloc_state.find(cluster_offset);
@@ -765,7 +765,7 @@ Qcow2L2Table *Qcow2ClusterMapping::create_and_add_l2(const qcow2_io_ctx_t &ioc,
 	const unsigned idx = l1_idx(offset);
 	u64 l1_entry = state.l1_table.get_entry(idx);
 	u64 l2_cluster = -1;
-	struct ublksrv_queue *q = ublksrv_get_queue(state.dev, ioc.get_qid());
+	const struct ublksrv_queue *q = ublksrv_get_queue(state.dev, ioc.get_qid());
 	Qcow2L2Table *l2 = nullptr;
 
 	qcow2_assert(!state.l1_table.entry_allocated(l1_entry));
@@ -872,7 +872,7 @@ int Qcow2ClusterMapping::build_mapping(const qcow2_io_ctx_t &ioc,
 		u64 virt_offset, Qcow2L2Table *l2, u32 idx_in_slice,
 		u64 *l2_entry)
 {
-	struct ublksrv_queue *q = ublksrv_get_queue(state.dev, ioc.get_qid());
+	const struct ublksrv_queue *q = ublksrv_get_queue(state.dev, ioc.get_qid());
 	u64 data_cluster = -1;
 	int ret;
 

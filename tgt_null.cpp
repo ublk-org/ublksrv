@@ -77,7 +77,7 @@ static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 	return 0;
 }
 
-static co_io_job __null_handle_io_async(struct ublksrv_queue *q,
+static co_io_job __null_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	ublksrv_complete_io(q, tag, data->iod->nr_sectors << 9);
@@ -85,7 +85,7 @@ static co_io_job __null_handle_io_async(struct ublksrv_queue *q,
 	co_io_job_return();
 }
 
-static int null_handle_io_async(struct ublksrv_queue *q,
+static int null_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);

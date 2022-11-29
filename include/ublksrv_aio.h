@@ -158,7 +158,7 @@ struct ublksrv_aio *ublksrv_aio_alloc_req(struct ublksrv_aio_ctx *ctx,
 		int payload_size);
 void ublksrv_aio_free_req(struct ublksrv_aio_ctx *ctx, struct ublksrv_aio *req);
 void ublksrv_aio_submit_req(struct ublksrv_aio_ctx *ctx,
-		struct ublksrv_queue *q, struct ublksrv_aio *req);
+		const struct ublksrv_queue *q, struct ublksrv_aio *req);
 void ublksrv_aio_get_completed_reqs(struct ublksrv_aio_ctx *ctx,
 		const struct ublksrv_queue *q,
 		struct aio_list *al);
@@ -167,7 +167,7 @@ int ublksrv_aio_submit_worker(struct ublksrv_aio_ctx *ctx,
 void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 		struct aio_list *completed);
 void ublksrv_aio_handle_event(struct ublksrv_aio_ctx *ctx,
-		struct ublksrv_queue *q);
+		const struct ublksrv_queue *q);
 #ifdef __cplusplus
 }
 #endif

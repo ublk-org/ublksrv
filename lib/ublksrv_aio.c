@@ -194,15 +194,16 @@ static bool ublksrv_aio_add_ctx_for_submit(struct _ublksrv_queue *q,
 }
 
 void ublksrv_aio_submit_req(struct ublksrv_aio_ctx *ctx,
-		struct ublksrv_queue *tq, struct ublksrv_aio *req)
+		const struct ublksrv_queue *tq, struct ublksrv_aio *req)
 {
+	struct _ublksrv_queue *q = tq_to_local(tq);
 	unsigned long long data = 1;
 
 	pthread_spin_lock(&ctx->submit.lock);
 	aio_list_add(&ctx->submit.list, req);
 	pthread_spin_unlock(&ctx->submit.lock);
 
-	if (!ublksrv_aio_add_ctx_for_submit(tq_to_local(tq), ctx))
+	if (!ublksrv_aio_add_ctx_for_submit(q, ctx))
 		write(ctx->efd, &data, 8);
 }
 
@@ -218,7 +219,7 @@ void ublksrv_aio_get_completed_reqs(struct ublksrv_aio_ctx *ctx,
 }
 
 void ublksrv_aio_handle_event(struct ublksrv_aio_ctx *ctx,
-		struct ublksrv_queue *q)
+		const struct ublksrv_queue *q)
 {
 	struct ublksrv_aio_list *compl = &ctx->complete[q->q_id];
 	struct ublksrv_aio *req;

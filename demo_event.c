@@ -485,7 +485,7 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	return 0;
 }
 
-static int demo_handle_io_async(struct ublksrv_queue *q,
+static int demo_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
 	struct ublksrv_aio *req = ublksrv_aio_alloc_req(aio_ctx, 0);
@@ -498,7 +498,7 @@ static int demo_handle_io_async(struct ublksrv_queue *q,
 	return 0;
 }
 
-static void demo_handle_event(struct ublksrv_queue *q)
+static void demo_handle_event(const struct ublksrv_queue *q)
 {
 	ublksrv_aio_handle_event(aio_ctx, q);
 }

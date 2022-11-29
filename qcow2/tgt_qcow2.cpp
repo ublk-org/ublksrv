@@ -198,8 +198,8 @@ static void qcow2_usage_for_add(void)
 }
 
 /* todo: flush meta dirty data */
-static inline int qcow2_queue_tgt_fsync(struct ublksrv_queue *q, unsigned io_op,
-		int tag, u32 len, u64 offset)
+static inline int qcow2_queue_tgt_fsync(const struct ublksrv_queue *q,
+		unsigned io_op, int tag, u32 len, u64 offset)
 {
 	int fd = q->dev->tgt.fds[1];
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
@@ -221,7 +221,7 @@ static inline int qcow2_queue_tgt_fsync(struct ublksrv_queue *q, unsigned io_op,
 }
 
 static inline int qcow2_queue_tgt_zero_cluster(const Qcow2State *qs,
-		struct ublksrv_queue *q, int tag, u64 offset)
+		const struct ublksrv_queue *q, int tag, u64 offset)
 {
 	int mode = FALLOC_FL_ZERO_RANGE;
 	int fd = q->dev->tgt.fds[1];
@@ -244,7 +244,7 @@ static inline int qcow2_queue_tgt_zero_cluster(const Qcow2State *qs,
 	return 1;
 }
 
-static inline int qcow2_queue_tgt_rw_fast(struct ublksrv_queue *q,
+static inline int qcow2_queue_tgt_rw_fast(const struct ublksrv_queue *q,
 		unsigned io_op, int tag, u64 offset,
 		const struct ublksrv_io_desc *iod)
 {
@@ -269,7 +269,7 @@ static inline int qcow2_queue_tgt_rw_fast(struct ublksrv_queue *q,
 
 }
 
-static inline int qcow2_queue_tgt_rw(struct ublksrv_queue *q, unsigned io_op,
+static inline int qcow2_queue_tgt_rw(const struct ublksrv_queue *q, unsigned io_op,
 		int tag, u64 offset, const struct ublksrv_io_desc *iod,
 		u32 *expected_op)
 {
@@ -307,7 +307,7 @@ static inline int qcow2_queue_tgt_rw(struct ublksrv_queue *q, unsigned io_op,
 }
 
 /* return how many sqes queued */
-static int qcow2_queue_tgt_io(struct ublksrv_queue *q, unsigned io_op,
+static int qcow2_queue_tgt_io(const struct ublksrv_queue *q, unsigned io_op,
 		int tag, u64 offset, u32 *exp_op,
 		const struct ublksrv_io_desc *iod)
 {
@@ -334,7 +334,7 @@ static inline bool l2_entry_read_as_zero(u64 entry)
 	return false;
 }
 
-static co_io_job __qcow2_handle_io_async(struct ublksrv_queue *q,
+static co_io_job __qcow2_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
@@ -460,7 +460,7 @@ exit:
 	ublksrv_complete_io(q, tag, ret);
 }
 
-static int qcow2_handle_io_async(struct ublksrv_queue *q,
+static int qcow2_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
@@ -481,7 +481,7 @@ static void qcow2_deinit_tgt(struct ublksrv_dev *dev)
 	delete qs;
 }
 
-static void qcow2_tgt_io_done(struct ublksrv_queue *q,
+static void qcow2_tgt_io_done(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, const struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
@@ -499,7 +499,7 @@ static void qcow2_tgt_io_done(struct ublksrv_queue *q,
 	}
 }
 
-static void qcow2_handle_io_bg(struct ublksrv_queue *q, int nr_queued_io)
+static void qcow2_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 {
 	Qcow2State *qs = dev_to_qcow2state(q->dev);
 
@@ -514,7 +514,7 @@ again:
 	}
 }
 
-static void qcow2_idle(struct ublksrv_queue *q, bool enter)
+static void qcow2_idle(const struct ublksrv_queue *q, bool enter)
 {
 	Qcow2State *qs = dev_to_qcow2state(q->dev);
 

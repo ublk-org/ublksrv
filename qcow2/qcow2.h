@@ -373,7 +373,7 @@ public:
 		io_waiters.add_waiter(tag);
 	}
 
-	void wakeup_all(struct ublksrv_queue *q, unsigned my_tag) {
+	void wakeup_all(const struct ublksrv_queue *q, unsigned my_tag) {
 		io_waiters.wakeup_all(q, my_tag);
 	}
 };
@@ -459,7 +459,7 @@ public:
 	void alloc_cluster_zeroing(const qcow2_io_ctx_t &ioc, u64 cluster_offset);
 
 	//called after the cluster is zeroed
-	void alloc_cluster_zeroed(struct ublksrv_queue *q,
+	void alloc_cluster_zeroed(const struct ublksrv_queue *q,
 			int tag, u64 cluster_offset);
 
 	//called after the cluster is zeroed and associated mapping is updated
@@ -509,23 +509,23 @@ private:
 	void del_meta_from_list(std::vector <Qcow2SliceMeta *> &v,
 		const Qcow2SliceMeta *t);
 
-	void __prep_write_slice(Qcow2State &qs, struct ublksrv_queue *q);
+	void __prep_write_slice(Qcow2State &qs, const struct ublksrv_queue *q);
 
-	void __zero_my_cluster(Qcow2State &qs, struct ublksrv_queue *q);
+	void __zero_my_cluster(Qcow2State &qs, const struct ublksrv_queue *q);
 	co_io_job __zero_my_cluster_co(Qcow2State &qs,
-		struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag,
+		const struct ublksrv_queue *q, struct ublk_io_tgt *io, int tag,
 		Qcow2SliceMeta *m);
 
-	void __write_slices(Qcow2State &qs, struct ublksrv_queue *q);
+	void __write_slices(Qcow2State &qs, const struct ublksrv_queue *q);
 	co_io_job __write_slice_co(Qcow2State &qs,
-		struct ublksrv_queue *q, Qcow2SliceMeta *m,
+		const struct ublksrv_queue *q, Qcow2SliceMeta *m,
 		struct ublk_io_tgt *io, int tag);
 
-	void __write_top(Qcow2State &qs, struct ublksrv_queue *q);
-	co_io_job  __write_top_co(Qcow2State &qs, struct ublksrv_queue *q,
+	void __write_top(Qcow2State &qs, const struct ublksrv_queue *q);
+	co_io_job  __write_top_co(Qcow2State &qs, const struct ublksrv_queue *q,
 			struct ublk_io_tgt *io, int tag);
 
-	void __done(Qcow2State &qs, struct ublksrv_queue *q);
+	void __done(Qcow2State &qs, const struct ublksrv_queue *q);
 	bool __need_flush(int queued);
 	void mark_no_update();
 public:
@@ -549,7 +549,7 @@ public:
 	MetaFlushingState(Qcow2TopTable &t, bool is_mapping);
 	void slice_is_done(const Qcow2SliceMeta*);
 	void add_slice_to_flush(Qcow2SliceMeta *m);
-	void run_flush(Qcow2State &qs, struct ublksrv_queue *q,
+	void run_flush(Qcow2State &qs, const struct ublksrv_queue *q,
 			int top_blk_idx);
 	bool need_flush(Qcow2State &qs, int *top_idx, unsigned queued);
 	void dump(const char *func, int line) const;
@@ -572,9 +572,9 @@ private:
 	int refcnt_blk_end;
 
 	bool handle_mapping_dependency_start_end(Qcow2State *qs,
-			struct ublksrv_queue *q);
+			const struct ublksrv_queue *q);
 	void handle_mapping_dependency(Qcow2State *qs,
-			struct ublksrv_queue *q);
+			const struct ublksrv_queue *q);
 public:
 	Qcow2State &state;
 
@@ -597,9 +597,9 @@ public:
 
 	Qcow2MetaFlushing(Qcow2State &qs);
 	void dump();
-	int alloc_tag(struct ublksrv_queue *q);
-	void free_tag(struct ublksrv_queue *q, int tag);
-	void run_flush(struct ublksrv_queue *q, int queued);
+	int alloc_tag(const struct ublksrv_queue *q);
+	void free_tag(const struct ublksrv_queue *q, int tag);
+	void run_flush(const struct ublksrv_queue *q, int queued);
 	bool is_flushing();
 };
 
@@ -674,7 +674,7 @@ public:
 		freed_slices.push_back(m);
 	}
 
-	void kill_slices(struct ublksrv_queue *q);
+	void kill_slices(const struct ublksrv_queue *q);
 	u32 add_meta_io(u32 qid, Qcow2MappingMeta *m);
 	void dump_meta();
 	void reclaim_slice(Qcow2SliceMeta *m);
@@ -717,7 +717,7 @@ public:
 		Qcow2State(img_path, dev) {}
 };
 
-static inline int qcow2_meta_io_done(struct ublksrv_queue *q,
+static inline int qcow2_meta_io_done(const struct ublksrv_queue *q,
 		const struct io_uring_cqe *cqe)
 {
 	if (!cqe)

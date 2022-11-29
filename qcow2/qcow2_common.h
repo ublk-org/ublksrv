@@ -138,14 +138,14 @@ private:
 		val = tag | (entry_idx << QCOW2_TAG_BITS);
 		io_waiters.insert(val);
 	}
-	void __mapping_meta_wakeup_all(struct ublksrv_queue *q,
+	void __mapping_meta_wakeup_all(const struct ublksrv_queue *q,
 			unsigned my_tag, unsigned entry_idx, bool all);
 public:
 	IOWaiters();
 	void add_waiter(unsigned tag);
 	void add_waiter_idx(unsigned tag, unsigned entry_idx);
-	void wakeup_all(struct ublksrv_queue *q, unsigned my_tag);
-	void wakeup_all_idx(struct ublksrv_queue *q,
+	void wakeup_all(const struct ublksrv_queue *q, unsigned my_tag);
+	void wakeup_all_idx(const struct ublksrv_queue *q,
 			unsigned my_tag, unsigned entry_idx);
 };
 
