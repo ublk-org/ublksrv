@@ -5,6 +5,13 @@
 #include "ublksrv_priv.h"
 #include "ublksrv_aio.h"
 
+static inline struct ublksrv_io_desc *ublksrv_get_iod(
+		const struct ublksrv_queue *q, int tag)
+{
+        return (struct ublksrv_io_desc *)
+                &(q->io_cmd_buf[tag * sizeof(struct ublksrv_io_desc)]);
+}
+
 /*
  * /dev/ublkbN shares same lifetime with the ublk io daemon:
  *

@@ -308,9 +308,9 @@ static inline int qcow2_queue_tgt_rw(struct ublksrv_queue *q, unsigned io_op,
 
 /* return how many sqes queued */
 static int qcow2_queue_tgt_io(struct ublksrv_queue *q, unsigned io_op,
-		int tag, u64 offset, u32 *exp_op)
+		int tag, u64 offset, u32 *exp_op,
+		const struct ublksrv_io_desc *iod)
 {
-	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
 	int ret;
 
 	//we don't support discard yet
@@ -335,10 +335,11 @@ static inline bool l2_entry_read_as_zero(u64 entry)
 }
 
 static co_io_job __qcow2_handle_io_async(struct ublksrv_queue *q,
-		struct ublk_io_tgt *io, int tag)
+		const struct ublk_io_data *data, int tag)
 {
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 	Qcow2State *qs = dev_to_qcow2state(q->dev);
-	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
+	const struct ublksrv_io_desc *iod = data->iod;
 	unsigned long start = iod->start_sector << 9;
 	u64 mapped_start;
 	qcow2_io_ctx_t ioc(tag, q->q_id);
@@ -395,7 +396,6 @@ again:
 			ret = -EIO;
 		}
 	} else {
-		const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
 		unsigned io_op = ublksrv_convert_cmd_op(iod);
 		unsigned exp_op;
 
@@ -407,7 +407,7 @@ queue_io:
 		//the only exception is from handling zeroing cluster
 		try {
 			ret = qcow2_queue_tgt_io(q, io_op, tag, mapped_start,
-					&exp_op);
+					&exp_op, iod);
 			wait = false;
 		} catch (MetaUpdateException &meta_error) {
 			wait = true;
@@ -465,7 +465,7 @@ static int qcow2_handle_io_async(struct ublksrv_queue *q,
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-	io->co = __qcow2_handle_io_async(q, io, data->tag);
+	io->co = __qcow2_handle_io_async(q, data, data->tag);
 	return 0;
 }
 

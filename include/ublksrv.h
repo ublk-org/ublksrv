@@ -347,13 +347,6 @@ struct ublksrv_dev {
 	unsigned long reserved[4];
 };
 
-static inline struct ublksrv_io_desc *ublksrv_get_iod(
-		const struct ublksrv_queue *q, int tag)
-{
-        return (struct ublksrv_io_desc *)
-                &(q->io_cmd_buf[tag * sizeof(struct ublksrv_io_desc)]);
-}
-
 static inline __u64 build_user_data(unsigned tag, unsigned op,
 		unsigned tgt_data, unsigned is_target_io)
 {
