@@ -8,14 +8,65 @@ static int jbuf_size = 0;
 static int queues_stored = 0;
 static char *jbuf = NULL;
 
-/********************cmd handling************************/
-static char *full_cmd;
-
 struct ublksrv_queue_info {
 	struct ublksrv_dev *dev;
 	int qid;
 	pthread_t thread;
 };
+
+
+/********************cmd handling************************/
+static char *full_cmd;
+static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
+
+static const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name)
+{
+	int i;
+
+	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
+		const struct ublksrv_tgt_type *type = tgt_list[i];
+
+		if (type == NULL)
+			continue;
+
+		if (!strcmp(type->name, name))
+			return type;
+	}
+
+	return NULL;
+}
+
+static void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
+			const struct ublksrv_tgt_type *type, void *data),
+		void *data)
+{
+	int i;
+
+	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
+                const struct ublksrv_tgt_type  *type = tgt_list[i];
+
+		if (!type)
+			continue;
+		handle_tgt_type(i, type, data);
+	}
+}
+
+int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
+{
+	if (type->type < UBLKSRV_TGT_TYPE_MAX && !tgt_list[type->type]) {
+		tgt_list[type->type] = type;
+		return 0;
+	}
+	return -1;
+}
+
+void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
+{
+	if (type->type < UBLKSRV_TGT_TYPE_MAX && tgt_list[type->type]) {
+		tgt_list[type->type] = NULL;
+	}
+}
+
 
 static char *mprintf(const char *fmt, ...)
 {
@@ -580,6 +631,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		fprintf(stderr, "unknown dev type: %s\n", data.tgt_type);
 		return -EINVAL;
 	}
+	data.tgt_ops = tgt_type;
 	data.flags |= tgt_type->ublk_flags;
 	data.ublksrv_flags |= tgt_type->ublksrv_flags;
 
@@ -815,6 +867,7 @@ static void cmd_dev_list_usage(const char *cmd)
 
 static int __cmd_dev_user_recover(int number, bool verbose)
 {
+	const struct ublksrv_tgt_type *tgt_type;
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
 		.run_dir = UBLKSRV_PID_DIR,
@@ -873,7 +926,13 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 		goto fail;
 	}
 
-	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, buf);
+	tgt_type = ublksrv_find_tgt_type(tgt_json.name);
+	if (!tgt_type) {
+		fprintf(stderr, "can't find target type %s\n", tgt_json.name);
+		goto fail;
+	}
+
+	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, tgt_type, buf);
 
 	ret = ublksrv_start_daemon(dev);
 	if (ret < 0) {

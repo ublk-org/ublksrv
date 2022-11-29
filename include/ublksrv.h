@@ -113,18 +113,6 @@ struct ublksrv_queue {
 	void *private_data;
 };
 
-enum {
-	/* evaluate communication cost, ublksrv_null vs /dev/nullb0 */
-	UBLKSRV_TGT_TYPE_NULL,
-
-	/* ublksrv_loop vs. /dev/loop */
-	UBLKSRV_TGT_TYPE_LOOP,
-
-	UBLKSRV_TGT_TYPE_QCOW2,
-
-	UBLKSRV_TGT_TYPE_MAX = 256,
-};
-
 struct ublksrv_tgt_type;
 
 #define  UBLKSRV_TGT_MAX_FDS	32
@@ -294,7 +282,8 @@ extern const struct ublksrv_ctrl_dev_info *ublksrv_ctrl_get_dev_info(
 		const struct ublksrv_ctrl_dev *dev);
 extern const char *ublksrv_ctrl_get_run_dir(const struct ublksrv_ctrl_dev *dev);
 extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
-		const char *tgt_type, const char *recovery_jbuf);
+		const char *tgt_type, const struct ublksrv_tgt_type *tgt_ops,
+		const char *recovery_jbuf);
 extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev);
 
 extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
@@ -367,13 +356,6 @@ extern struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 
 extern int ublksrv_process_io(struct ublksrv_queue *q);
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
-
-extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
-extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);
-extern void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
-			const struct ublksrv_tgt_type *type, void *data),
-		void *data);
-extern const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name);
 
 extern void ublksrv_apply_oom_protection();
 

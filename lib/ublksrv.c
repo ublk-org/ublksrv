@@ -53,8 +53,6 @@ static inline struct ublksrv_io_desc *ublksrv_get_iod(
 
 static void *ublksrv_io_handler_fn(void *data);
 
-static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
-
 static int __ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 		const struct ublksrv_tgt_type *ops, int type,
 		int argc, char *argv[])
@@ -106,13 +104,6 @@ static int ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 		return __ublksrv_tgt_init(dev, type_name, ops,
 				ops->type, argc, argv);
 
-	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
-		const struct ublksrv_tgt_type  *lops = tgt_list[i];
-
-		if (!__ublksrv_tgt_init(dev, type_name, lops, i, argc, argv))
-			return 0;
-	}
-
 	return -EINVAL;
 }
 
@@ -132,56 +123,6 @@ static void ublksrv_tgt_deinit(struct _ublksrv_dev *dev)
 
 	if (tgt->ops && tgt->ops->deinit_tgt)
 		tgt->ops->deinit_tgt(local_to_tdev(dev));
-}
-
-void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
-			const struct ublksrv_tgt_type *type, void *data),
-		void *data)
-{
-	int i;
-
-	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
-		int len;
-
-                const struct ublksrv_tgt_type  *type = tgt_list[i];
-
-		if (!type)
-			continue;
-		handle_tgt_type(i, type, data);
-	}
-}
-
-const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name)
-{
-	int i;
-
-	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
-		const struct ublksrv_tgt_type *type = tgt_list[i];
-
-		if (type == NULL)
-			continue;
-
-		if (!strcmp(type->name, name))
-			return type;
-	}
-
-	return NULL;
-}
-
-int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
-{
-	if (type->type < UBLKSRV_TGT_TYPE_MAX && !tgt_list[type->type]) {
-		tgt_list[type->type] = type;
-		return 0;
-	}
-	return -1;
-}
-
-void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
-{
-	if (type->type < UBLKSRV_TGT_TYPE_MAX && tgt_list[type->type]) {
-		tgt_list[type->type] = NULL;
-	}
 }
 
 static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,

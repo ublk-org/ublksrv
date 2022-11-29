@@ -141,4 +141,18 @@ static inline struct ublk_io_tgt *ublk_get_io_tgt_data(
 
 //static_assert(sizeof(struct ublk_io_tgt) == sizeof(struct ublk_io), "ublk_io is defined as wrong");
 
+enum {
+	/* evaluate communication cost, ublksrv_null vs /dev/nullb0 */
+	UBLKSRV_TGT_TYPE_NULL,
+
+	/* ublksrv_loop vs. /dev/loop */
+	UBLKSRV_TGT_TYPE_LOOP,
+
+	UBLKSRV_TGT_TYPE_QCOW2,
+
+	UBLKSRV_TGT_TYPE_MAX = 256,
+};
+extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
+extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);
+
 #endif
