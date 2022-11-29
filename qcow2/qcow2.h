@@ -718,7 +718,7 @@ public:
 };
 
 static inline int qcow2_meta_io_done(struct ublksrv_queue *q,
-		struct io_uring_cqe *cqe)
+		const struct io_uring_cqe *cqe)
 {
 	if (!cqe)
 		return -EAGAIN;

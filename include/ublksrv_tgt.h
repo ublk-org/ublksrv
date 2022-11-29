@@ -113,7 +113,7 @@ struct co_io_job {
 
 struct ublk_io_tgt {
 	co_handle_type co;
-	struct io_uring_cqe *tgt_io_cqe;
+	const struct io_uring_cqe *tgt_io_cqe;
 	int queued_tgt_io;	/* obsolete */
 };
 

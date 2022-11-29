@@ -305,7 +305,6 @@ static int loop_queue_tgt_io(struct ublksrv_queue *q,
 static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 		struct ublk_io_tgt *io, int tag)
 {
-	struct io_uring_cqe *cqe;
 	int ret;
 
 	io->queued_tgt_io = 0;
@@ -320,11 +319,10 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 		co_io_job_submit_and_wait(tag);
 		io->queued_tgt_io -= 1;
 
-		cqe = io->tgt_io_cqe;
-		if (cqe->res == -EAGAIN)
+		if (io->tgt_io_cqe->res == -EAGAIN)
 			goto again;
 
-		ublksrv_complete_io(q, tag, cqe->res);
+		ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);
 	} else if (ret < 0) {
 		syslog(LOG_ERR, "fail to queue io %d, ret %d\n", tag, tag);
 	} else {
@@ -343,7 +341,7 @@ static int loop_handle_io_async(struct ublksrv_queue *q,
 
 static void loop_tgt_io_done(struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
-		struct io_uring_cqe *cqe)
+		const struct io_uring_cqe *cqe)
 {
 	int tag = user_data_to_tag(cqe->user_data);
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);

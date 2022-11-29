@@ -352,7 +352,7 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 }
 
 void Qcow2MappingMeta::io_done(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe)
+			const struct io_uring_cqe *cqe)
 {
 	u32 tag = user_data_to_tag(cqe->user_data);
 	u32 meta_id = user_data_to_tgt_data(cqe->user_data) - 1;
@@ -396,7 +396,7 @@ void Qcow2TopTable::unprep_flush(u32 blk_idx) {
 }
 
 void Qcow2TopTable::io_done(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe)
+			const struct io_uring_cqe *cqe)
 {
 	u32 op = user_data_to_op(cqe->user_data);
 
@@ -726,7 +726,7 @@ void Qcow2SliceMeta::io_done_validate(Qcow2State &qs, struct ublksrv_queue *q,
 
 /* called for both load() and flush() */
 void Qcow2SliceMeta::io_done(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe)
+			const struct io_uring_cqe *cqe)
 {
 	u32 tag = user_data_to_tag(cqe->user_data);
 	u32 meta_id = user_data_to_tgt_data(cqe->user_data) - 1;
@@ -975,7 +975,7 @@ Qcow2L2Table::~Qcow2L2Table()
 }
 
 void Qcow2L2Table::io_done(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe)
+			const struct io_uring_cqe *cqe)
 {
 	get_ref();
 	Qcow2SliceMeta::io_done(qs, q, cqe);

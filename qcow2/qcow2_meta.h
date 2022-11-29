@@ -399,7 +399,7 @@ public:
 	//both load() and flush() should be async, and done() needs to be called
 	//after both load() and flush() meta IO are done.
 	virtual void io_done(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe);
+			const struct io_uring_cqe *cqe);
 };
 
 class Qcow2TopTable: public Qcow2MappingMeta {
@@ -470,7 +470,7 @@ public:
 	void unprep_flush(u32 blk_idx);
 
 	virtual void io_done(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *);
+			const struct io_uring_cqe *);
 	virtual int flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc, u64 off, u32 len);
 	bool has_dirty_slices(Qcow2State &qs, int idx);
 };
@@ -573,7 +573,7 @@ public:
 	//both load() and flush() should be async, and done() needs to be called
 	//after both load() and flush() meta IO are done.
 	virtual void io_done(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe);
+			const struct io_uring_cqe *cqe);
 	int zero_my_cluster(Qcow2State &qs, const qcow2_io_ctx_t &ioc);
 
 	void reclaim_me();
@@ -618,10 +618,10 @@ public:
 	}
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void io_done_validate(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe);
+			const struct io_uring_cqe *cqe);
 #else
 	void io_done_validate(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe) {}
+			const struct io_uring_cqe *cqe) {}
 #endif
 };
 
@@ -747,7 +747,7 @@ public:
 	virtual void get_dirty_range(u64 *start, u64 *end);
 	//virtual int flush(Qcow2State &qs, qcow2_io_ctx_t ioc, bool auto_free = false);
 	virtual void io_done(Qcow2State &qs, struct ublksrv_queue *q,
-			struct io_uring_cqe *cqe);
+			const struct io_uring_cqe *cqe);
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	void check(Qcow2State &qs, const char *func, int line);
 	void check_duplicated_clusters(Qcow2State &qs, int tag,

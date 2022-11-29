@@ -257,7 +257,7 @@ struct ublksrv_tgt_type {
 	 */
 	void (*tgt_io_done)(struct ublksrv_queue *,
 			const struct ublk_io_data *io,
-			struct io_uring_cqe *);
+			const struct io_uring_cqe *);
 
 	/*
 	 * Someone has written to our eventfd, so let target handle the

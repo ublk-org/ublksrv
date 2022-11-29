@@ -77,7 +77,7 @@ again:
 	}
 
 	if (ret > 0) {
-		struct io_uring_cqe *cqe;
+		const struct io_uring_cqe *cqe;
 		bool done = false;
 		int io_ret = 0;
 
@@ -173,7 +173,7 @@ again:
 	}
 
 	if (ret > 0) {
-		struct io_uring_cqe *cqe;
+		const struct io_uring_cqe *cqe;
 
 		co_io_job_submit_and_wait(tag);
 
@@ -307,7 +307,7 @@ again:
 	}
 
 	if (ret > 0) {
-		struct io_uring_cqe *cqe;
+		const struct io_uring_cqe *cqe;
 
 		co_io_job_submit_and_wait(tag);
 

@@ -342,7 +342,7 @@ static co_io_job __qcow2_handle_io_async(struct ublksrv_queue *q,
 	unsigned long start = iod->start_sector << 9;
 	u64 mapped_start;
 	qcow2_io_ctx_t ioc(tag, q->q_id);
-	struct io_uring_cqe *cqe;
+	const struct io_uring_cqe *cqe;
 	int ret = 0;
 	unsigned int op = ublksrv_get_op(iod);
 	bool wait;
@@ -482,7 +482,7 @@ static void qcow2_deinit_tgt(struct ublksrv_dev *dev)
 }
 
 static void qcow2_tgt_io_done(struct ublksrv_queue *q,
-		const struct ublk_io_data *data, struct io_uring_cqe *cqe)
+		const struct ublk_io_data *data, const struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
 
