@@ -150,7 +150,7 @@ struct _ublksrv_queue {
 	int q_depth;
 
 	struct io_uring *ring_ptr;
-	struct ublksrv_dev *dev;
+	struct _ublksrv_dev *dev;
 	void *private_data;
 
 	/*
@@ -338,6 +338,11 @@ struct ublksrv_tgt_type {
 };
 
 struct ublksrv_dev {
+	struct ublksrv_tgt_info tgt;
+};
+
+struct _ublksrv_dev {
+	//keep same with ublksrv_dev
 	struct ublksrv_tgt_info tgt;
 
 	struct _ublksrv_queue *__queues[MAX_NR_HW_QUEUES];

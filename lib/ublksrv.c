@@ -54,7 +54,7 @@ static void *ublksrv_io_handler_fn(void *data);
 
 static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
 
-static int __ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
+static int __ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 		const struct ublksrv_tgt_type *ops, int type,
 		int argc, char *argv[])
 {
@@ -78,10 +78,10 @@ static int __ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
 	tgt->ops = ops;
 
 	if (dev->ctrl_dev->dev_info.state != UBLK_S_DEV_QUIESCED)
-		ret = ops->init_tgt(dev, type, argc, argv);
+		ret = ops->init_tgt(local_to_tdev(dev), type, argc, argv);
 	else {
 		if (ops->recovery_tgt)
-			ret = ops->recovery_tgt(dev, type);
+			ret = ops->recovery_tgt(local_to_tdev(dev), type);
 		else
 			ret = -ENOTSUP;
 	}
@@ -92,7 +92,7 @@ static int __ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
 	return 0;
 }
 
-static int ublksrv_tgt_init(struct ublksrv_dev *dev, const char *type_name,
+static int ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 		const struct ublksrv_tgt_type *ops,
 		int argc, char *argv[])
 {
@@ -123,14 +123,14 @@ static inline void ublksrv_tgt_exit(struct ublksrv_tgt_info *tgt)
 		close(tgt->fds[i]);
 }
 
-static void ublksrv_tgt_deinit(struct ublksrv_dev *dev)
+static void ublksrv_tgt_deinit(struct _ublksrv_dev *dev)
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 
 	ublksrv_tgt_exit(tgt);
 
 	if (tgt->ops && tgt->ops->deinit_tgt)
-		tgt->ops->deinit_tgt(dev);
+		tgt->ops->deinit_tgt(local_to_tdev(dev));
 }
 
 void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
@@ -353,20 +353,20 @@ static int ublksrv_queue_is_done(struct _ublksrv_queue *q)
 }
 
 /* used for allocating zero copy vma space */
-static inline int ublk_queue_single_io_buf_size(struct ublksrv_dev *dev)
+static inline int ublk_queue_single_io_buf_size(struct _ublksrv_dev *dev)
 {
 	unsigned max_io_sz = dev->ctrl_dev->dev_info.max_io_buf_bytes;
 	unsigned int page_sz = getpagesize();
 
 	return round_up(max_io_sz, page_sz);
 }
-static inline int ublk_queue_io_buf_size(struct ublksrv_dev *dev)
+static inline int ublk_queue_io_buf_size(struct _ublksrv_dev *dev)
 {
 	unsigned depth = dev->ctrl_dev->dev_info.queue_depth;
 
 	return ublk_queue_single_io_buf_size(dev) * depth;
 }
-static inline int ublk_io_buf_size(struct ublksrv_dev *dev)
+static inline int ublk_io_buf_size(struct _ublksrv_dev *dev)
 {
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
 
@@ -374,7 +374,7 @@ static inline int ublk_io_buf_size(struct ublksrv_dev *dev)
 }
 
 /* mmap vm space for remapping block io request pages */
-static void ublksrv_dev_deinit_io_bufs(struct ublksrv_dev *dev)
+static void ublksrv_dev_deinit_io_bufs(struct _ublksrv_dev *dev)
 {
 	unsigned long sz = ublk_io_buf_size(dev);
 
@@ -385,7 +385,7 @@ static void ublksrv_dev_deinit_io_bufs(struct ublksrv_dev *dev)
 }
 
 /* mmap vm space for remapping block io request pages */
-static int ublksrv_dev_init_io_bufs(struct ublksrv_dev *dev)
+static int ublksrv_dev_init_io_bufs(struct _ublksrv_dev *dev)
 {
 	unsigned long sz = ublk_io_buf_size(dev);
 	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
@@ -406,7 +406,7 @@ static int ublksrv_dev_init_io_bufs(struct ublksrv_dev *dev)
 
 	for (i = 0; i < nr_queues; i++) {
 		struct _ublksrv_queue *q = (struct _ublksrv_queue *)
-			ublksrv_get_queue(dev, i);
+			ublksrv_get_queue(local_to_tdev(dev), i);
 
 		q->io_buf = dev->io_buf_start + i * ublk_queue_io_buf_size(dev);
 	}
@@ -414,7 +414,7 @@ static int ublksrv_dev_init_io_bufs(struct ublksrv_dev *dev)
 	return 0;
 }
 
-static void ublksrv_dev_init_io_cmds(struct ublksrv_dev *dev, struct _ublksrv_queue *q)
+static void ublksrv_dev_init_io_cmds(struct _ublksrv_dev *dev, struct _ublksrv_queue *q)
 {
 	struct io_uring *r = &q->ring;
 	struct io_uring_sqe *sqe;
@@ -492,7 +492,7 @@ void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset)
 	}
 }
 
-static void ublksrv_set_sched_affinity(struct ublksrv_dev *dev,
+static void ublksrv_set_sched_affinity(struct _ublksrv_dev *dev,
 		unsigned short q_id)
 {
 	const struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
@@ -545,7 +545,7 @@ static int ublksrv_setup_eventfd(struct _ublksrv_queue *q)
 
 static void ublksrv_queue_adjust_uring_io_wq_workers(struct _ublksrv_queue *q)
 {
-	struct ublksrv_dev *dev = q->dev;
+	struct _ublksrv_dev *dev = q->dev;
 	unsigned int val[2] = {0, 0};
 	int ret;
 
@@ -569,9 +569,10 @@ static void ublksrv_queue_adjust_uring_io_wq_workers(struct _ublksrv_queue *q)
 				__func__, ret);
 }
 
-struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
+struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *tdev,
 		unsigned short q_id, void *queue_data)
 {
+	struct _ublksrv_dev *dev = tdev_to_local(tdev);
 	struct _ublksrv_queue *q;
 	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	int depth = ctrl_dev->dev_info.queue_depth;
@@ -702,7 +703,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 	return NULL;
 }
 
-static int ublksrv_create_pid_file(struct ublksrv_dev *dev)
+static int ublksrv_create_pid_file(struct _ublksrv_dev *dev)
 {
 	int dev_id = dev->ctrl_dev->dev_info.dev_id;
 	char pid_file[64];
@@ -727,7 +728,7 @@ static int ublksrv_create_pid_file(struct ublksrv_dev *dev)
 	return 0;
 }
 
-static void ublksrv_remove_pid_file(const struct ublksrv_dev *dev)
+static void ublksrv_remove_pid_file(const struct _ublksrv_dev *dev)
 {
 	int dev_id = dev->ctrl_dev->dev_info.dev_id;
 	char pid_file[64];
@@ -740,8 +741,9 @@ static void ublksrv_remove_pid_file(const struct ublksrv_dev *dev)
 	unlink(pid_file);
 }
 
-void ublksrv_dev_deinit(struct ublksrv_dev *dev)
+void ublksrv_dev_deinit(struct ublksrv_dev *tdev)
 {
+	struct _ublksrv_dev *dev = tdev_to_local(tdev);
 	int dev_id = dev->ctrl_dev->dev_info.dev_id;
 	int i;
 
@@ -767,11 +769,11 @@ struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 	char buf[64];
 	int ret = -1;
 	int i;
-	struct ublksrv_dev *dev = (struct ublksrv_dev *)calloc(1, sizeof(*dev));
+	struct _ublksrv_dev *dev = (struct _ublksrv_dev *)calloc(1, sizeof(*dev));
 	struct ublksrv_tgt_info *tgt;
 
 	if (!dev)
-		return dev;
+		return local_to_tdev(dev);
 
 	tgt = &dev->tgt;
 	dev->ctrl_dev = ctrl_dev;
@@ -808,9 +810,9 @@ struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 		goto fail;
 	}
 
-	return dev;
+	return local_to_tdev(dev);
 fail:
-	ublksrv_dev_deinit(dev);
+	ublksrv_dev_deinit(local_to_tdev(dev));
 	return NULL;
 }
 
@@ -1010,7 +1012,7 @@ int ublksrv_process_io(struct ublksrv_queue *tq)
 struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id)
 {
-	return (struct ublksrv_queue *)dev->__queues[q_id];
+	return (struct ublksrv_queue *)tdev_to_local(dev)->__queues[q_id];
 }
 
 /* called in ublksrv process context */
@@ -1036,12 +1038,12 @@ void ublksrv_apply_oom_protection()
 const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 		const struct ublksrv_dev *dev)
 {
-	return dev->ctrl_dev;
+	return tdev_to_local(dev)->ctrl_dev;
 }
 
 int ublksrv_get_pidfile_fd(const struct ublksrv_dev *dev)
 {
-	return dev->pid_file_fd;
+	return tdev_to_local(dev)->pid_file_fd;
 }
 
 void *ublksrv_io_private_data(const struct ublksrv_queue *tq, int tag)

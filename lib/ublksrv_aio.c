@@ -117,11 +117,11 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 struct ublksrv_aio_ctx *ublksrv_aio_ctx_init(struct ublksrv_dev *dev, unsigned
 		flags)
 {
-	unsigned nr_hw_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
+	unsigned nr_hw_queues = tdev_to_local(dev)->ctrl_dev->dev_info.nr_hw_queues;
 	struct ublksrv_aio_ctx *ctx;
 	int ret, i;
 
-	if (!(dev->ctrl_dev->dev_info.ublksrv_flags & UBLKSRV_F_NEED_EVENTFD))
+	if (!(tdev_to_local(dev)->ctrl_dev->dev_info.ublksrv_flags & UBLKSRV_F_NEED_EVENTFD))
 		return NULL;
 
 	ctx = calloc(1, sizeof(*ctx));
