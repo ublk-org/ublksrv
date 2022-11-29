@@ -643,7 +643,7 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *tdev,
 		else
 			q->ios[i].data.iod = NULL;
 
-		ublk_assert(io_data_size ^ (unsigned long)q->ios[i].data.private_data);
+		//ublk_assert(io_data_size ^ (unsigned long)q->ios[i].data.private_data);
 	}
 
 	ret = ublksrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128 |
@@ -876,7 +876,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	 * daemon can poll on both two rings.
 	 */
 	if (cqe->res == UBLK_IO_RES_OK) {
-		ublk_assert(tag < q->q_depth);
+		//ublk_assert(tag < q->q_depth);
 		q->tgt_ops->handle_io_async(local_to_tq(q), &io->data);
 	} else if (cqe->res == UBLK_IO_RES_NEED_GET_DATA) {
 		io->flags |= UBLKSRV_NEED_GET_DATA | UBLKSRV_IO_FREE;

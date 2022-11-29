@@ -113,11 +113,6 @@ static inline void ublksrv_log(int priority, const char *fmt, ...) { }
 static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
 #endif
 
-static inline unsigned ilog2(unsigned x)
-{
-    return sizeof(unsigned) * 8 - 1 - __builtin_clz(x);
-}
-
 #define round_up(val, rnd) \
 	(((val) + ((rnd) - 1)) & ~((rnd) - 1))
 
@@ -127,13 +122,6 @@ static inline unsigned ilog2(unsigned x)
 #define container_of(ptr, type, member) ({                              \
 	unsigned long __mptr = (unsigned long)(ptr);                    \
 	((type *)(__mptr - offsetof(type, member))); })
-
-#define ublk_assert(x)  do { \
-	if (!(x)) {	\
-		syslog(LOG_ERR, "%s %d: assert!\n", __func__, __LINE__); \
-		assert(x);	\
-	}	\
-} while (0)
 
 #ifdef __cplusplus
 }

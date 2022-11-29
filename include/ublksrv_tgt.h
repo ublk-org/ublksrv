@@ -11,6 +11,18 @@
 //we are free to use the private definition
 #include "ublksrv_priv.h"
 
+#define ublk_assert(x)  do { \
+	if (!(x)) {	\
+		syslog(LOG_ERR, "%s %d: assert!\n", __func__, __LINE__); \
+		assert(x);	\
+	}	\
+} while (0)
+
+static inline unsigned ilog2(unsigned x)
+{
+    return sizeof(unsigned) * 8 - 1 - __builtin_clz(x);
+}
+
 #define MAX_NR_UBLK_DEVS	128
 #define UBLKSRV_PID_DIR  "/var/run/ublksrvd"
 
