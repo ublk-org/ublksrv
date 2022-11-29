@@ -461,7 +461,7 @@ exit:
 }
 
 static int qcow2_handle_io_async(struct ublksrv_queue *q,
-		struct ublk_io_data *data)
+		const struct ublk_io_data *data)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
@@ -482,7 +482,7 @@ static void qcow2_deinit_tgt(struct ublksrv_dev *dev)
 }
 
 static void qcow2_tgt_io_done(struct ublksrv_queue *q,
-		struct ublk_io_data *data, struct io_uring_cqe *cqe)
+		const struct ublk_io_data *data, struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
 

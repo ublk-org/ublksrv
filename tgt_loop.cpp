@@ -333,7 +333,7 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 }
 
 static int loop_handle_io_async(struct ublksrv_queue *q,
-		struct ublk_io_data *data)
+		const struct ublk_io_data *data)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
@@ -341,7 +341,8 @@ static int loop_handle_io_async(struct ublksrv_queue *q,
 	return 0;
 }
 
-static void loop_tgt_io_done(struct ublksrv_queue *q, struct ublk_io_data *data,
+static void loop_tgt_io_done(struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
 		struct io_uring_cqe *cqe)
 {
 	int tag = user_data_to_tag(cqe->user_data);

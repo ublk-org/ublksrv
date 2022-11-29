@@ -489,7 +489,7 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 }
 
 static int demo_handle_io_async(struct ublksrv_queue *q,
-		struct ublk_io_data *data)
+		const struct ublk_io_data *data)
 {
 	struct ublksrv_aio *req = ublksrv_aio_alloc_req(aio_ctx, 0);
 

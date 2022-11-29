@@ -248,13 +248,15 @@ struct ublksrv_tgt_type {
 	 * has to be implemented. Otherwise, target can implement
 	 * ->handle_event() for processing io completion there.
 	 */
-	int (*handle_io_async)(struct ublksrv_queue *, struct ublk_io_data *io);
+	int (*handle_io_async)(struct ublksrv_queue *,
+			const struct ublk_io_data *io);
 
 	/*
 	 * target io is handled by our io_uring, and once the target io
 	 * is completed, this callback is called
 	 */
-	void (*tgt_io_done)(struct ublksrv_queue *, struct ublk_io_data *io,
+	void (*tgt_io_done)(struct ublksrv_queue *,
+			const struct ublk_io_data *io,
 			struct io_uring_cqe *);
 
 	/*
