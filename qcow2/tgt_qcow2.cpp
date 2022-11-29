@@ -95,7 +95,7 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	tgt->iowq_max_workers[0] = 1;
 	tgt->nr_fds = 1;
 	tgt->fds[1] = fd;
-	dev->target_data = qs = make_qcow2state(file, dev);
+	tgt->tgt_data = qs = make_qcow2state(file, dev);
 
 	jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
 	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
@@ -187,7 +187,7 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 	tgt->iowq_max_workers[0] = 1;
 	tgt->nr_fds = 1;
 	tgt->fds[1] = fd;
-	dev->target_data = make_qcow2state(file, dev);
+	tgt->tgt_data = make_qcow2state(file, dev);
 
 	return 0;
 }

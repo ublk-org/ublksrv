@@ -694,7 +694,7 @@ public:
 
 static inline Qcow2State *dev_to_qcow2state(const struct ublksrv_dev *dev)
 {
-	return (Qcow2State *)dev->target_data;
+	return (Qcow2State *)dev->tgt.tgt_data;
 }
 
 Qcow2State *make_qcow2state(const char *file, struct ublksrv_dev *dev);
