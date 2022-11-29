@@ -1039,6 +1039,11 @@ const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 	return dev->ctrl_dev;
 }
 
+int ublksrv_get_pidfile_fd(const struct ublksrv_dev *dev)
+{
+	return dev->pid_file_fd;
+}
+
 void *ublksrv_io_private_data(const struct ublksrv_queue *tq, int tag)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);

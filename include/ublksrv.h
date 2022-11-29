@@ -448,6 +448,7 @@ extern int ublksrv_json_get_length(const char *jbuf);
 
 extern const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 		const struct ublksrv_dev *dev);
+extern int ublksrv_get_pidfile_fd(const struct ublksrv_dev *dev);
 
 extern void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag);
 
