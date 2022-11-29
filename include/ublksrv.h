@@ -73,6 +73,7 @@ extern "C" {
 #define UBLKSRV_F_NEED_EVENTFD		(1UL << 1)
 
 struct ublksrv_aio_ctx;
+struct ublksrv_ctrl_dev;
 
 /*
  * Generic data for creating one ublk device
@@ -94,108 +95,15 @@ struct ublksrv_dev_data {
 	unsigned long   reserved[7];
 };
 
-struct ublksrv_ctrl_dev {
-	struct io_uring ring;
-
-	int ctrl_fd;
-	unsigned bs_shift;
-	struct ublksrv_ctrl_dev_info  dev_info;
-
-	const char *tgt_type;
-	const struct ublksrv_tgt_type *tgt_ops;
-
-	/*
-	 * default is UBLKSRV_RUN_DIR but can be specified via command line,
-	 * pid file will be saved there
-	 */
-	const char *run_dir;
-
-	union {
-		/* used by ->init_tgt() */
-		struct {
-			int tgt_argc;
-			char **tgt_argv;
-		};
-		/* used by ->recovery_tgt() */
-		const char *recovery_jbuf;
-	};
-
-	cpu_set_t *queues_cpuset;
-
-	unsigned long reserved[4];
-};
-
 struct ublk_io_data {
 	int tag;
 	const struct ublksrv_io_desc *iod;
 	void *private_data;
 };
 
-struct ublk_io {
-	char *buf_addr;
-
-#define UBLKSRV_NEED_FETCH_RQ		(1UL << 0)
-#define UBLKSRV_NEED_COMMIT_RQ_COMP	(1UL << 1)
-#define UBLKSRV_IO_FREE			(1UL << 2)
-#define UBLKSRV_NEED_GET_DATA		(1UL << 3)
-	unsigned int flags;
-
-	/* result is updated after all target ios are done */
-	unsigned int result;
-
-	struct ublk_io_data  data;
-};
-
-struct _ublksrv_queue {
-	int q_id;
-	int q_depth;
-
-	struct io_uring *ring_ptr;
-	struct _ublksrv_dev *dev;
-	void *private_data;
-
-	/*
-	 * Read only by ublksrv daemon, setup via mmap on /dev/ublkcN.
-	 *
-	 * ublksrv_io_desc(iod) is stored in this buffer, so iod
-	 * can be retrieved by request's tag directly.
-	 * 
-	 * ublksrv writes the iod into this array, and notify ublksrv daemon
-	 * by issued io_uring command beforehand.
-	 * */
-	char *io_cmd_buf;
-	char *io_buf;
-
-	unsigned cmd_inflight, tgt_io_inflight;	//obsolete
+/* queue state is only retrieved via ublksrv_queue_state() API */
 #define UBLKSRV_QUEUE_STOPPING	(1U << 0)
 #define UBLKSRV_QUEUE_IDLE	(1U << 1)
-	unsigned state;
-
-	/* eventfd */
-	int efd;
-
-	/* cache tgt ops */
-	const struct ublksrv_tgt_type *tgt_ops;
-
-	/*
-	 * ring for submit io command to ublk driver, can only be issued
-	 * from ublksrv daemon.
-	 *
-	 * ring depth == dev_info->queue_depth.
-	 */
-	struct io_uring ring;
-
-	unsigned  tid;
-
-#define UBLKSRV_NR_CTX_BATCH 4
-	int nr_ctxs;
-	struct ublksrv_aio_ctx *ctxs[UBLKSRV_NR_CTX_BATCH];
-
-	unsigned long reserved[8];
-
-	struct ublk_io ios[0];
-};
-
 struct ublksrv_queue {
 	int q_id;
 	int q_depth;
@@ -205,7 +113,6 @@ struct ublksrv_queue {
 	void *private_data;
 };
 
-#define  UBLKSRV_TGT_MAX_FDS	32
 enum {
 	/* evaluate communication cost, ublksrv_null vs /dev/nullb0 */
 	UBLKSRV_TGT_TYPE_NULL,
@@ -220,6 +127,7 @@ enum {
 
 struct ublksrv_tgt_type;
 
+#define  UBLKSRV_TGT_MAX_FDS	32
 struct ublksrv_tgt_info {
 	unsigned long long dev_size;
 	unsigned int tgt_ring_depth;	/* at most in-flight ios */
@@ -244,6 +152,10 @@ struct ublksrv_tgt_info {
 	unsigned int iowq_max_workers[2];
 
 	unsigned long reserved[4];
+};
+
+struct ublksrv_dev {
+	struct ublksrv_tgt_info tgt;
 };
 
 struct ublksrv_tgt_type {
@@ -336,26 +248,6 @@ struct ublksrv_tgt_type {
 	int (*recovery_tgt)(struct ublksrv_dev *, int type);
 
 	unsigned long reserved[7];
-};
-
-struct ublksrv_dev {
-	struct ublksrv_tgt_info tgt;
-};
-
-struct _ublksrv_dev {
-	//keep same with ublksrv_dev
-	struct ublksrv_tgt_info tgt;
-
-	struct _ublksrv_queue *__queues[MAX_NR_HW_QUEUES];
-	char	*io_buf_start;
-	pthread_t *thread;
-	int cdev_fd;
-	int pid_file_fd;
-
-	const struct ublksrv_ctrl_dev *ctrl_dev;
-	void	*target_data;
-
-	unsigned long reserved[4];
 };
 
 static inline __u64 build_user_data(unsigned tag, unsigned op,

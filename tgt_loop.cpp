@@ -4,7 +4,6 @@
 
 #include <poll.h>
 #include <sys/epoll.h>
-#include "ublksrv_aio.h"
 #include "ublksrv_tgt.h"
 
 static bool backing_supports_discard(char *name)

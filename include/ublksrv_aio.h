@@ -3,8 +3,6 @@
 #ifndef UBLKSRV_AIO_INC_H
 #define UBLKSRV_AIO_INC_H
 
-#include "ublksrv_priv.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif

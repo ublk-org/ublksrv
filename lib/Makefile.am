@@ -11,9 +11,9 @@ libublksrv_la_SOURCES = \
 libublksrv_la_CFLAGS = \
 	$(WARNING_CFLAGS) \
 	$(LIBURING_CFLAGS) \
-	$(PTHREAD_CFLAGS)
+	$(PTHREAD_CFLAGS) -DUBLKSRV_INTERNAL_H_
 libublksrv_la_CPPFLAGS = \
-	-I$(top_srcdir)/include
+	-I$(top_srcdir)/include -DUBLKSRV_INTERNAL_H_
 libublksrv_la_LIBADD = \
 	$(LIBURING_LIBS) \
 	$(PTHREAD_LIBS)
