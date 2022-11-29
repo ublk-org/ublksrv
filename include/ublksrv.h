@@ -124,6 +124,12 @@ struct ublksrv_ctrl_dev {
 	unsigned long reserved[4];
 };
 
+struct ublk_io_data {
+	int tag;
+	const struct ublksrv_io_desc *iod;
+	void *private_data;
+};
+
 struct ublk_io {
 	char *buf_addr;
 
@@ -136,8 +142,7 @@ struct ublk_io {
 	/* result is updated after all target ios are done */
 	unsigned int result;
 
-	/* todo: inline private data */
-	void *private_data;
+	struct ublk_io_data  data;
 };
 
 struct ublksrv_queue {
@@ -191,7 +196,7 @@ struct ublksrv_queue {
 
 static inline void *ublk_io_private_data(const struct ublksrv_queue *q, int tag)
 {
-	return q->ios[tag].private_data;
+	return q->ios[tag].data.private_data;
 }
 
 #define  UBLKSRV_TGT_MAX_FDS	32
@@ -243,13 +248,14 @@ struct ublksrv_tgt_type {
 	 * has to be implemented. Otherwise, target can implement
 	 * ->handle_event() for processing io completion there.
 	 */
-	int (*handle_io_async)(struct ublksrv_queue *, int tag);
+	int (*handle_io_async)(struct ublksrv_queue *, struct ublk_io_data *io);
 
 	/*
 	 * target io is handled by our io_uring, and once the target io
 	 * is completed, this callback is called
 	 */
-	void (*tgt_io_done)(struct ublksrv_queue *, struct io_uring_cqe *);
+	void (*tgt_io_done)(struct ublksrv_queue *, struct ublk_io_data *io,
+			struct io_uring_cqe *);
 
 	/*
 	 * Someone has written to our eventfd, so let target handle the
@@ -339,7 +345,8 @@ struct ublksrv_dev {
 	unsigned long reserved[4];
 };
 
-static inline struct ublksrv_io_desc *ublksrv_get_iod(struct ublksrv_queue *q, int tag)
+static inline struct ublksrv_io_desc *ublksrv_get_iod(
+		const struct ublksrv_queue *q, int tag)
 {
         return (struct ublksrv_io_desc *)
                 &(q->io_cmd_buf[tag * sizeof(struct ublksrv_io_desc)]);
@@ -441,6 +448,8 @@ extern int ublksrv_json_get_length(const char *jbuf);
 
 extern const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 		const struct ublksrv_dev *dev);
+
+extern void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag);
 
 static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 {

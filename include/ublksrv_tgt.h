@@ -117,9 +117,15 @@ struct ublk_io_tgt {
 	int queued_tgt_io;	/* obsolete */
 };
 
-static inline struct ublk_io_tgt *ublk_get_io_tgt_data(struct ublk_io *io)
+static inline struct ublk_io_tgt *__ublk_get_io_tgt_data(struct ublk_io_data *io)
 {
 	return (struct ublk_io_tgt *)io->private_data;
+}
+
+static inline struct ublk_io_tgt *ublk_get_io_tgt_data(
+		const struct ublksrv_queue *q, int tag)
+{
+	return (struct ublk_io_tgt *)ublksrv_io_private_data(q, tag);
 }
 
 //static_assert(sizeof(struct ublk_io_tgt) == sizeof(struct ublk_io), "ublk_io is defined as wrong");

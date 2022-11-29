@@ -453,7 +453,7 @@ void ublksrv_queue_deinit(struct ublksrv_queue *q)
 				free(q->ios[i].buf_addr);
 			q->ios[i].buf_addr = NULL;
 		}
-		free(q->ios[i].private_data);
+		free(q->ios[i].data.private_data);
 	}
 	q->dev->__queues[q->q_id] = NULL;
 	free(q);
@@ -619,9 +619,14 @@ struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
 			goto fail;
 		}
 		q->ios[i].flags = UBLKSRV_NEED_FETCH_RQ | UBLKSRV_IO_FREE;
-		q->ios[i].private_data = malloc(io_data_size);
+		q->ios[i].data.private_data = malloc(io_data_size);
+		q->ios[i].data.tag = i;
+		if (i < q->q_depth)
+			q->ios[i].data.iod = ublksrv_get_iod(q, i);
+		else
+			q->ios[i].data.iod = NULL;
 
-		ublk_assert(io_data_size ^ (unsigned long)q->ios[i].private_data);
+		ublk_assert(io_data_size ^ (unsigned long)q->ios[i].data.private_data);
 	}
 
 	ret = ublksrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128 |
@@ -810,7 +815,7 @@ static inline void ublksrv_handle_tgt_cqe(struct ublksrv_queue *q,
 			q->tgt_ops->handle_event(q);
 	} else {
 		if (q->tgt_ops->tgt_io_done)
-			q->tgt_ops->tgt_io_done(q, cqe);
+			q->tgt_ops->tgt_io_done(q, &q->ios[tag].data, cqe);
 	}
 }
 
@@ -851,7 +856,8 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 	 * daemon can poll on both two rings.
 	 */
 	if (cqe->res == UBLK_IO_RES_OK) {
-		q->tgt_ops->handle_io_async(q, tag);
+		ublk_assert(tag < q->q_depth);
+		q->tgt_ops->handle_io_async(q, &io->data);
 	} else if (cqe->res == UBLK_IO_RES_NEED_GET_DATA) {
 		io->flags |= UBLKSRV_NEED_GET_DATA | UBLKSRV_IO_FREE;
 		ublksrv_queue_io_cmd(q, io, tag);
@@ -1012,4 +1018,9 @@ const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 		const struct ublksrv_dev *dev)
 {
 	return dev->ctrl_dev;
+}
+
+void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag)
+{
+	return q->ios[tag].data.private_data;
 }

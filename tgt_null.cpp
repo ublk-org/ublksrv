@@ -87,11 +87,12 @@ static co_io_job __null_handle_io_async(struct ublksrv_queue *q,
 	co_io_job_return();
 }
 
-static int null_handle_io_async(struct ublksrv_queue *q, int tag)
+static int null_handle_io_async(struct ublksrv_queue *q,
+		struct ublk_io_data *data)
 {
-	struct ublk_io_tgt *data = ublk_get_io_tgt_data(&q->ios[tag]);
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-	data->co = __null_handle_io_async(q, data, tag);
+	io->co = __null_handle_io_async(q, io, data->tag);
 
 	return 0;
 }

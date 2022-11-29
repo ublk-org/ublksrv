@@ -460,11 +460,12 @@ exit:
 	ublksrv_complete_io(q, tag, ret);
 }
 
-static int qcow2_handle_io_async(struct ublksrv_queue *q, int tag)
+static int qcow2_handle_io_async(struct ublksrv_queue *q,
+		struct ublk_io_data *data)
 {
-	struct ublk_io_tgt *io = ublk_get_io_tgt_data(&q->ios[tag]);
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-	io->co = __qcow2_handle_io_async(q, io, tag);
+	io->co = __qcow2_handle_io_async(q, io, data->tag);
 	return 0;
 }
 
@@ -480,7 +481,8 @@ static void qcow2_deinit_tgt(struct ublksrv_dev *dev)
 	delete qs;
 }
 
-static void qcow2_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
+static void qcow2_tgt_io_done(struct ublksrv_queue *q,
+		struct ublk_io_data *data, struct io_uring_cqe *cqe)
 {
 	unsigned tag = user_data_to_tag(cqe->user_data);
 
@@ -491,7 +493,7 @@ static void qcow2_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
 	//special tag is ignored, so far it is used in sending
 	//fsync during flushing meta
 	if (tag != 0xffff) {
-		struct ublk_io_tgt *io = ublk_get_io_tgt_data(&q->ios[tag]);
+		struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 		io->tgt_io_cqe = cqe;
 		io->co.resume();
 	}

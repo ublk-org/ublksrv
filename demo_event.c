@@ -488,14 +488,14 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	return 0;
 }
 
-static int demo_handle_io_async(struct ublksrv_queue *q, int tag)
+static int demo_handle_io_async(struct ublksrv_queue *q,
+		struct ublk_io_data *data)
 {
-	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
 	struct ublksrv_aio *req = ublksrv_aio_alloc_req(aio_ctx, 0);
 
-	req->io = *iod;
+	req->io = *data->iod;
 	req->fd = backing_fd;
-	req->id = ublksrv_aio_pid_tag(q->q_id, tag);
+	req->id = ublksrv_aio_pid_tag(q->q_id, data->tag);
 	ublksrv_aio_submit_req(aio_ctx, q, req);
 
 	return 0;

@@ -332,26 +332,29 @@ static co_io_job __loop_handle_io_async(struct ublksrv_queue *q,
 	}
 }
 
-static int loop_handle_io_async(struct ublksrv_queue *q, int tag)
+static int loop_handle_io_async(struct ublksrv_queue *q,
+		struct ublk_io_data *data)
 {
-	struct ublk_io_tgt *io = ublk_get_io_tgt_data(&q->ios[tag]);
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-	io->co = __loop_handle_io_async(q, io, tag);
+	io->co = __loop_handle_io_async(q, io, data->tag);
 	return 0;
 }
 
-static void loop_tgt_io_done(struct ublksrv_queue *q, struct io_uring_cqe *cqe)
+static void loop_tgt_io_done(struct ublksrv_queue *q, struct ublk_io_data *data,
+		struct io_uring_cqe *cqe)
 {
 	int tag = user_data_to_tag(cqe->user_data);
-	struct ublk_io_tgt *io = ublk_get_io_tgt_data(&q->ios[tag]);
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
+	ublk_assert(tag == data->tag);
 	if (!io->queued_tgt_io)
 		syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
 			__func__, cqe->res, q->q_id,
 			user_data_to_tag(cqe->user_data),
 			user_data_to_op(cqe->user_data));
 	io->tgt_io_cqe = cqe;
-	((struct ublk_io_tgt *)io)->co.resume();
+	io->co.resume();
 }
 
 static void loop_deinit_tgt(struct ublksrv_dev *dev)

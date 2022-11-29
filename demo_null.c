@@ -184,11 +184,12 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	return 0;
 }
 
-static int demo_handle_io_async(struct ublksrv_queue *q, int tag)
+static int demo_handle_io_async(struct ublksrv_queue *q,
+		struct ublk_io_data *data)
 {
-	const struct ublksrv_io_desc *iod = ublksrv_get_iod(q, tag);
+	const struct ublksrv_io_desc *iod = data->iod;
 
-	ublksrv_complete_io(q, tag, iod->nr_sectors << 9);
+	ublksrv_complete_io(q, data->tag, iod->nr_sectors << 9);
 
 	return 0;
 }

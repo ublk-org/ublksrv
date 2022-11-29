@@ -138,7 +138,7 @@ void MetaFlushingState::__write_slices(Qcow2State &qs,
 		m = *it;
 		it = v1.erase(it);
 		m->get_ref();
-		io = ublk_get_io_tgt_data(&q->ios[tag]);
+		io = ublk_get_io_tgt_data(q, tag);
 		io->co = __write_slice_co(qs, q, m, io, tag);
 	}
 }
@@ -204,7 +204,7 @@ void MetaFlushingState::__write_top(Qcow2State &qs,
 	if (tag == -1)
 		return;
 
-	io = ublk_get_io_tgt_data(&q->ios[tag]);
+	io = ublk_get_io_tgt_data(q, tag);
 	io->co = __write_top_co(qs, q, io, tag);
 }
 
@@ -352,7 +352,7 @@ void MetaFlushingState::__zero_my_cluster(Qcow2State &qs,
 		return;
 
 	m->get_ref();
-	io = ublk_get_io_tgt_data(&q->ios[tag]);
+	io = ublk_get_io_tgt_data(q, tag);
 	io->co = __zero_my_cluster_co(qs, q, io, tag, m);
 }
 
