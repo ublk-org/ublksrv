@@ -130,8 +130,15 @@ static int ublksrv_tgt_store_dev_data(struct ublksrv_dev *dev,
 {
 	int ret;
 	int len = ublksrv_json_get_length(buf);
+	int fd = ublksrv_get_pidfile_fd(dev);
 
-	ret = pwrite(dev->pid_file_fd, buf, len, JSON_OFFSET);
+	if (fd < 0) {
+		syslog(LOG_ERR, "fail to get fd of pid file, ret %d\n",
+				fd);
+		return fd;
+	}
+
+	ret = pwrite(fd, buf, len, JSON_OFFSET);
 	if (ret <= 0)
 		syslog(LOG_ERR, "fail to write json data to pid file, ret %d\n",
 				ret);
