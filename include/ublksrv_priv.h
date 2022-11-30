@@ -20,7 +20,7 @@
 #include <sys/poll.h>
 
 #include "ublk_cmd.h"
-#include "utils.h"
+#include "ublksrv_utils.h"
 #include "ublksrv.h"
 #include "ublksrv_aio.h"
 

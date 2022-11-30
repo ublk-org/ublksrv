@@ -18,7 +18,7 @@
 #include <iostream>
 #include <type_traits>
 
-#include "utils.h"
+#include "ublksrv_utils.h"
 #include "ublksrv.h"
 
 #define ublk_assert(x)  do { \
