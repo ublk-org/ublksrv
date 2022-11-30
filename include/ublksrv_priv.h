@@ -63,12 +63,14 @@ struct ublk_io {
 };
 
 struct _ublksrv_queue {
+	/********** part of API, can't change ************/
 	int q_id;
 	int q_depth;
 
 	struct io_uring *ring_ptr;
 	struct _ublksrv_dev *dev;
 	void *private_data;
+	/*************************************************/
 
 	/*
 	 * Read only by ublksrv daemon, setup via mmap on /dev/ublkcN.
@@ -112,7 +114,9 @@ struct _ublksrv_queue {
 
 struct _ublksrv_dev {
 	//keep same with ublksrv_dev
+	/********** part of API, can't change ************/
 	struct ublksrv_tgt_info tgt;
+	/************************************************/
 
 	struct _ublksrv_queue *__queues[MAX_NR_HW_QUEUES];
 	char	*io_buf_start;
