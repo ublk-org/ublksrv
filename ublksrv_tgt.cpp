@@ -243,7 +243,7 @@ static void *ublksrv_io_handler_fn(void *data)
 		ublksrv_ctrl_get_dev_info(cdev);
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
-	struct ublksrv_queue *q;
+	const struct ublksrv_queue *q;
 	int ret;
 	int buf_size;
 	char *buf;

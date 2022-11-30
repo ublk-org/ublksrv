@@ -109,7 +109,7 @@ struct ublksrv_queue {
 	int q_depth;
 
 	struct io_uring *ring_ptr;
-	struct ublksrv_dev *dev;
+	const struct ublksrv_dev *dev;
 	void *private_data;
 };
 
@@ -346,15 +346,15 @@ static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 
 extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
 
-extern struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *dev,
+extern const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data);
-extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
+extern void ublksrv_queue_deinit(const struct ublksrv_queue *q);
 extern int ublksrv_queue_handled_event(const struct ublksrv_queue *q);
-extern int ublksrv_queue_send_event(struct ublksrv_queue *q);
-extern struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
+extern int ublksrv_queue_send_event(const struct ublksrv_queue *q);
+extern const struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id);
 
-extern int ublksrv_process_io(struct ublksrv_queue *q);
+extern int ublksrv_process_io(const struct ublksrv_queue *q);
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
 
 extern void ublksrv_apply_oom_protection();

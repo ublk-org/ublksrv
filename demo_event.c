@@ -19,7 +19,7 @@ static struct ublksrv_aio_ctx *aio_ctx = NULL;
 static pthread_t io_thread;
 struct demo_queue_info {
 	const struct ublksrv_dev *dev;
-	struct ublksrv_queue *q;
+	const struct ublksrv_queue *q;
 	int qid;
 
 	pthread_t thread;
@@ -33,7 +33,7 @@ static char jbuf[4096];
 
 static void sig_handler(int sig)
 {
-	struct ublksrv_queue *q = ublksrv_get_queue(this_dev, 0);
+	const struct ublksrv_queue *q = ublksrv_get_queue(this_dev, 0);
 	unsigned state = ublksrv_queue_state(q);
 
 	fprintf(stderr, "got signal %d, stopping %d\n", sig,
@@ -313,7 +313,7 @@ static void *demo_event_io_handler_fn(void *data)
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
-	struct ublksrv_queue *q;
+	const struct ublksrv_queue *q;
 
 	pthread_mutex_lock(&jbuf_lock);
 	ublksrv_json_write_queue_info(ublksrv_get_ctrl_dev(dev), jbuf, sizeof jbuf,

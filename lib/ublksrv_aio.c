@@ -81,7 +81,7 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 		return;
 
 	if (ctx->flags & UBLKSRV_AIO_QUEUE_WIDE) {
-		struct ublksrv_queue *tq = ublksrv_get_queue(ctx->dev,
+		const struct ublksrv_queue *tq = ublksrv_get_queue(ctx->dev,
 				ublksrv_aio_qid(completed->head->id));
 
 		this_q = tq_to_local(tq);
@@ -95,13 +95,13 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 
 	while (!aio_list_empty(completed)) {
 		struct ublksrv_aio_list *compl;
-		struct ublksrv_queue *tq = ublksrv_get_queue(ctx->dev,
+		const struct ublksrv_queue *tq = ublksrv_get_queue(ctx->dev,
 				ublksrv_aio_qid(completed->head->id));
 
 		this_q = tq_to_local(tq);
 		while (req = aio_list_pop(completed)) {
-			struct ublksrv_queue *q = ublksrv_get_queue(ctx->dev,
-					ublksrv_aio_qid(req->id));
+			const struct ublksrv_queue *q = ublksrv_get_queue(
+					ctx->dev, ublksrv_aio_qid(req->id));
 
 			if (q == local_to_tq(this_q))
 				aio_list_add(&this, req);

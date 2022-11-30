@@ -41,7 +41,7 @@ static void *demo_null_io_handler_fn(void *data)
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
-	struct ublksrv_queue *q;
+	const struct ublksrv_queue *q;
 
 	sched_setscheduler(getpid(), SCHED_RR, NULL);
 

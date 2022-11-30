@@ -255,7 +255,7 @@ int ublksrv_queue_handled_event(const struct ublksrv_queue *tq)
  *
  * This API is usually called from other context.
  */
-int ublksrv_queue_send_event(struct ublksrv_queue *tq)
+int ublksrv_queue_send_event(const struct ublksrv_queue *tq)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
 
@@ -381,7 +381,7 @@ static int ublksrv_queue_cmd_buf_sz(struct _ublksrv_queue *q)
 	return round_up(size, page_sz);
 }
 
-void ublksrv_queue_deinit(struct ublksrv_queue *tq)
+void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
 	int i;
@@ -511,7 +511,7 @@ static void ublksrv_queue_adjust_uring_io_wq_workers(struct _ublksrv_queue *q)
 				__func__, ret);
 }
 
-struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
+const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 		unsigned short q_id, void *queue_data)
 {
 	struct _ublksrv_dev *dev = tdev_to_local(tdev);
@@ -903,7 +903,7 @@ static void ublksrv_submit_aio_batch(struct _ublksrv_queue *q)
 	}
 }
 
-int ublksrv_process_io(struct ublksrv_queue *tq)
+int ublksrv_process_io(const struct ublksrv_queue *tq)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
 	int ret, reapped;
@@ -951,10 +951,10 @@ int ublksrv_process_io(struct ublksrv_queue *tq)
 	return reapped;
 }
 
-struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
+const struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id)
 {
-	return (struct ublksrv_queue *)tdev_to_local(dev)->__queues[q_id];
+	return (const struct ublksrv_queue *)tdev_to_local(dev)->__queues[q_id];
 }
 
 /* called in ublksrv process context */
