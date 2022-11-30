@@ -18,7 +18,7 @@ static int backing_fd = -1;
 static struct ublksrv_aio_ctx *aio_ctx = NULL;
 static pthread_t io_thread;
 struct demo_queue_info {
-	struct ublksrv_dev *dev;
+	const struct ublksrv_dev *dev;
 	struct ublksrv_queue *q;
 	int qid;
 
@@ -26,7 +26,7 @@ struct demo_queue_info {
 };
 
 static struct ublksrv_ctrl_dev *this_ctrl_dev;
-static struct ublksrv_dev *this_dev;
+static const struct ublksrv_dev *this_dev;
 
 static pthread_mutex_t jbuf_lock;
 static char jbuf[4096];
@@ -308,7 +308,7 @@ static void *demo_event_real_io_handler_fn(void *data)
 static void *demo_event_io_handler_fn(void *data)
 {
 	struct demo_queue_info *info = (struct demo_queue_info *)data;
-	struct ublksrv_dev *dev = info->dev;
+	const struct ublksrv_dev *dev = info->dev;
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	unsigned dev_id = dinfo->dev_id;
@@ -375,7 +375,7 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
 	int dev_id = dinfo->dev_id;
 	int ret, i;
-	struct ublksrv_dev *dev;
+	const struct ublksrv_dev *dev;
 	struct demo_queue_info *info_array;
 	void *thread_ret;
 

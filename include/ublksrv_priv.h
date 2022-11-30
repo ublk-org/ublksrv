@@ -230,7 +230,7 @@ struct ublksrv_aio_ctx {
 	unsigned int		flags;
 	bool dead;
 
-	struct ublksrv_dev *dev;
+	const struct ublksrv_dev *dev;
 
 	void *ctx_data;
 

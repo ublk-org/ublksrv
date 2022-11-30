@@ -9,7 +9,7 @@ static int queues_stored = 0;
 static char *jbuf = NULL;
 
 struct ublksrv_queue_info {
-	struct ublksrv_dev *dev;
+	const struct ublksrv_dev *dev;
 	int qid;
 	pthread_t thread;
 };
@@ -152,7 +152,7 @@ char *ublksrv_tgt_return_json_buf(struct ublksrv_dev *dev, int *size)
 	return buf;
 }
 
-static char *__ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size)
+static char *__ublksrv_tgt_realloc_json_buf(const struct ublksrv_dev *dev, int *size)
 {
 	if (jbuf == NULL)
 		jbuf_size = 1024;
@@ -176,7 +176,7 @@ char *ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size)
 	return buf;
 }
 
-static int ublksrv_tgt_store_dev_data(struct ublksrv_dev *dev,
+static int ublksrv_tgt_store_dev_data(const struct ublksrv_dev *dev,
 		const char *buf)
 {
 	int ret;
@@ -237,7 +237,7 @@ static char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev)
 static void *ublksrv_io_handler_fn(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
-	struct ublksrv_dev *dev = info->dev;
+	const struct ublksrv_dev *dev = info->dev;
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(cdev);
@@ -315,7 +315,7 @@ static void setup_pthread_sigmask()
  * Now STOP DEV ctrl command has been sent to /dev/ublk-control,
  * and wait until all pending fetch commands are canceled
  */
-static void ublksrv_drain_fetch_commands(struct ublksrv_dev *dev,
+static void ublksrv_drain_fetch_commands(const struct ublksrv_dev *dev,
 		struct ublksrv_queue_info *info)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
@@ -337,7 +337,7 @@ static void ublksrv_io_handler(void *data)
 	int dev_id = dinfo->dev_id;
 	int i;
 	char buf[32];
-	struct ublksrv_dev *dev;
+	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);

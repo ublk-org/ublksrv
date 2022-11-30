@@ -10,7 +10,7 @@
 #define UBLKSRV_TGT_TYPE_DEMO  0
 
 struct demo_queue_info {
-	struct ublksrv_dev *dev;
+	const struct ublksrv_dev *dev;
 	int qid;
 	pthread_t thread;
 };
@@ -36,7 +36,7 @@ static void sig_handler(int sig)
 static void *demo_null_io_handler_fn(void *data)
 {
 	struct demo_queue_info *info = (struct demo_queue_info *)data;
-	struct ublksrv_dev *dev = info->dev;
+	const struct ublksrv_dev *dev = info->dev;
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	unsigned dev_id = dinfo->dev_id;
@@ -99,7 +99,7 @@ static void demo_null_set_parameters(struct ublksrv_ctrl_dev *cdev,
 static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int ret, i;
-	struct ublksrv_dev *dev;
+	const struct ublksrv_dev *dev;
 	struct demo_queue_info *info_array;
 	void *thread_ret;
 	const struct ublksrv_ctrl_dev_info *dinfo =

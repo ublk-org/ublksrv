@@ -511,7 +511,7 @@ static void ublksrv_queue_adjust_uring_io_wq_workers(struct _ublksrv_queue *q)
 				__func__, ret);
 }
 
-struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *tdev,
+struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 		unsigned short q_id, void *queue_data)
 {
 	struct _ublksrv_dev *dev = tdev_to_local(tdev);
@@ -683,7 +683,7 @@ static void ublksrv_remove_pid_file(const struct _ublksrv_dev *dev)
 	unlink(pid_file);
 }
 
-void ublksrv_dev_deinit(struct ublksrv_dev *tdev)
+void ublksrv_dev_deinit(const struct ublksrv_dev *tdev)
 {
 	struct _ublksrv_dev *dev = tdev_to_local(tdev);
 	int dev_id = dev->ctrl_dev->dev_info.dev_id;
@@ -703,7 +703,7 @@ void ublksrv_dev_deinit(struct ublksrv_dev *tdev)
 	free(dev);
 }
 
-struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
+const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int nr_queues = ctrl_dev->dev_info.nr_hw_queues;
 	int dev_id = ctrl_dev->dev_info.dev_id;

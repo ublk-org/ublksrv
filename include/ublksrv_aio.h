@@ -108,8 +108,8 @@ static inline void ublksrv_aio_init_list(struct ublksrv_aio_list *l)
 	aio_list_init(&l->list);
 }
 
-struct ublksrv_aio_ctx *ublksrv_aio_ctx_init(struct ublksrv_dev *dev, unsigned
-		flags);
+struct ublksrv_aio_ctx *ublksrv_aio_ctx_init(const struct ublksrv_dev *dev,
+		unsigned flags);
 void ublksrv_aio_ctx_shutdown(struct ublksrv_aio_ctx *ctx);
 void ublksrv_aio_ctx_deinit(struct ublksrv_aio_ctx *ctx);
 struct ublksrv_aio *ublksrv_aio_alloc_req(struct ublksrv_aio_ctx *ctx,

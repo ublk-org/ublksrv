@@ -286,9 +286,9 @@ extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 		const char *recovery_jbuf);
 extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev);
 
-extern struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
+extern const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);
-extern void ublksrv_dev_deinit(struct ublksrv_dev *dev);
+extern void ublksrv_dev_deinit(const struct ublksrv_dev *dev);
 
 /* target json has to include the following key/value */
 #define UBLKSRV_TGT_NAME_MAX_LEN 32
@@ -346,7 +346,7 @@ static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
 
 extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
 
-extern struct ublksrv_queue *ublksrv_queue_init(struct ublksrv_dev *dev,
+extern struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data);
 extern void ublksrv_queue_deinit(struct ublksrv_queue *q);
 extern int ublksrv_queue_handled_event(const struct ublksrv_queue *q);

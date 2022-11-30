@@ -115,8 +115,8 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 	}
 }
 
-struct ublksrv_aio_ctx *ublksrv_aio_ctx_init(struct ublksrv_dev *dev, unsigned
-		flags)
+struct ublksrv_aio_ctx *ublksrv_aio_ctx_init(const struct ublksrv_dev *dev,
+		unsigned flags)
 {
 	unsigned nr_hw_queues = tdev_to_local(dev)->ctrl_dev->dev_info.nr_hw_queues;
 	struct ublksrv_aio_ctx *ctx;
