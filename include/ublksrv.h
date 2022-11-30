@@ -22,17 +22,7 @@ extern "C" {
 #define	DEF_QD		128
 #define	DEF_BUF_SIZE	(512 << 10)
 
-#define UBLKSRV_SHM_DIR	"ublksrv"
-#define UBLKSRV_SHM_SIZE  1024
-
 /************ stored in ublksrv_ctrl_dev_info->ublksrv_flags *******/
-/*
- * HAS_IO_DAEMON means io handler has its own daemon context which isn't
- * same with control command context, so shared memory communication is
- * required between control task and io daemon
- */
-#define UBLKSRV_F_HAS_IO_DAEMON		(1UL << 0)
-
 /*
  * target may not use io_uring for handling io, so eventfd is required
  * for wakeup io command io_uring context
@@ -307,11 +297,6 @@ extern const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 extern int ublksrv_get_pidfile_fd(const struct ublksrv_dev *dev);
 
 extern void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag);
-
-static inline void *ublksrv_queue_get_data(const struct ublksrv_queue *q)
-{
-	return q->private_data;
-}
 
 extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
 

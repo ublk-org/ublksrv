@@ -570,7 +570,6 @@ static int cmd_dev_add(int argc, char *argv[])
 	data.queue_depth = DEF_QD;
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
 	data.dev_id = -1;
-	data.ublksrv_flags |= UBLKSRV_F_HAS_IO_DAEMON;
 	data.run_dir = UBLKSRV_PID_DIR;
 
 	mkpath(data.run_dir);
