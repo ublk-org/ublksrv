@@ -38,6 +38,8 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
+	ublksrv_tgt_set_io_data_size(tgt);
+
 	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
 	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
 
@@ -71,6 +73,7 @@ static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 		return ret;
 	}
 
+	ublksrv_tgt_set_io_data_size(tgt);
 	tgt->dev_size = p.basic.dev_sectors << 9;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;

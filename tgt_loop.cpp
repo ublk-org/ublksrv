@@ -79,6 +79,7 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 	if (direct_io)
 		fcntl(fd, F_SETFL, O_DIRECT);
 
+	ublksrv_tgt_set_io_data_size(tgt);
 	tgt->tgt_data = strdup(file);
 	tgt->dev_size = p.basic.dev_sectors << 9;
 	tgt->tgt_ring_depth = info->queue_depth;
@@ -184,6 +185,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		buffered_io = 1;
 	}
 
+	ublksrv_tgt_set_io_data_size(tgt);
 	tgt->tgt_data = strdup(file);
 	tgt_json.dev_size = tgt->dev_size = bytes;
 	tgt->tgt_ring_depth = info->queue_depth;

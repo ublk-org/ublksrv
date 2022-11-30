@@ -139,6 +139,11 @@ static inline struct ublk_io_tgt *ublk_get_io_tgt_data(
 	return (struct ublk_io_tgt *)ublksrv_io_private_data(q, tag);
 }
 
+static inline void ublksrv_tgt_set_io_data_size(struct ublksrv_tgt_info *tgt)
+{
+	tgt->io_data_size = sizeof(struct ublk_io_tgt);
+}
+
 //static_assert(sizeof(struct ublk_io_tgt) == sizeof(struct ublk_io), "ublk_io is defined as wrong");
 
 enum {

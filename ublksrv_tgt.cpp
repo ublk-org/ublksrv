@@ -353,8 +353,6 @@ static void ublksrv_io_handler(void *data)
 		goto out;
 	}
 
-	dev->tgt.io_data_size = sizeof(struct ublk_io_tgt);
-
 	setup_pthread_sigmask();
 	ublksrv_apply_oom_protection();
 
