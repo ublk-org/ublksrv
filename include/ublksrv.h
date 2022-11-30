@@ -15,8 +15,8 @@ extern "C" {
 #include "ublk_cmd.h"
 
 #define	MAX_NR_HW_QUEUES 32
-#define	MAX_QD		1024
-#define	MAX_BUF_SIZE	(1024 << 10)
+#define	MAX_QD		UBLK_MAX_QUEUE_DEPTH
+#define	MAX_BUF_SIZE    (32U << 20)
 
 #define	DEF_NR_HW_QUEUES 1
 #define	DEF_QD		128
