@@ -3,11 +3,22 @@
 #ifndef UBLKSRV_TGT_INC_H
 #define UBLKSRV_TGT_INC_H
 
+#include <unistd.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <getopt.h>
+#include <string.h>
+#include <stdarg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+
 #include <libgen.h>
 #include <coroutine>
 #include <iostream>
 #include <type_traits>
 
+#include "utils.h"
 #include "ublksrv.h"
 
 #define ublk_assert(x)  do { \

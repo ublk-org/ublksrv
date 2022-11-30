@@ -4,42 +4,9 @@
 #define UBLKSRV_INC_H
 
 #include <stdbool.h>
-#include <stdio.h>
-#include <errno.h>
 #include <assert.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <signal.h>
-#include <inttypes.h>
-#include <math.h>
-#include <getopt.h>
-#include <stdarg.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
-#include <sys/syscall.h>
-#include <sys/resource.h>
-#include <sys/mman.h>
-#include <sys/uio.h>
-#include <sys/eventfd.h>
-#include <linux/fs.h>
-#include <unistd.h>
-#include <string.h>
-#include <pthread.h>
-#include <sched.h>
-#include <syslog.h>
-#include <signal.h>
-
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <dirent.h>
-#include <sys/prctl.h>
-#include <limits.h>
 
 #include "liburing.h"
-#include "utils.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +39,8 @@ extern "C" {
  */
 #define UBLKSRV_F_NEED_EVENTFD		(1UL << 1)
 
+struct io_uring;
+struct io_uring_cqe;
 struct ublksrv_aio_ctx;
 struct ublksrv_ctrl_dev;
 

@@ -2,10 +2,18 @@
 
 #include <config.h>
 
+#include <stdlib.h>
+#include <stdio.h>
 #include <poll.h>
 #include <sys/epoll.h>
+#include <sched.h>
+#include <pthread.h>
+#include <getopt.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <error.h>
+#include <string.h>
+#include <sys/ioctl.h>
 
 #include "ublksrv.h"
 #include "ublksrv_aio.h"

@@ -2,20 +2,12 @@
 
 #include <config.h>
 
-#include <unistd.h>
-#include <stdio.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdarg.h>
-#include <inttypes.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <sys/syslog.h>
 #include <linux/fs.h>
 #include <fcntl.h>
 #include <string.h>
+#include "ublksrv_priv.h"
 
 /*
  * We don't need to lock file since the device id is unique

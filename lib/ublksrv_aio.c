@@ -2,8 +2,6 @@
 
 #define _GNU_SOURCE
 #include "ublksrv_priv.h"
-#include "ublksrv_aio.h"
-#include <sys/epoll.h>
 
 static inline void aio_log(const char *fmt, ...)
 {

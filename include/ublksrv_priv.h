@@ -7,10 +7,22 @@
 #ifndef UBLKSRV_PRIVATE_INC_H
 #define UBLKSRV_PRIVATE_INC_H
 
+#include <unistd.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <signal.h>
+#include <limits.h>
+#include <pthread.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/eventfd.h>
+#include <sys/epoll.h>
+#include <sys/poll.h>
+
 #include "ublk_cmd.h"
+#include "utils.h"
 #include "ublksrv.h"
 #include "ublksrv_aio.h"
-#include "liburing.h"
 
 #ifdef __cplusplus
 extern "C" {

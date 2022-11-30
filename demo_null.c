@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
 #include <config.h>
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <sched.h>
+#include <pthread.h>
+#include <getopt.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <error.h>
+#include <string.h>
 
 #include "ublksrv.h"
 
