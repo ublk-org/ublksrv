@@ -102,46 +102,6 @@ struct ublksrv_aio_list {
 	struct aio_list list;
 };
 
-/*
- * ublksrv_aio_ctx is used to offload IO handling from ublksrv io_uring
- * context.
- *
- * ublksrv_aio_ctx is bound with one single pthread which has to belong
- * to same process of the io_uring where IO is originated, so we can
- * support to handle IO from multiple queues of the same device. At
- * default, ublksrv_aio_ctx supports to handle device wide aio or io
- * offloading except for UBLKSRV_AIO_QUEUE_WIDE.
- *
- * Meantime ublksrv_aio_ctx can be created per each queue, and only handle
- * IOs from this queue.
- *
- * The final io handling in the aio context depends on user's implementation,
- * either sync or async IO submitting is supported.
- */
-struct ublksrv_aio_ctx {
-	struct ublksrv_aio_list submit;
-
-	/* per-queue completion list */
-	struct ublksrv_aio_list *complete;
-
-	int efd;		//for wakeup us
-
-#define UBLKSRV_AIO_QUEUE_WIDE	(1U << 0)
-	unsigned int		flags;
-	bool dead;
-
-	struct ublksrv_dev *dev;
-
-	void *ctx_data;
-
-	unsigned long reserved[8];
-};
-
-static inline bool ublksrv_aio_ctx_dead(struct ublksrv_aio_ctx *ctx)
-{
-	return ctx->dead;
-}
-
 static inline void ublksrv_aio_init_list(struct ublksrv_aio_list *l)
 {
 	pthread_spin_init(&l->lock, PTHREAD_PROCESS_PRIVATE);
@@ -166,6 +126,12 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 		struct aio_list *completed);
 void ublksrv_aio_handle_event(struct ublksrv_aio_ctx *ctx,
 		const struct ublksrv_queue *q);
+int ublksrv_aio_get_efd(struct ublksrv_aio_ctx *ctx);
+void ublksrv_aio_set_ctx_data(struct ublksrv_aio_ctx *ctx, void *data);
+void *ublksrv_aio_get_ctx_data(struct ublksrv_aio_ctx *ctx);
+bool ublksrv_aio_ctx_dead(struct ublksrv_aio_ctx *ctx);
+const struct ublksrv_dev *ublksrv_aio_get_dev(struct ublksrv_aio_ctx *ctx);
+
 #ifdef __cplusplus
 }
 #endif

@@ -238,3 +238,28 @@ void ublksrv_aio_handle_event(struct ublksrv_aio_ctx *ctx,
 		ublksrv_aio_free_req(ctx, req);
 	}
 }
+
+int ublksrv_aio_get_efd(struct ublksrv_aio_ctx *ctx)
+{
+	return ctx->efd;
+}
+
+void ublksrv_aio_set_ctx_data(struct ublksrv_aio_ctx *ctx, void *data)
+{
+	ctx->ctx_data = data;
+}
+
+void *ublksrv_aio_get_ctx_data(struct ublksrv_aio_ctx *ctx)
+{
+	return ctx->ctx_data;
+}
+
+bool ublksrv_aio_ctx_dead(struct ublksrv_aio_ctx *ctx)
+{
+	return ctx->dead;
+}
+
+const struct ublksrv_dev *ublksrv_aio_get_dev(struct ublksrv_aio_ctx *ctx)
+{
+	return ctx->dev;
+}

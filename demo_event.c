@@ -66,7 +66,8 @@ static void queue_fallocate_async(struct io_uring_sqe *sqe,
 int async_io_submitter(struct ublksrv_aio_ctx *ctx,
 		struct ublksrv_aio *req)
 {
-	struct io_uring *ring = (struct io_uring *)ctx->ctx_data;
+	struct io_uring *ring = (struct io_uring*)
+		ublksrv_aio_get_ctx_data(ctx);
 	const struct ublksrv_io_desc *iod = &req->io;
 	unsigned op = ublksrv_get_op(iod);
 	struct io_uring_sqe *sqe;
@@ -159,8 +160,10 @@ static int io_submit_worker(struct ublksrv_aio_ctx *ctx,
 
 static int queue_event(struct ublksrv_aio_ctx *ctx)
 {
-	struct io_uring *ring = (struct io_uring *)ctx->ctx_data;
+	struct io_uring *ring = (struct io_uring *)
+		ublksrv_aio_get_ctx_data(ctx);
 	struct io_uring_sqe *sqe;
+	int ctx_efd = ublksrv_aio_get_efd(ctx);
 
 	sqe = io_uring_get_sqe(ring);
 	if (!sqe) {
@@ -168,7 +171,7 @@ static int queue_event(struct ublksrv_aio_ctx *ctx)
 		return -1;
 	}
 
-	io_uring_prep_poll_add(sqe, ctx->efd, POLLIN);
+	io_uring_prep_poll_add(sqe, ctx_efd, POLLIN);
 	io_uring_sqe_set_data64(sqe, 0);
 
 	return 0;
@@ -177,7 +180,7 @@ static int queue_event(struct ublksrv_aio_ctx *ctx)
 static int reap_uring(struct ublksrv_aio_ctx *ctx, struct aio_list *list, int
 		*got_efd)
 {
-	struct io_uring *r = (struct io_uring *)ctx->ctx_data;
+	struct io_uring *r = (struct io_uring *)ublksrv_aio_get_ctx_data(ctx);
 	struct io_uring_cqe *cqe;
 	unsigned head;
 	int count = 0;
@@ -209,24 +212,26 @@ static int reap_uring(struct ublksrv_aio_ctx *ctx, struct aio_list *list, int
 static void *demo_event_uring_io_handler_fn(void *data)
 {
 	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
+	const struct ublksrv_dev *dev = ublksrv_aio_get_dev(ctx);
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(ctx->dev));
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	unsigned dev_id = info->dev_id;
 	struct io_uring ring;
 	unsigned qd;
 	int ret;
+	int ctx_efd = ublksrv_aio_get_efd(ctx);
 
 	qd = info->queue_depth * info->nr_hw_queues * 2;
 
 	io_uring_queue_init(qd, &ring, 0);
-	ret = io_uring_register_eventfd(&ring, ctx->efd);
+	ret = io_uring_register_eventfd(&ring, ctx_efd);
 	if (ret) {
 		fprintf(stdout, "ublk dev %d fails to register eventfd\n",
 			dev_id);
 		return NULL;
 	}
 
-	ctx->ctx_data = (void *)&ring;
+	ublksrv_aio_set_ctx_data(ctx, (void *)&ring);
 
 	fprintf(stdout, "ublk dev %d aio(io_uring submitter) context started tid %d\n",
 			dev_id, gettid());
@@ -256,13 +261,15 @@ static void *demo_event_uring_io_handler_fn(void *data)
 static void *demo_event_real_io_handler_fn(void *data)
 {
 	struct ublksrv_aio_ctx *ctx = (struct ublksrv_aio_ctx *)data;
+	const struct ublksrv_dev *dev = ublksrv_aio_get_dev(ctx);
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(ctx->dev));
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 
 	unsigned dev_id = info->dev_id;
 	struct epoll_event events[EPOLL_NR_EVENTS];
 	int epoll_fd = epoll_create(EPOLL_NR_EVENTS);
 	struct epoll_event read_event;
+	int ctx_efd = ublksrv_aio_get_efd(ctx);
 
 	if (epoll_fd < 0) {
 	        fprintf(stderr, "ublk dev %d create epoll fd failed\n", dev_id);
@@ -273,8 +280,8 @@ static void *demo_event_real_io_handler_fn(void *data)
 			dev_id, gettid());
 
 	read_event.events = EPOLLIN;
-	read_event.data.fd = ctx->efd;
-	(void)epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ctx->efd, &read_event);
+	read_event.data.fd = ctx_efd;
+	(void)epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ctx_efd, &read_event);
 
 	while (!ublksrv_aio_ctx_dead(ctx)) {
 		struct aio_list compl;
