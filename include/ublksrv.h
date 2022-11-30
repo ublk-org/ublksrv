@@ -35,9 +35,10 @@ struct ublksrv_aio_ctx;
 struct ublksrv_ctrl_dev;
 
 /*
- * Generic data for creating one ublk device
+ * Generic data for creating one ublk control device, which is used for
+ * sending control commands to /dev/ublk-control.
  *
- * Target specific data is handled by ->init_tgt
+ * Control commands(UBLK_CMD_*) are defined in ublk_cmd.h.
  */
 struct ublksrv_dev_data {
 	int		dev_id;
@@ -54,21 +55,44 @@ struct ublksrv_dev_data {
 	unsigned long   reserved[7];
 };
 
+/*
+ * IO data passed to target io handling callbacks, such as
+ * ->handle_io_async() and ->tgt_io_done().
+ */
 struct ublk_io_data {
+	/* tag of this io data, unique in queue wide */
 	int tag;
+
+	/* io description from ublk driver */
 	const struct ublksrv_io_desc *iod;
+
+	/*
+	 * IO private data, created in ublksrv_queue_init(),
+	 * data size is specified in ublksrv_tgt_info.io_data_size
+	 */
 	void *private_data;
 };
 
 /* queue state is only retrieved via ublksrv_queue_state() API */
 #define UBLKSRV_QUEUE_STOPPING	(1U << 0)
 #define UBLKSRV_QUEUE_IDLE	(1U << 1)
+/*
+ * ublksrv_queue is 1:1 mapping with ublk driver's blk-mq queue, and
+ * has same queue depth with ublk driver's blk-mq queue.
+ */
 struct ublksrv_queue {
-	int q_id;
+	int q_id;	/* queue id */
+
+	/* So far, all queues in same device has same depth */
 	int q_depth;
 
+	/* io uring for handling io commands() from ublk driver */
 	struct io_uring *ring_ptr;
+
+	/* which device this queue belongs to */
 	const struct ublksrv_dev *dev;
+
+	/* queue's private data, passed from ublksrv_queue_init() */
 	void *private_data;
 };
 
@@ -88,7 +112,14 @@ struct ublksrv_tgt_info {
 	 * ublk_io instances can be assigned for these extra IOs.
 	 */
 	unsigned int extra_ios;
+
+	/* size of io private data */
 	unsigned int io_data_size;
+
+	/*
+	 * target io handling type, target main job is to implement
+	 * callbacks defined in this type
+	 */
 	const struct ublksrv_tgt_type *ops;
 
 	/*
@@ -112,13 +143,18 @@ struct ublksrv_tgt_type {
 	 * with our io_uring too, if this is true, ->tgt_io_done callback
 	 * has to be implemented. Otherwise, target can implement
 	 * ->handle_event() for processing io completion there.
+	 *
+	 *  Required.
 	 */
 	int (*handle_io_async)(const struct ublksrv_queue *,
 			const struct ublk_io_data *io);
 
 	/*
 	 * target io is handled by our io_uring, and once the target io
-	 * is completed, this callback is called
+	 * is completed, this callback is called.
+	 *
+	 * Optional, only required iff this target io is handled by ublksrv's
+	 * io_uring.
 	 */
 	void (*tgt_io_done)(const struct ublksrv_queue *,
 			const struct ublk_io_data *io,
@@ -146,6 +182,9 @@ struct ublksrv_tgt_type {
 	 * 4) after returning from ->handle_event(), ubq_daemon will
 	 * queue & submit the eventfd io immediately for getting
 	 * notification from future event.
+	 *
+	 * Optional. Only needed if target IO is handled by target its
+	 * own pthread context.
 	 */
 	void (*handle_event)(const struct ublksrv_queue *);
 
@@ -158,6 +197,8 @@ struct ublksrv_tgt_type {
 	 *
 	 * @nr_queued_io: count of queued IOs in ublksrv_reap_events_uring of
 	 * this time
+	 *
+	 * Optional.
 	 */
 	void (*handle_io_background)(const struct ublksrv_queue *, int
 			nr_queued_io);
@@ -173,16 +214,31 @@ struct ublksrv_tgt_type {
 	/*
 	 * initialize this new target, argc/argv includes target specific
 	 * command line parameters
+	 *
+	 * Required.
 	 */
 	int (*init_tgt)(struct ublksrv_dev *, int type, int argc,
 			char *argv[]);
 
-	/* deinitialize this target */
+	/*
+	 * Deinitialize this target
+	 *
+	 * Optional.
+	 */
 	void (*deinit_tgt)(const struct ublksrv_dev *);
 
+	/*
+	 * The two are optional, just needed if the target code wants to
+	 * manage io buffer.
+	 */
 	void *(*alloc_io_buf)(const struct ublksrv_queue *q, int tag, int size);
 	void (*free_io_buf)(const struct ublksrv_queue *q, void *buf, int tag);
 
+	/*
+	 * Called when the ublksrv io_uring is idle.
+	 *
+	 * Optional.
+	 */
 	void (*idle_fn)(const struct ublksrv_queue *q, bool enter);
 
 	int  type;
@@ -220,6 +276,10 @@ static inline unsigned int user_data_to_tgt_data(__u64 user_data)
 	return (user_data >> 24) & 0xffff;
 }
 
+/*
+ * ublksrv control device APIs, for sending control commands
+ * to /dev/ublk-control
+ */
 extern void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev);
 extern struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data);
 extern int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev);
@@ -245,9 +305,13 @@ extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 		const char *recovery_jbuf);
 extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev);
 
+/* ublksrv device ("/dev/ublkcN") level APIs */
 extern const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);
 extern void ublksrv_dev_deinit(const struct ublksrv_dev *dev);
+extern const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
+		const struct ublksrv_dev *dev);
+extern int ublksrv_get_pidfile_fd(const struct ublksrv_dev *dev);
 
 /* target json has to include the following key/value */
 #define UBLKSRV_TGT_NAME_MAX_LEN 32
@@ -259,6 +323,7 @@ struct ublksrv_tgt_base_json {
 	unsigned long reserved[8];
 };
 
+/* APIs for serializing/deserializing device data to/from json string */
 extern int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *dev,
 		char *buf, int len);
 extern int ublksrv_json_read_dev_info(const char *json_buf,
@@ -271,7 +336,6 @@ extern int ublksrv_json_read_target_info(const char *jbuf, char *tgt_buf,
 		int len);
 extern int ublksrv_json_read_target_str_info(const char *jbuf, int len,
 		const char *name, char *val);
-
 extern int ublksrv_json_read_target_ulong_info(const char *jbuf,
 		const char *name, long *val);
 extern int ublksrv_json_write_target_str_info(char *jbuf, int len,
@@ -292,14 +356,9 @@ extern int ublksrv_json_write_params(const struct ublk_params *p,
 extern int ublksrv_json_dump_params(const char *jbuf);
 extern int ublksrv_json_get_length(const char *jbuf);
 
-extern const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
-		const struct ublksrv_dev *dev);
-extern int ublksrv_get_pidfile_fd(const struct ublksrv_dev *dev);
-
+/* ublksrv queue level APIs */
 extern void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag);
-
 extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
-
 extern const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data);
 extern void ublksrv_queue_deinit(const struct ublksrv_queue *q);
@@ -307,14 +366,11 @@ extern int ublksrv_queue_handled_event(const struct ublksrv_queue *q);
 extern int ublksrv_queue_send_event(const struct ublksrv_queue *q);
 extern const struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id);
-
 extern int ublksrv_process_io(const struct ublksrv_queue *q);
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
-
 extern void ublksrv_apply_oom_protection();
 
 #ifdef __cplusplus
 }
 #endif
-
 #endif

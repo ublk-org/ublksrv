@@ -3,6 +3,11 @@
 #ifndef UBLKSRV_AIO_INC_H
 #define UBLKSRV_AIO_INC_H
 
+/*
+ * APIs for offloading IO handling in non-ublksrv context, refer to
+ * demo_event.c for how to use these APIs
+ */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
