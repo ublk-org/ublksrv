@@ -6,10 +6,16 @@
 #include <syslog.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <sys/syscall.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+static inline int ublksrv_gettid()
+{
+	return syscall(SYS_gettid);
+}
 
 static inline void ublksrv_log(int priority, const char *fmt, ...)
 	__attribute__ ((format (printf, 2, 3)));

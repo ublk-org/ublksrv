@@ -256,7 +256,7 @@ static void *ublksrv_io_handler_fn(void *data)
 		do {
 			buf = __ublksrv_tgt_realloc_json_buf(dev, &buf_size);
 			ret = ublksrv_json_write_queue_info(cdev, buf, buf_size,
-					q_id, gettid());
+					q_id, ublksrv_gettid());
 		} while (ret < 0);
 		jbuf = buf;
 	} else {
@@ -279,7 +279,7 @@ static void *ublksrv_io_handler_fn(void *data)
 		return NULL;
 	}
 
-	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", gettid(),
+	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", ublksrv_gettid(),
 			dev_id, q->q_id);
 	do {
 		if (ublksrv_process_io(q) < 0)
