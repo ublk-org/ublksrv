@@ -69,6 +69,20 @@ and LIBURING_DIR points to directory of liburing source code, and liburing
 needs to be built before running above commands. Also IORING_SETUP_SQE128
 has to be supported in the liburing source.
 
+c++20 is required for building ublk utility, but libublksrv and demo_null.c &
+demo_event.c can be built independently:
+
+#build libublksrv
+
+make -C lib/
+
+#build demo_null && demo_event
+
+make -C lib/
+
+make demo_null demo_event
+
+
 help
 ----
 
