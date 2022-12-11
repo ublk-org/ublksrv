@@ -261,15 +261,12 @@ int ublksrv_ctrl_del_dev(struct ublksrv_ctrl_dev *dev)
 	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
-int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev)
+static int __ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev,
+		unsigned cmd_op)
 {
 	char buf[UBLKC_PATH_MAX + sizeof(dev->dev_info)];
 	struct ublksrv_ctrl_cmd_data data = {
-#ifdef UBLK_CMD_GET_DEV_INFO2
-		.cmd_op	= UBLK_CMD_GET_DEV_INFO2,
-#else
-		.cmd_op	= UBLK_CMD_GET_DEV_INFO,
-#endif
+		.cmd_op	= cmd_op,
 		.flags	= CTRL_CMD_HAS_BUF,
 		.addr = (__u64)&dev->dev_info,
 		.len = sizeof(struct ublksrv_ctrl_dev_info),
@@ -277,7 +274,10 @@ int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev)
 	bool has_dev_path = false;
 	int ret;
 
-	if (ublk_is_unprivileged(dev) || data.cmd_op == UBLK_CMD_GET_DEV_INFO2) {
+	if (ublk_is_unprivileged(dev) && data.cmd_op == UBLK_CMD_GET_DEV_INFO)
+		return -EINVAL;
+
+	if (data.cmd_op == UBLK_CMD_GET_DEV_INFO2) {
 		snprintf(buf, UBLKC_PATH_MAX, "%s%d", UBLKC_DEV,
 			dev->dev_info.dev_id);
 		data.flags |= CTRL_CMD_HAS_BUF | CTRL_CMD_HAS_DATA;
@@ -291,6 +291,60 @@ int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev)
 	if (ret >= 0 && has_dev_path)
 		memcpy(&dev->dev_info, &buf[UBLKC_PATH_MAX],
 				sizeof(dev->dev_info));
+	return ret;
+}
+
+/*
+ * Deal with userspace/kernel compatibility
+ *
+ * 1) if kernel is capable of handling UBLK_F_UNPRIVILEGED_DEV,
+ * - ublksrv supports UBLK_F_UNPRIVILEGED_DEV
+ *   ublksrv should send UBLK_CMD_GET_DEV_INFO2, given anytime unprivileged
+ *   application needs to query devices it owns, when the application has
+ *   no idea if UBLK_F_UNPRIVILEGED_DEV is set given the capability info
+ *   is stateless, and application always get it via control command
+ *
+ * - ublksrv doesn't support UBLK_F_UNPRIVILEGED_DEV
+ *   UBLK_CMD_GET_DEV_INFO is always sent to kernel, and the feature of
+ *   UBLK_F_UNPRIVILEGED_DEV isn't available for user
+ *
+ * 2) if kernel isn't capable of handling UBLK_F_UNPRIVILEGED_DEV
+ * - ublksrv supports UBLK_F_UNPRIVILEGED_DEV
+ *   UBLK_CMD_GET_DEV_INFO2 is tried first, and will be failed, then
+ *   UBLK_CMD_GET_DEV_INFO is retried given UBLK_F_UNPRIVILEGED_DEV
+ *   can't be set
+ *
+ * - ublksrv doesn't support UBLK_F_UNPRIVILEGED_DEV
+ *   UBLK_CMD_GET_DEV_INFO is always sent to kernel, and the feature of
+ *   UBLK_F_UNPRIVILEGED_DEV isn't available for user
+ *
+ */
+int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev)
+{
+	int ret;
+
+	unsigned cmd_op	=
+#ifdef UBLK_CMD_GET_DEV_INFO2
+		UBLK_CMD_GET_DEV_INFO2;
+#else
+		UBLK_CMD_GET_DEV_INFO;
+#endif
+	ret = __ublksrv_ctrl_get_info(dev, cmd_op);
+
+	if (cmd_op == UBLK_CMD_GET_DEV_INFO)
+		return ret;
+
+	if (ret < 0) {
+		/* unprivileged does support GET_DEV_INFO2 */
+		if (ublk_is_unprivileged(dev))
+			return ret;
+		/*
+		 * fallback to GET_DEV_INFO since driver may not support
+		 * GET_DEV_INFO2
+		 */
+		ret = __ublksrv_ctrl_get_info(dev, UBLK_CMD_GET_DEV_INFO);
+	}
+
 	return ret;
 }
 
