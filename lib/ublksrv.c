@@ -53,8 +53,6 @@ static inline struct ublksrv_io_desc *ublksrv_get_iod(
  */
 #define UBLKSRV_IO_IDLE_SECS    20
 
-static void *ublksrv_io_handler_fn(void *data);
-
 static int __ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 		const struct ublksrv_tgt_type *ops, int type,
 		int argc, char *argv[])
@@ -97,8 +95,6 @@ static int ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 		const struct ublksrv_tgt_type *ops,
 		int argc, char *argv[])
 {
-	int i;
-
 	if (type_name == NULL)
 		return -EINVAL;
 
@@ -361,7 +357,6 @@ static int ublksrv_dev_init_io_bufs(struct _ublksrv_dev *dev)
 static void ublksrv_dev_init_io_cmds(struct _ublksrv_dev *dev, struct _ublksrv_queue *q)
 {
 	struct io_uring *r = &q->ring;
-	struct io_uring_sqe *sqe;
 	int i;
 
 	for (i = 0; i < q->q_depth; i++) {
@@ -688,8 +683,6 @@ static void ublksrv_remove_pid_file(const struct _ublksrv_dev *dev)
 void ublksrv_dev_deinit(const struct ublksrv_dev *tdev)
 {
 	struct _ublksrv_dev *dev = tdev_to_local(tdev);
-	int dev_id = dev->ctrl_dev->dev_info.dev_id;
-	int i;
 
 	ublksrv_remove_pid_file(dev);
 
@@ -707,12 +700,9 @@ void ublksrv_dev_deinit(const struct ublksrv_dev *tdev)
 
 const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	int nr_queues = ctrl_dev->dev_info.nr_hw_queues;
 	int dev_id = ctrl_dev->dev_info.dev_id;
-	int queue_size;
 	char buf[64];
 	int ret = -1;
-	int i;
 	struct _ublksrv_dev *dev = (struct _ublksrv_dev *)calloc(1, sizeof(*dev));
 	struct ublksrv_tgt_info *tgt;
 

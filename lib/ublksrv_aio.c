@@ -26,7 +26,7 @@ again:
 	aio_list_splice(&ctx->submit.list, &sl);
 	pthread_spin_unlock(&ctx->submit.lock);
 
-	while (req = aio_list_pop(&sl)) {
+	while ((req = aio_list_pop(&sl))) {
 		int ret = fn(ctx, req);
 
 		/*
@@ -92,12 +92,11 @@ void ublksrv_aio_complete_worker(struct ublksrv_aio_ctx *ctx,
 	aio_list_init(&others);
 
 	while (!aio_list_empty(completed)) {
-		struct ublksrv_aio_list *compl;
 		const struct ublksrv_queue *tq = ublksrv_get_queue(ctx->dev,
 				ublksrv_aio_qid(completed->head->id));
 
 		this_q = tq_to_local(tq);
-		while (req = aio_list_pop(completed)) {
+		while ((req = aio_list_pop(completed))) {
 			const struct ublksrv_queue *q = ublksrv_get_queue(
 					ctx->dev, ublksrv_aio_qid(req->id));
 
@@ -118,7 +117,7 @@ struct ublksrv_aio_ctx *ublksrv_aio_ctx_init(const struct ublksrv_dev *dev,
 {
 	unsigned nr_hw_queues = tdev_to_local(dev)->ctrl_dev->dev_info.nr_hw_queues;
 	struct ublksrv_aio_ctx *ctx;
-	int ret, i;
+	int i;
 
 	if (!(tdev_to_local(dev)->ctrl_dev->dev_info.ublksrv_flags & UBLKSRV_F_NEED_EVENTFD))
 		return NULL;
@@ -230,7 +229,7 @@ void ublksrv_aio_handle_event(struct ublksrv_aio_ctx *ctx,
 	ublksrv_queue_handled_event(q);
 	pthread_spin_unlock(&compl->lock);
 
-	while (req = aio_list_pop(&al)) {
+	while ((req = aio_list_pop(&al))) {
 		ublksrv_complete_io(q, ublksrv_aio_tag(req->id),
 				req->res);
 		ublksrv_aio_free_req(ctx, req);

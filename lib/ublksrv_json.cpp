@@ -105,7 +105,6 @@ int ublksrv_json_write_params(const struct ublk_params *p,
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -119,7 +118,6 @@ int ublksrv_json_read_params(struct ublk_params *p,
 {
 	json j, sj;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -135,7 +133,6 @@ int ublksrv_json_dump_params(const char *jbuf)
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -152,7 +149,6 @@ int ublksrv_json_read_target_str_info(const char *jbuf, int len,
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -165,7 +161,7 @@ int ublksrv_json_read_target_str_info(const char *jbuf, int len,
 		return -EINVAL;
 
 	std::string str = tj[std::string(name)];
-	if (str.length() < len) {
+	if (str.length() < (unsigned)len) {
 		strcpy(val, str.c_str());
 		return 0;
 	}
@@ -178,7 +174,6 @@ int ublksrv_json_read_target_ulong_info(const char *jbuf,
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -200,7 +195,6 @@ int ublksrv_json_write_target_str_info(char *jbuf, int len,
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -214,7 +208,6 @@ int ublksrv_json_write_target_long_info(char *jbuf, int len,
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -228,7 +221,6 @@ int ublksrv_json_write_target_ulong_info(char *jbuf, int len, const char *name,
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -242,7 +234,6 @@ int ublksrv_json_write_target_base_info(char *jbuf, int len,
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -258,7 +249,6 @@ int ublksrv_json_read_target_base_info(const char *jbuf,
 {
 	json j;
 	std::string s;
-	int j_len;
 
 	parse_json(j, jbuf);
 
@@ -300,7 +290,6 @@ int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
 {
 	json j;
 	std::string s;
-	int j_len;
 	char name[16];
 	char cpus[4096];
 
@@ -333,7 +322,7 @@ int ublksrv_json_read_queue_info(const char *jbuf, int qid, unsigned *tid,
 	*tid = qj["tid"];
 	str = qj["affinity"];
 
-	if (str.length() < len) {
+	if (str.length() < (unsigned)len) {
 		strcpy(affinity_buf, str.c_str());
 		return 0;
 	}
