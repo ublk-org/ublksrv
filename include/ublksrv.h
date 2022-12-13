@@ -62,6 +62,7 @@ struct ublksrv_dev_data {
 struct ublk_io_data {
 	/* tag of this io data, unique in queue wide */
 	int tag;
+	unsigned int pad;
 
 	/* io description from ublk driver */
 	const struct ublksrv_io_desc *iod;
