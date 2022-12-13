@@ -369,7 +369,7 @@ extern const struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *d
 		int q_id);
 extern int ublksrv_process_io(const struct ublksrv_queue *q);
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
-extern void ublksrv_apply_oom_protection();
+extern void ublksrv_apply_oom_protection(void);
 
 #ifdef __cplusplus
 }
