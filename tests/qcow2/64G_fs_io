@@ -1,0 +1,41 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+
+. common/fio_common
+. common/qcow2_common
+
+echo "run fs randwrite with verify over ublk-qcow2"
+
+IMG_SIZE=64G
+file=`_create_qcow2_image "null" $IMG_SIZE`
+
+QUEUES=1
+URING_COMP=0
+NEED_GET_DATA=0
+
+export T_TYPE_PARAMS="-t qcow2 -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -f $file"
+echo -e "\trun fio(fs randwrite with verify) over ublk($T_TYPE_PARAMS)"
+
+DEV=`__create_ublk_dev`
+
+MNT=`mktemp -d`
+
+mkfs.xfs -f $DEV > /dev/null 2>&1
+mount $DEV $MNT > /dev/null 2>&1
+
+fio --size=8G --bsrange=4k-128k --runtime=20 --numjobs=12 --ioengine=libaio \
+	--iodepth=64 --iodepth_batch_submit=16 --iodepth_batch_complete_min=16 \
+	--directory=$MNT --group_reporting=1 --unlink=0 \
+	--direct=1 --fsync=0 --name=f1 --stonewall \
+	--overwrite=1 --rw=randwrite --verify=md5 > /dev/null 2>&1
+umount $MNT > /dev/null 2>&1
+
+RES=`__remove_ublk_dev_return $DEV`
+if [ $RES -ne 0 ]; then
+	echo -e "\tdelete ublk0 failed"
+	exit -1
+fi
+
+_remove_qcow2_image $file
+
+rm -fr $MNT
