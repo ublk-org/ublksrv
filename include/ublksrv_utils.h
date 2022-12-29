@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-static inline int ublksrv_gettid()
+static inline int ublksrv_gettid(void)
 {
 	return syscall(SYS_gettid);
 }
@@ -49,9 +49,12 @@ static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
 #ifndef offsetof
 #define offsetof(TYPE, MEMBER)  ((size_t)&((TYPE *)0)->MEMBER)
 #endif
+
+#ifndef container_of
 #define container_of(ptr, type, member) ({                              \
 	unsigned long __mptr = (unsigned long)(ptr);                    \
 	((type *)(__mptr - offsetof(type, member))); })
+#endif
 
 #ifdef __cplusplus
 }
