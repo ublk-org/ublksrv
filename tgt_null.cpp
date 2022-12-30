@@ -85,7 +85,7 @@ static co_io_job __null_handle_io_async(const struct ublksrv_queue *q,
 {
 	ublksrv_complete_io(q, tag, data->iod->nr_sectors << 9);
 
-	co_io_job_return();
+	co_return;
 }
 
 static int null_handle_io_async(const struct ublksrv_queue *q,

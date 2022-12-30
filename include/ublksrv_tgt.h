@@ -62,37 +62,14 @@ static inline unsigned ublksrv_convert_cmd_op(const struct ublksrv_io_desc *iod)
 	}
 }
 
-/* For using C++20 coroutine */
 /*
- * Due to the use of std::cout, the member functions await_ready,
- * await_suspend, and await_resume cannot be declared as constexpr.
+ * Our convention is to use this macro instead of raw `co_await` to make it
+ * easy to log `tag` when debugging coroutine issues.
  */
-struct ublk_suspend_always {
-    bool await_ready() const noexcept {
-        return false;
-    }
-    void await_suspend(std::coroutine_handle<>) const noexcept {
-    }
-    void await_resume() const noexcept {
-    }
-};
-
-/*
- * When you don't resume the Awaitable such as the coroutine object returned
- * by the member function final_suspend, the function await_resume is not
- * processed. In contrast, the Awaitable's ublk_suspend_never the function is
- * immediately ready because await_ready returns true and, hence, does
- * not suspend.
- */
-struct ublk_suspend_never {
-    bool await_ready() const noexcept {
-        return true;
-    }
-    void await_suspend(std::coroutine_handle<>) const noexcept {
-    }
-    void await_resume() const noexcept {
-    }
-};
+#define co_await__suspend_always(tag) {                                       \
+	static_assert(std::is_same<decltype(tag), int>::value, "tag not int");\
+	co_await std::suspend_always();                                       \
+}
 
 using co_handle_type = std::coroutine_handle<>;
 struct co_io_job {
@@ -100,10 +77,10 @@ struct co_io_job {
         co_io_job get_return_object() {
             return {std::coroutine_handle<promise_type>::from_promise(*this)};
         }
-        ublk_suspend_never initial_suspend() {
+        std::suspend_never initial_suspend() {
             return {};
         }
-        ublk_suspend_never final_suspend() noexcept {
+        std::suspend_never final_suspend() noexcept {
             return {};
         }
         void return_void() {}
@@ -112,26 +89,10 @@ struct co_io_job {
 
     co_handle_type coro;
 
-    co_io_job(co_handle_type h): coro(h){}
-
-    void resume() {
-        coro.resume();
-    }
+    co_io_job(co_handle_type h): coro(h) {}
 
     operator co_handle_type() const { return coro; }
 };
-
-/*
- * c++20 is stackless coroutine, and can't handle nested coroutine, so
- * the following two have to be defined as macro
- */
-#define co_io_job_submit_and_wait(tag) do {		\
-	co_await ublk_suspend_always();			\
-} while (0)
-
-#define co_io_job_return() do {		\
-	co_return;			\
-} while (0)
 
 struct ublk_io_tgt {
 	co_handle_type co;
