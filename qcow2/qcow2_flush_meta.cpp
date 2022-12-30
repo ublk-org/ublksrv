@@ -66,7 +66,7 @@ again:
 	}
 
 	if (wait) {
-		co_io_job_submit_and_wait(tag);
+		co_await__suspend_always(tag);
 		goto again;
 	}
 
@@ -81,7 +81,7 @@ again:
 		bool done = false;
 		int io_ret = 0;
 
-		co_io_job_submit_and_wait(tag);
+		co_await__suspend_always(tag);
 
 		cqe = io->tgt_io_cqe;
 		done = (cqe && cqe->res != -EAGAIN);
@@ -162,7 +162,7 @@ again:
 	}
 
 	if (wait) {
-		co_io_job_submit_and_wait(tag);
+		co_await__suspend_always(tag);
 		goto again;
 	}
 
@@ -175,7 +175,7 @@ again:
 	if (ret > 0) {
 		const struct io_uring_cqe *cqe;
 
-		co_io_job_submit_and_wait(tag);
+		co_await__suspend_always(tag);
 
 		cqe = io->tgt_io_cqe;
 		ret = qcow2_meta_io_done(q, cqe);
@@ -296,7 +296,7 @@ again:
 	}
 
 	if (wait) {
-		co_io_job_submit_and_wait(tag);
+		co_await__suspend_always(tag);
 		goto again;
 	}
 
@@ -309,7 +309,7 @@ again:
 	if (ret > 0) {
 		const struct io_uring_cqe *cqe;
 
-		co_io_job_submit_and_wait(tag);
+		co_await__suspend_always(tag);
 
 		cqe = io->tgt_io_cqe;
 		ret = qcow2_meta_io_done(q, cqe);

@@ -367,7 +367,7 @@ again:
 	}
 
 	if (wait) {
-		co_io_job_submit_and_wait(tag);
+		co_await__suspend_always(tag);
 
 		cqe = io->tgt_io_cqe;
 		io->tgt_io_cqe = NULL;
@@ -416,7 +416,7 @@ queue_io:
 		}
 
 		if (wait) {
-			co_io_job_submit_and_wait(tag);
+			co_await__suspend_always(tag);
 			goto queue_io;
 		}
 
@@ -424,7 +424,7 @@ queue_io:
 			u64 cluster_start = mapped_start &
 				~((1ULL << qs->header.cluster_bits) - 1);
 
-			co_io_job_submit_and_wait(tag);
+			co_await__suspend_always(tag);
 			cqe = io->tgt_io_cqe;
 			ret = cqe->res;
 			if (ret == -EAGAIN) {
