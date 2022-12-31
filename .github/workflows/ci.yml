@@ -72,8 +72,9 @@ jobs:
       shell: bash
       run: |
         sudo apt update
-        sudo apt install -y dnf rpm systemd-container qemu-system-x86 ovmf e2fsprogs
-        python3 -m pip install --user git+https://github.com/systemd/mkosi.git
+        sudo apt install -y dnf rpm systemd-container qemu-system-x86 ovmf e2fsprogs btrfs-progs
+        #python3 -m pip install --user git+https://github.com/systemd/mkosi.git
+        python3 -m pip install --user https://github.com/systemd/mkosi/archive/refs/tags/v14.tar.gz
 
     # Required for ssh'ing into VM
     - name: "setup: environment"
