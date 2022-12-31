@@ -262,29 +262,33 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_FLUSH:
-		io_uring_prep_sync_file_range(sqe, q->dev->tgt.fds[1],
+		io_uring_prep_sync_file_range(sqe, 1 /*fds[1]*/,
 				iod->nr_sectors << 9,
 				iod->start_sector << 9,
 				IORING_FSYNC_DATASYNC);
+		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		break;
 	case UBLK_IO_OP_WRITE_ZEROES:
 	case UBLK_IO_OP_DISCARD:
-		io_uring_prep_fallocate(sqe, q->dev->tgt.fds[1],
+		io_uring_prep_fallocate(sqe, 1 /*fds[1]*/,
 				loop_fallocate_mode(iod),
 				iod->start_sector << 9,
 				iod->nr_sectors << 9);
+		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		break;
 	case UBLK_IO_OP_READ:
-		io_uring_prep_read(sqe, 1, (void *)iod->addr,
+		io_uring_prep_read(sqe, 1 /*fds[1]*/,
+				(void *)iod->addr,
 				iod->nr_sectors << 9,
 				iod->start_sector << 9);
-		sqe->flags = IOSQE_FIXED_FILE;
+		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		break;
 	case UBLK_IO_OP_WRITE:
-		io_uring_prep_write(sqe, 1, (void *)iod->addr,
+		io_uring_prep_write(sqe, 1 /*fds[1]*/,
+				(void *)iod->addr,
 				iod->nr_sectors << 9,
 				iod->start_sector << 9);
-		sqe->flags = IOSQE_FIXED_FILE;
+		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		break;
 	default:
 		return -EINVAL;
