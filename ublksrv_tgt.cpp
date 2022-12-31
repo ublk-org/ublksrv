@@ -1003,7 +1003,7 @@ int main(int argc, char *argv[])
 	char exe[PATH_MAX];
 
 	full_cmd = argv[0];
-	strncpy(exe, full_cmd, PATH_MAX);
+	strncpy(exe, full_cmd, PATH_MAX - 1);
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
