@@ -73,6 +73,61 @@ AC_ARG_ENABLE(
 dnl Check for liburing (required).
 PKG_CHECK_MODULES([LIBURING], [liburing >= 2.2])
 
+#gnutls is only for nbd target, borrowed from nbd-client project
+AC_ARG_WITH([gnutls],
+	[AS_HELP_STRING([--without-gnutls],
+		[do not use gnutls])],
+	[],
+	[with_gnutls=check]
+)
+if test "x$with_gnutls" != "xno"; then
+	PKG_CHECK_MODULES(GnuTLS, [gnutls >= 2.12.0],
+		[HAVE_GNUTLS=1
+		AC_DEFINE(HAVE_GNUTLS, 1, [Define to 1 if you have a GnuTLS version of 2.12 or above])],
+		[if test "x$with_gnutls" = "xyes"; then
+			AC_MSG_ERROR([--with-gnutls given but cannot find gnutls])
+		else
+			HAVE_GNUTLS=0
+			AC_DEFINE(HAVE_GNUTLS, 0)
+		fi]
+	)
+else
+	HAVE_GNUTLS=0
+	AC_DEFINE(HAVE_GNUTLS, 0)
+fi
+AM_CONDITIONAL([GNUTLS], [test "x$HAVE_GNUTLS" = "x1"])
+
+AC_ARG_ENABLE(
+  sdp,
+  AS_HELP_STRING([--enable-sdp],[Build a version of nbd-server with support for the Socket Direct Protocol (SDP). Requires you to build and install a kernel with the InfiniBand patches (default disabled)]),
+  [
+    if test "x$enableval" = "xyes"; then
+      AC_DEFINE(WITH_SDP, 1, [Define to 1 if you have and want support for the Socket Direct Protocol])
+    fi
+  ]
+)
+
+AC_ARG_ENABLE(
+  lfs,
+  AS_HELP_STRING([--disable-lfs],[Disable Large File Support (default on)]),
+  [
+    if test "x$enableval" = "xyes" ; then
+      NBD_LFS=1
+    else
+      NBD_LFS=0
+    fi
+  ],
+  [NBD_LFS=1]
+)
+AC_MSG_CHECKING([whether Large File Support should be enabled])
+if test $NBD_LFS -eq 1; then
+  AC_DEFINE(NBD_LFS,1, [Define to 1 if Large File Support should be enabled])
+  AC_MSG_RESULT([yes])
+else
+  AC_DEFINE(NBD_LFS,0)
+  AC_MSG_RESULT([no])
+fi
+
 dnl Produce output files.
 AC_CONFIG_HEADERS([config.h])
 
