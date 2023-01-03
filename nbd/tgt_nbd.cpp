@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: MIT or GPL-2.0-only
+
+#include <config.h>
+#include "ublksrv_tgt.h"
+
+static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
+		char *argv[])
+{
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	int jbuf_size;
+	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
+	struct ublksrv_tgt_base_json tgt_json = {
+		.type = type,
+	};
+	unsigned long long dev_size = 250UL * 1024 * 1024 * 1024;
+	struct ublk_params p = {
+		.types = UBLK_PARAM_TYPE_BASIC,
+		.basic = {
+			.logical_bs_shift	= 9,
+			.physical_bs_shift	= 12,
+			.io_opt_shift		= 12,
+			.io_min_shift		= 9,
+			.max_sectors		= info->max_io_buf_bytes >> 9,
+			.dev_sectors		= dev_size >> 9,
+		},
+	};
+	int ret;
+
+	strcpy(tgt_json.name, "nbd");
+
+	if (type != UBLKSRV_TGT_TYPE_NBD)
+		return -1;
+
+	tgt_json.dev_size = tgt->dev_size = dev_size;
+	tgt->tgt_ring_depth = info->queue_depth;
+	tgt->nr_fds = 0;
+
+	ublksrv_tgt_set_io_data_size(tgt);
+
+	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
+	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
+
+	do {
+		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
+		if (ret < 0)
+			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
+	} while (ret < 0);
+
+	return 0;
+}
+
+static int nbd_recovery_tgt(struct ublksrv_dev *dev, int type)
+{
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(cdev);
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	int ret;
+	struct ublk_params p;
+
+	ublk_assert(jbuf);
+	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
+	ublk_assert(type == UBLKSRV_TGT_TYPE_NULL);
+
+	ret = ublksrv_json_read_params(&p, jbuf);
+	if (ret) {
+		syslog(LOG_ERR, "%s: read ublk params failed %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	ublksrv_tgt_set_io_data_size(tgt);
+	tgt->dev_size = p.basic.dev_sectors << 9;
+	tgt->tgt_ring_depth = info->queue_depth;
+	tgt->nr_fds = 0;
+	return 0;
+}
+
+static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data, int tag)
+{
+	ublksrv_complete_io(q, tag, data->iod->nr_sectors << 9);
+
+	co_return;
+}
+
+static int nbd_handle_io_async(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data)
+{
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+	io->co = __nbd_handle_io_async(q, data, data->tag);
+
+	return 0;
+}
+
+struct ublksrv_tgt_type  nbd_tgt_type = {
+	.handle_io_async = nbd_handle_io_async,
+	.init_tgt = nbd_init_tgt,
+	.type	= UBLKSRV_TGT_TYPE_NULL,
+	.name	=  "nbd",
+	.recovery_tgt = nbd_recovery_tgt,
+};
+
+static void tgt_nbd_init() __attribute__((constructor));
+
+static void tgt_nbd_init(void)
+{
+	ublksrv_register_tgt_type(&nbd_tgt_type);
+}
+
