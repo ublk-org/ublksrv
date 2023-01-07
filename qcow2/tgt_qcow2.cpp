@@ -275,7 +275,7 @@ static inline int qcow2_queue_tgt_rw(const struct ublksrv_queue *q, unsigned io_
 		int tag, u64 offset, const struct ublksrv_io_desc *iod,
 		u32 *expected_op)
 {
-	Qcow2State *qs = dev_to_qcow2state(q->dev);
+	Qcow2State *qs = queue_to_qcow2state(q);
 	u64 cluster_start = offset & ~((1ULL << qs->header.cluster_bits) - 1);
 	Qcow2ClusterState *cs = qs->cluster_allocator.
 		get_cluster_state(cluster_start);
@@ -340,7 +340,7 @@ static co_io_job __qcow2_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
-	Qcow2State *qs = dev_to_qcow2state(q->dev);
+	Qcow2State *qs = queue_to_qcow2state(q);
 	const struct ublksrv_io_desc *iod = data->iod;
 	unsigned long start = iod->start_sector << 9;
 	u64 mapped_start;
@@ -503,7 +503,7 @@ static void qcow2_tgt_io_done(const struct ublksrv_queue *q,
 
 static void qcow2_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 {
-	Qcow2State *qs = dev_to_qcow2state(q->dev);
+	Qcow2State *qs = queue_to_qcow2state(q);
 
 	meta_log("%s %d, queued io %d\n", __func__, __LINE__, nr_queued_io);
 	qs->kill_slices(q);
@@ -518,12 +518,22 @@ again:
 
 static void qcow2_idle(const struct ublksrv_queue *q, bool enter)
 {
-	Qcow2State *qs = dev_to_qcow2state(q->dev);
+	Qcow2State *qs = queue_to_qcow2state(q);
 
 	if (!enter)
 		return;
 
 	qs->shrink_cache();
+}
+
+static int qcow2_init_queue(const struct ublksrv_queue *q,
+		void **queue_data_ptr)
+{
+	Qcow2State *qs = dev_to_qcow2state(q->dev);
+
+	*queue_data_ptr = (void *)qs;
+
+	return 0;
 }
 
 struct ublksrv_tgt_type  qcow2_tgt_type = {
@@ -537,6 +547,7 @@ struct ublksrv_tgt_type  qcow2_tgt_type = {
 	.type	= UBLKSRV_TGT_TYPE_QCOW2,
 	.name	=  "qcow2",
 	.recovery_tgt = qcow2_recovery_tgt,
+	.init_queue = qcow2_init_queue,
 };
 
 static void tgt_qcow2_init() __attribute__((constructor));

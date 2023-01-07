@@ -623,7 +623,7 @@ bool Qcow2MetaFlushing::is_flushing()
 
 void Qcow2MetaFlushing::run_flush(const struct ublksrv_queue *q, int queued)
 {
-	Qcow2State *qs = dev_to_qcow2state(q->dev);
+	Qcow2State *qs = queue_to_qcow2state(q);
 	bool need_flush;
 	int map_idx = -1;
 	int refcnt_idx = -1;

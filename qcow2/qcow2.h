@@ -697,6 +697,11 @@ static inline Qcow2State *dev_to_qcow2state(const struct ublksrv_dev *dev)
 	return (Qcow2State *)dev->tgt.tgt_data;
 }
 
+static inline Qcow2State *queue_to_qcow2state(const struct ublksrv_queue *q)
+{
+	return (Qcow2State *)q->private_data;
+}
+
 Qcow2State *make_qcow2state(const char *file, struct ublksrv_dev *dev);
 
 class Qcow2StatePlain : public Qcow2State {
@@ -734,7 +739,7 @@ static inline int qcow2_meta_io_done(const struct ublksrv_queue *q,
 		return -EAGAIN;
 	}
 
-	Qcow2State *qs = dev_to_qcow2state(q->dev);
+	Qcow2State *qs = queue_to_qcow2state(q);
 	/* retrieve meta data from target data part of cqe->user_data */
 	Qcow2MappingMeta *meta = qs->get_meta_io(q->q_id, tgt_data - 1);
 
