@@ -20,6 +20,36 @@
 		break;						\
 } while (1)
 
+enum nbd_recv_state {
+	NBD_RECV_IDLE,
+	NBD_RECV_REPLY,
+	NBD_RECV_DATA,
+};
+
+struct nbd_queue_data {
+	enum nbd_recv_state recv;
+	unsigned short in_flight_read_ios;
+
+	struct nbd_reply reply;
+};
+
+struct nbd_io_data {
+	struct nbd_request req;
+	unsigned int cmd_cookie;
+};
+
+static inline struct nbd_queue_data *
+nbd_get_queue_data(const struct ublksrv_queue *q)
+{
+	return (struct nbd_queue_data *)q->private_data;
+}
+
+static inline struct nbd_io_data *
+io_tgt_to_nbd_data(const struct ublk_io_tgt *io)
+{
+	return (struct nbd_io_data *)(io + 1);
+}
+
 static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery)
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
@@ -83,8 +113,10 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery)
 	tgt->dev_size = size64;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = info->nr_hw_queues;
+	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
 
-	ublksrv_tgt_set_io_data_size(tgt);
+	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
+		sizeof(struct nbd_io_data);
 }
 
 static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
@@ -211,6 +243,28 @@ static void nbd_usage_for_add(void)
 	printf("           nbd: --host=$HOST [--port=$PORT] | --unix=$UNIX_PATH\n");
 }
 
+static int nbd_init_queue(const struct ublksrv_queue *q,
+		void **queue_data_ptr)
+{
+	struct nbd_queue_data *data =
+		(struct nbd_queue_data *)calloc(sizeof(*data), 1);
+
+	if (!data)
+		return -ENOMEM;
+
+	data->recv = NBD_RECV_IDLE;
+
+	*queue_data_ptr = (void *)data;
+	return 0;
+}
+
+static void nbd_deinit_queue(const struct ublksrv_queue *q)
+{
+	struct nbd_queue_data *data = nbd_get_queue_data(q);
+
+	free(data);
+}
+
 struct ublksrv_tgt_type  nbd_tgt_type = {
 	.handle_io_async = nbd_handle_io_async,
 	.usage_for_add	=  nbd_usage_for_add,
@@ -219,6 +273,8 @@ struct ublksrv_tgt_type  nbd_tgt_type = {
 	.type	= UBLKSRV_TGT_TYPE_NBD,
 	.name	=  "nbd",
 	.recovery_tgt = nbd_recovery_tgt,
+	.init_queue = nbd_init_queue,
+	.deinit_queue = nbd_deinit_queue,
 };
 
 static void tgt_nbd_init() __attribute__((constructor));
