@@ -80,7 +80,6 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 		fcntl(fd, F_SETFL, O_DIRECT);
 
 	ublksrv_tgt_set_io_data_size(tgt);
-	tgt->tgt_data = strdup(file);
 	tgt->dev_size = p.basic.dev_sectors << 9;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 1;
@@ -186,7 +185,6 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	}
 
 	ublksrv_tgt_set_io_data_size(tgt);
-	tgt->tgt_data = strdup(file);
 	tgt_json.dev_size = tgt->dev_size = bytes;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 1;
@@ -366,8 +364,6 @@ static void loop_deinit_tgt(const struct ublksrv_dev *dev)
 {
 	fsync(dev->tgt.fds[1]);
 	close(dev->tgt.fds[1]);
-
-	free(dev->tgt.tgt_data);
 }
 
 struct ublksrv_tgt_type  loop_tgt_type = {
