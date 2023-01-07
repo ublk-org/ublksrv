@@ -10,6 +10,8 @@ m4_ifdef([AC_USE_SYSTEM_EXTENSIONS],[],
 AC_USE_SYSTEM_EXTENSIONS
 AC_SYS_LARGEFILE
 
+AM_SILENT_RULES([yes])
+
 dnl NB: Do not [quote] this parameter.
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 LT_INIT
