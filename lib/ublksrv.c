@@ -519,6 +519,11 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 	io_buf_size = ctrl_dev->dev_info.max_io_buf_bytes;
 	for (i = 0; i < nr_ios; i++) {
 		q->ios[i].buf_addr = NULL;
+
+		/* extra ios needn't to allocate io buffer */
+		if (i >= q->q_depth)
+			goto skip_alloc_buf;
+
 		if (dev->tgt.ops->alloc_io_buf)
 			q->ios[i].buf_addr =
 				dev->tgt.ops->alloc_io_buf(local_to_tq(q),
@@ -536,6 +541,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 					q->dev->ctrl_dev->dev_info.dev_id, q->q_id, i);
 			goto fail;
 		}
+skip_alloc_buf:
 		q->ios[i].flags = UBLKSRV_NEED_FETCH_RQ | UBLKSRV_IO_FREE;
 		q->ios[i].data.private_data = malloc(io_data_size);
 		q->ios[i].data.tag = i;
