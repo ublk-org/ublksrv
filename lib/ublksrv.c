@@ -343,6 +343,9 @@ void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 	int i;
 	int nr_ios = q->dev->tgt.extra_ios + q->q_depth;
 
+	if (q->dev->tgt.ops->deinit_queue)
+		q->dev->tgt.ops->deinit_queue(tq);
+
 	if (q->efd > 0)
 		close(q->efd);
 
@@ -578,6 +581,11 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 
 	q->private_data = queue_data;
 
+	if (ctrl_dev->tgt_ops->init_queue) {
+		if (ctrl_dev->tgt_ops->init_queue(local_to_tq(q),
+					&q->private_data))
+			goto fail;
+	}
 
 	if (ctrl_dev->queues_cpuset)
 		ublksrv_set_sched_affinity(dev, q_id);

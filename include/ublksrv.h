@@ -251,7 +251,19 @@ struct ublksrv_tgt_type {
 	/* recovery this target */
 	int (*recovery_tgt)(struct ublksrv_dev *, int type);
 
-	unsigned long reserved[7];
+	/*
+	 * queue_data_ptr points to address of q->priviate_data, so that
+	 * we still can pass 'const struct ublksrv_queue *', meantime
+	 * queue data can be stored to q->private_data via queue_data_ptr.
+	 *
+	 * ->init_queue provides one chance to override/init the passed
+	 * "queue_data" to ublksrv_queue_init(), "queue_data" is set to
+	 * q->private_data before calling ->init_queue()
+	 */
+	int (*init_queue)(const struct ublksrv_queue *, void **queue_data_ptr);
+	void (*deinit_queue)(const struct ublksrv_queue *);
+
+	unsigned long reserved[5];
 };
 
 static inline __u64 build_user_data(unsigned tag, unsigned op,
