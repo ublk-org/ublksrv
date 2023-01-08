@@ -132,4 +132,25 @@ enum {
 extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
 extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);
 
+enum {
+	UBLK_UNIQUE_TAG_BITS = 16,
+	UBLK_UNIQUE_TAG_MASK = (1 << UBLK_UNIQUE_TAG_BITS) - 1,
+};
+
+static inline unsigned int ublk_unique_tag(unsigned short hwq,
+		unsigned short tag)
+{
+	return (hwq << UBLK_UNIQUE_TAG_BITS) | (tag & UBLK_UNIQUE_TAG_MASK);
+}
+
+static inline unsigned short ublk_unique_tag_to_hwq(unsigned int unique_tag)
+{
+        return unique_tag >> UBLK_UNIQUE_TAG_BITS;
+}
+
+static inline unsigned short ublk_unique_tag_to_tag(unsigned int unique_tag)
+{
+        return unique_tag & UBLK_UNIQUE_TAG_MASK;
+}
+
 #endif
