@@ -102,7 +102,7 @@ struct nbd_reply {
 	char handle[8];		/* handle you got from request	*/
 };
 
-extern int opennet(char *name, char* portstr, int sdp);
+extern int opennet(const char *name, const char* portstr, int sdp);
 extern int openunix(const char *path);
 extern void negotiate(int *sockp, u64 *rsize64, uint16_t *flags, char* name,
 		uint32_t needed_flags, uint32_t client_flags, uint32_t do_opts,

@@ -33,7 +33,7 @@
 
 #define NBDC_DO_LIST 1
 
-int opennet(char *name, char* portstr, int sdp) {
+int opennet(const char *name, const char* portstr, int sdp) {
 	int sock;
 	struct addrinfo hints;
 	struct addrinfo *ai = NULL;
