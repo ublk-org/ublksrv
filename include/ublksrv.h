@@ -371,6 +371,8 @@ extern int ublksrv_json_get_length(const char *jbuf);
 
 /* ublksrv queue level APIs */
 extern void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag);
+extern const struct ublk_io_data *ublksrv_queue_get_io_data(
+		const struct ublksrv_queue *tq, int tag);
 extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
 extern const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data);

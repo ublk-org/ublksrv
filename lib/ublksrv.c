@@ -956,3 +956,11 @@ unsigned int ublksrv_queue_state(const struct ublksrv_queue *q)
 {
 	return tq_to_local(q)->state;
 }
+
+const struct ublk_io_data *
+ublksrv_queue_get_io_data(const struct ublksrv_queue *tq, int tag)
+{
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
+	return &q->ios[tag].data;
+}
