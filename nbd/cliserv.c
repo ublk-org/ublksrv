@@ -114,7 +114,7 @@ uint64_t ntohll(uint64_t a) {
 int readit(int f, void *buf, size_t len) {
 	ssize_t res;
 	while (len > 0) {
-		DEBUG("*");
+		NBD_DEBUG("*");
 		res = read(f, buf, len);
 		if (res > 0) {
 			len -= res;
@@ -143,7 +143,7 @@ int readit(int f, void *buf, size_t len) {
 int writeit(int f, void *buf, size_t len) {
 	ssize_t res;
 	while (len > 0) {
-		DEBUG("+");
+		NBD_DEBUG("+");
 		if ((res = write(f, buf, len)) <= 0) {
 			switch(errno) {
 				case EAGAIN:

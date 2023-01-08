@@ -10,9 +10,9 @@ extern "C" {
 
 /* Debugging macros */
 #ifdef DODBG
-#define DEBUG(...) printf(__VA_ARGS__)
+#define NBD_DEBUG(...) printf(__VA_ARGS__)
 #else
-#define DEBUG(...)
+#define NBD_DEBUG(...)
 #endif
 #ifndef PACKAGE_VERSION
 #define PACKAGE_VERSION ""
