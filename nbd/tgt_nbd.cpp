@@ -2,6 +2,7 @@
 
 #include <config.h>
 #include "ublksrv_tgt.h"
+#include "ublksrv_tgt_endian.h"
 #include "cliserv.h"
 #include "nbd.h"
 
@@ -34,7 +35,6 @@ struct nbd_queue_data {
 };
 
 struct nbd_io_data {
-	struct nbd_request req;
 	unsigned int cmd_cookie;
 };
 
@@ -181,6 +181,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
 		.basic = {
+			.attrs			= UBLK_ATTR_READ_ONLY,
 			.logical_bs_shift	= bs_shift,
 			.physical_bs_shift	= 12,
 			.io_opt_shift		= 12,
@@ -205,10 +206,207 @@ static int nbd_recovery_tgt(struct ublksrv_dev *dev, int type)
 	return 0;
 }
 
-static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
-		const struct ublk_io_data *data, int tag)
+static int req_to_nbd_cmd_type(const struct ublksrv_io_desc *iod)
 {
-	ublksrv_complete_io(q, tag, data->iod->nr_sectors << 9);
+	switch (ublksrv_get_op(iod)) {
+	case UBLK_IO_OP_DISCARD:
+		return NBD_CMD_TRIM;
+	case UBLK_IO_OP_FLUSH:
+		return NBD_CMD_FLUSH;
+	case UBLK_IO_OP_WRITE:
+		return NBD_CMD_WRITE;
+	case UBLK_IO_OP_READ:
+		return NBD_CMD_READ;
+	default:
+		return -1;
+	}
+}
+
+static inline bool is_recv_io(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data)
+{
+	return data->tag >= q->q_depth;
+}
+
+#define NBD_COOKIE_BITS 32
+static inline u64 nbd_cmd_handle(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct nbd_io_data *nbd_data)
+{
+	u64 cookie = nbd_data->cmd_cookie;
+
+	return (cookie << NBD_COOKIE_BITS) | ublk_unique_tag(q->q_id, data->tag);
+}
+
+static inline u32 nbd_handle_to_cookie(u64 handle)
+{
+	return (u32)(handle >> NBD_COOKIE_BITS);
+}
+
+static inline u32 nbd_handle_to_tag(u64 handle)
+{
+	return (u32)handle;
+}
+
+static inline void __nbd_build_req(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct nbd_io_data *nbd_data,
+		u32 type, struct nbd_request *req)
+{
+	u32 nbd_cmd_flags = 0;
+	u64 handle;
+
+	if (data->iod->op_flags & UBLK_IO_F_FUA)
+		nbd_cmd_flags |= NBD_CMD_FLAG_FUA;
+
+	req->type = htonl(type | nbd_cmd_flags);
+
+	if (type != NBD_CMD_FLUSH) {
+		req->from = cpu_to_be64(data->iod->start_sector << 9);
+		req->len = htonl(data->iod->nr_sectors << 9);
+	}
+
+	handle = nbd_cmd_handle(q, data, nbd_data);
+	memcpy(req->handle, &handle, sizeof(handle));
+}
+
+static inline void nbd_start_recv(const struct ublksrv_queue *q,
+		void *buf, int len, int tag, bool reply)
+{
+	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
+
+	io_uring_prep_recv(sqe, q->q_id + 1, buf, len, MSG_WAITALL);
+	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+
+	/* bit63 marks us as tgt io */
+	sqe->user_data = build_user_data(tag, UBLK_IO_OP_READ, 0, 1);
+
+	ublksrv_log(LOG_INFO, "%s: queue recv %s"
+				"(qid %d tag %u, target: %d, user_data %llx)\n",
+			__func__, reply ? "reply" : "io",
+			q->q_id, tag, 1, sqe->user_data);
+}
+
+static void nbd_recv_reply(const struct ublksrv_queue *q)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+
+	if (q_data->recv != NBD_RECV_IDLE)
+		return;
+
+	if (!q_data->in_flight_read_ios) {
+		q_data->recv = NBD_RECV_IDLE;
+		return;
+	}
+
+	q_data->recv = NBD_RECV_REPLY;
+	nbd_start_recv(q, &q_data->reply, sizeof(q_data->reply),
+			q->q_depth, true);
+}
+
+static void nbd_recv_io(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+
+	if (q_data->recv != NBD_RECV_REPLY)
+		return;
+
+	if (!q_data->in_flight_read_ios) {
+		q_data->recv = NBD_RECV_IDLE;
+		return;
+	}
+
+	q_data->recv = NBD_RECV_DATA;
+	nbd_start_recv(q, (void *)data->iod->addr,
+			data->iod->nr_sectors << 9, data->tag, false);
+}
+
+static int nbd_queue_req(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct nbd_request *req)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	const struct ublksrv_io_desc *iod = data->iod;
+	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
+	unsigned ublk_op = ublksrv_get_op(iod);
+
+	if (!sqe)
+		return 0;
+
+	switch (ublk_op) {
+	case UBLK_IO_OP_READ:
+		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), 0);
+		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE |
+				IOSQE_CQE_SKIP_SUCCESS);
+		q_data->in_flight_read_ios += 1;
+		nbd_recv_reply(q);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* bit63 marks us as tgt io */
+	sqe->user_data = build_user_data(data->tag, ublk_op, 0, 1);
+
+	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
+				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
+			__func__, ublk_op, data->iod->start_sector,
+			data->iod->nr_sectors, sqe->addr,
+			q->q_id, data->tag, ublk_op, 1, sqe->user_data);
+
+	return 1;
+}
+
+static void nbd_handle_recv_io(const struct ublksrv_queue *q)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+
+	ublk_assert(q_data->recv == NBD_RECV_DATA);
+
+	q_data->recv = NBD_RECV_IDLE;
+	nbd_recv_reply(q);
+}
+
+static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data, struct ublk_io_tgt *io)
+{
+	struct nbd_request req = {.magic = htonl(NBD_REQUEST_MAGIC)};
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
+	int type = req_to_nbd_cmd_type(data->iod);
+	int ret = -EIO;
+
+	if (type == -1)
+		goto exit;
+
+	ret = -EOPNOTSUPP;
+	/* so far, support read only*/
+	if (type != NBD_CMD_READ)
+		goto exit;
+
+	nbd_data->cmd_cookie += 1;
+
+	__nbd_build_req(q, data, nbd_data, type, &req);
+
+again:
+	ret = nbd_queue_req(q, data, &req);
+	if (!ret)
+		ret = -ENOMEM;
+	if (ret < 0)
+		goto exit;
+
+	co_await__suspend_always(data->tag);
+	if (io->tgt_io_cqe->res == -EAGAIN)
+		goto again;
+	ret = io->tgt_io_cqe->res;
+
+exit:
+	ublksrv_complete_io(q, data->tag, ret);
+	if (type == NBD_CMD_READ) {
+		q_data->in_flight_read_ios -= 1;
+		nbd_handle_recv_io(q);
+	}
 
 	co_return;
 }
@@ -218,9 +416,69 @@ static int nbd_handle_io_async(const struct ublksrv_queue *q,
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-	io->co = __nbd_handle_io_async(q, data, data->tag);
+	io->co = __nbd_handle_io_async(q, data, io);
 
 	return 0;
+}
+
+static void nbd_handle_recv_reply(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data, struct ublk_io_tgt *io,
+		const struct io_uring_cqe *cqe)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	struct nbd_io_data *nbd_data;
+	u64 handle;
+	int tag, hwq;
+
+	ublk_assert(q_data->recv == NBD_RECV_REPLY);
+
+	/* we are receiving reply for every read IO, so simply retry */
+	if (cqe->res < 0) {
+retry:
+		q_data->recv = NBD_RECV_IDLE;
+		nbd_recv_reply(q);
+		return;
+	}
+
+	memcpy(&handle, q_data->reply.handle, sizeof(handle));
+	tag = nbd_handle_to_tag(handle);
+	hwq = ublk_unique_tag_to_hwq(tag);
+	tag = ublk_unique_tag_to_tag(tag);
+
+	if (tag >= q->q_depth)
+		goto retry;
+
+	if (hwq != q->q_id)
+		goto retry;
+
+
+	data = ublksrv_queue_get_io_data(q, tag);
+	io = __ublk_get_io_tgt_data(data);
+	nbd_data = io_tgt_to_nbd_data(io);
+
+	if (nbd_data->cmd_cookie != nbd_handle_to_cookie(handle))
+		goto retry;
+
+	nbd_recv_io(q, data);
+}
+
+static void nbd_tgt_io_done(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct io_uring_cqe *cqe)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	int tag = user_data_to_tag(cqe->user_data);
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+	ublk_assert(tag == data->tag);
+
+	if (is_recv_io(q, data)) {
+		ublk_assert(q_data->recv == NBD_RECV_REPLY);
+		nbd_handle_recv_reply(q, data, io, cqe);
+	} else {
+		io->tgt_io_cqe = cqe;
+		io->co.resume();
+	}
 }
 
 static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
@@ -267,6 +525,7 @@ static void nbd_deinit_queue(const struct ublksrv_queue *q)
 
 struct ublksrv_tgt_type  nbd_tgt_type = {
 	.handle_io_async = nbd_handle_io_async,
+	.tgt_io_done = nbd_tgt_io_done,
 	.usage_for_add	=  nbd_usage_for_add,
 	.init_tgt = nbd_init_tgt,
 	.deinit_tgt = nbd_deinit_tgt,
