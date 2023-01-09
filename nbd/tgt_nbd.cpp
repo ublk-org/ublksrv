@@ -307,6 +307,7 @@ static inline void __nbd_build_req(const struct ublksrv_queue *q,
 static inline void nbd_start_recv(const struct ublksrv_queue *q,
 		void *buf, int len, int tag, bool reply)
 {
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
 
@@ -316,9 +317,9 @@ static inline void nbd_start_recv(const struct ublksrv_queue *q,
 	/* bit63 marks us as tgt io */
 	sqe->user_data = build_user_data(tag, op, 0, 1);
 
-	ublksrv_log(LOG_INFO, "%s: queue recv %s"
+	ublksrv_log(LOG_INFO, "%s: q_inflight %d queue recv %s"
 				"(qid %d tag %u, target: %d, user_data %llx)\n",
-			__func__, reply ? "reply" : "io",
+			__func__, q_data->in_flight_ios, reply ? "reply" : "io",
 			q->q_id, tag, 1, sqe->user_data);
 }
 
@@ -396,7 +397,6 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct nbd_request *req)
 {
-	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
@@ -405,7 +405,6 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	if (!sqe)
 		return 0;
 
-	q_data->in_flight_ios += 1;
 	switch (ublk_op) {
 	case UBLK_IO_OP_READ:
 		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), 0);
@@ -429,7 +428,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	}
 
 	if (ret < 0) {
-		q_data->in_flight_ios -= 1;
+		syslog(LOG_ERR, "%s failed ret %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -473,6 +472,7 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	nbd_data->cmd_cookie += 1;
 
 	__nbd_build_req(q, data, nbd_data, type, &req);
+	q_data->in_flight_ios += 1;
 
 again:
 	ret = nbd_queue_req(q, data, &req);
@@ -487,6 +487,8 @@ again:
 	ret = io->tgt_io_cqe->res;
 
 exit:
+	if (ret < 0)
+		syslog(LOG_ERR, "%s: err %d\n", __func__, ret);
 	ublksrv_complete_io(q, data->tag, ret);
 	q_data->in_flight_ios -= 1;
 	nbd_handle_recv_io(q, type);
