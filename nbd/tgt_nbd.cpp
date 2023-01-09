@@ -207,7 +207,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
 		.basic = {
-			.attrs			= UBLK_ATTR_READ_ONLY,
 			.logical_bs_shift	= bs_shift,
 			.physical_bs_shift	= 12,
 			.io_opt_shift		= 12,
@@ -353,6 +352,43 @@ static void nbd_recv_io(const struct ublksrv_queue *q,
 			data->iod->nr_sectors << 9, data->tag, false);
 }
 
+static void nbd_queue_send_req(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct nbd_request *req,
+		struct io_uring_sqe *sqe)
+{
+#if 0
+        struct iovec iov[2] = {
+		[0] = {
+			.iov_base = (void *)req,
+			.iov_len = sizeof(*req),
+		},
+		[1] = {
+			.iov_base = (void *)data->iod->addr,
+			.iov_len = data->iod->nr_sectors << 9,
+		},
+	};
+        struct msghdr msg = {0};
+
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 2;
+
+	io_uring_prep_sendmsg(sqe, q->q_id + 1, &msg, 0);
+#else
+	struct io_uring_sqe *sqe2 = io_uring_get_sqe(q->ring_ptr);
+
+	io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), 0);
+	io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS |
+			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+	sqe->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 1, 1);
+
+	io_uring_prep_send(sqe2, q->q_id + 1, (void *)data->iod->addr,
+			data->iod->nr_sectors << 9, MSG_WAITALL);
+	io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
+	sqe2->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 0, 1);
+#endif
+}
+
 static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct nbd_request *req)
@@ -368,17 +404,27 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	switch (ublk_op) {
 	case UBLK_IO_OP_READ:
 		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), 0);
-		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE |
-				IOSQE_CQE_SKIP_SUCCESS);
+		io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
 		q_data->in_flight_read_ios += 1;
 		nbd_recv_reply(q);
+		break;
+	case UBLK_IO_OP_WRITE:
+		nbd_queue_send_req(q, data, req, sqe);
+		break;
+	case UBLK_IO_OP_FLUSH:
+	case UBLK_IO_OP_DISCARD:
+		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req),
+				MSG_WAITALL);
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	/* bit63 marks us as tgt io */
-	sqe->user_data = build_user_data(data->tag, ublk_op, 0, 1);
+	if (ublk_op != UBLK_IO_OP_WRITE) {
+		sqe->flags |= IOSQE_FIXED_FILE;
+		/* bit63 marks us as tgt io */
+		sqe->user_data = build_user_data(data->tag, ublk_op, 0, 1);
+	}
 
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
@@ -409,11 +455,6 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	int ret = -EIO;
 
 	if (type == -1)
-		goto exit;
-
-	ret = -EOPNOTSUPP;
-	/* so far, support read only*/
-	if (type != NBD_CMD_READ)
 		goto exit;
 
 	nbd_data->cmd_cookie += 1;
