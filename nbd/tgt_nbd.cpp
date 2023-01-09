@@ -292,7 +292,7 @@ static inline void __nbd_build_req(const struct ublksrv_queue *q,
 	req->type = htonl(type | nbd_cmd_flags);
 
 	if (type != NBD_CMD_FLUSH) {
-		req->from = cpu_to_be64(data->iod->start_sector << 9);
+		req->from = cpu_to_be64((u64)data->iod->start_sector << 9);
 		req->len = htonl(data->iod->nr_sectors << 9);
 	}
 
@@ -377,13 +377,13 @@ static void nbd_queue_send_req(const struct ublksrv_queue *q,
 #else
 	struct io_uring_sqe *sqe2 = io_uring_get_sqe(q->ring_ptr);
 
-	io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), 0);
+	io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), MSG_MORE);
 	io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS |
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 	sqe->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 1, 1);
 
 	io_uring_prep_send(sqe2, q->q_id + 1, (void *)data->iod->addr,
-			data->iod->nr_sectors << 9, MSG_WAITALL);
+			data->iod->nr_sectors << 9, 0);
 	io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
 	sqe2->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 0, 1);
 #endif
@@ -511,6 +511,7 @@ retry:
 		nbd_recv_reply(q);
 		return;
 	}
+	ublk_assert(cqe->res == sizeof(struct nbd_reply));
 
 	memcpy(&handle, q_data->reply.handle, sizeof(handle));
 	tag = nbd_handle_to_tag(handle);
