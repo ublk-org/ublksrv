@@ -65,6 +65,11 @@ enum {
 #define NBD_FLAG_SEND_WRITE_ZEROES (1 << 6) 	/* Send NBD_CMD_WRITE_ZEROES */
 #define NBD_FLAG_CAN_MULTI_CONN	(1 << 8)	/* multiple connections are okay */
 
+/* from libnbd/lib/nbd-protocol.h */
+#define NBD_FLAG_SEND_DF           (1 << 7)
+#define NBD_FLAG_SEND_CACHE        (1 << 10)
+#define NBD_FLAG_SEND_FAST_ZERO    (1 << 11)
+
 #define nbd_cmd(req) ((req)->cmd[0])
 
 /* userspace doesn't need the nbd_device structure */
