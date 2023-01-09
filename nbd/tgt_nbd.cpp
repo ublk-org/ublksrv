@@ -33,7 +33,7 @@ enum nbd_recv_state {
 
 struct nbd_queue_data {
 	enum nbd_recv_state recv;
-	unsigned short in_flight_read_ios;
+	unsigned short in_flight_ios;
 
 	struct nbd_reply reply;
 };
@@ -329,10 +329,8 @@ static void nbd_recv_reply(const struct ublksrv_queue *q)
 	if (q_data->recv != NBD_RECV_IDLE)
 		return;
 
-	if (!q_data->in_flight_read_ios) {
-		q_data->recv = NBD_RECV_IDLE;
+	if (!q_data->in_flight_ios)
 		return;
-	}
 
 	q_data->recv = NBD_RECV_REPLY;
 	nbd_start_recv(q, &q_data->reply, sizeof(q_data->reply),
@@ -347,17 +345,12 @@ static void nbd_recv_io(const struct ublksrv_queue *q,
 	if (q_data->recv != NBD_RECV_REPLY)
 		return;
 
-	if (!q_data->in_flight_read_ios) {
-		q_data->recv = NBD_RECV_IDLE;
-		return;
-	}
-
 	q_data->recv = NBD_RECV_DATA;
 	nbd_start_recv(q, (void *)data->iod->addr,
 			data->iod->nr_sectors << 9, data->tag, false);
 }
 
-static void nbd_queue_send_req(const struct ublksrv_queue *q,
+static int nbd_queue_send_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct nbd_request *req,
 		struct io_uring_sqe *sqe)
@@ -382,6 +375,9 @@ static void nbd_queue_send_req(const struct ublksrv_queue *q,
 #else
 	struct io_uring_sqe *sqe2 = io_uring_get_sqe(q->ring_ptr);
 
+	if (!sqe2)
+		return -ENOMEM;
+
 	io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), MSG_MORE);
 	io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS |
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
@@ -391,6 +387,8 @@ static void nbd_queue_send_req(const struct ublksrv_queue *q,
 			data->iod->nr_sectors << 9, 0);
 	io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
 	sqe2->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 0, 1);
+
+	return 0;
 #endif
 }
 
@@ -402,21 +400,21 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
+	int ret = 0;
 
 	if (!sqe)
 		return 0;
 
+	q_data->in_flight_ios += 1;
 	switch (ublk_op) {
 	case UBLK_IO_OP_READ:
 		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), 0);
 		io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS |
 				IOSQE_FIXED_FILE);
 		sqe->user_data = build_user_data(data->tag, NBD_OP_READ_REQ, 0, 1);
-		q_data->in_flight_read_ios += 1;
-		nbd_recv_reply(q);
 		break;
 	case UBLK_IO_OP_WRITE:
-		nbd_queue_send_req(q, data, req, sqe);
+		ret = nbd_queue_send_req(q, data, req, sqe);
 		break;
 	case UBLK_IO_OP_FLUSH:
 	case UBLK_IO_OP_DISCARD:
@@ -426,8 +424,16 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		sqe->user_data = build_user_data(data->tag, ublk_op, 0, 1);
 		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
+		break;
 	}
+
+	if (ret < 0) {
+		q_data->in_flight_ios -= 1;
+		return ret;
+	}
+
+	nbd_recv_reply(q);
 
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
@@ -438,11 +444,15 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	return 1;
 }
 
-static void nbd_handle_recv_io(const struct ublksrv_queue *q)
+static void nbd_handle_recv_io(const struct ublksrv_queue *q,
+		int type)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
-	ublk_assert(q_data->recv == NBD_RECV_DATA);
+	if (type == NBD_CMD_READ)
+		ublk_assert(q_data->recv == NBD_RECV_DATA);
+	else
+		ublk_assert(q_data->recv == NBD_RECV_REPLY);
 
 	q_data->recv = NBD_RECV_IDLE;
 	nbd_recv_reply(q);
@@ -478,10 +488,8 @@ again:
 
 exit:
 	ublksrv_complete_io(q, data->tag, ret);
-	if (type == NBD_CMD_READ) {
-		q_data->in_flight_read_ios -= 1;
-		nbd_handle_recv_io(q);
-	}
+	q_data->in_flight_ios -= 1;
+	nbd_handle_recv_io(q, type);
 
 	co_return;
 }
@@ -504,6 +512,7 @@ static void nbd_handle_recv_reply(const struct ublksrv_queue *q,
 	struct nbd_io_data *nbd_data;
 	u64 handle;
 	int tag, hwq;
+	unsigned ublk_op;
 
 	ublk_assert(q_data->recv == NBD_RECV_REPLY);
 
@@ -535,7 +544,26 @@ retry:
 	if (nbd_data->cmd_cookie != nbd_handle_to_cookie(handle))
 		goto retry;
 
-	nbd_recv_io(q, data);
+	ublk_op = ublksrv_get_op(data->iod);
+
+	if (ublk_op == UBLK_IO_OP_READ)
+		nbd_recv_io(q, data);
+	else {
+		int err = ntohl(q_data->reply.error);
+		struct io_uring_cqe fake_cqe;
+
+		if (err) {
+			fake_cqe.res = -EIO;
+		} else {
+			if (ublk_op == UBLK_IO_OP_WRITE)
+				fake_cqe.res = data->iod->nr_sectors << 9;
+			else
+				fake_cqe.res = 0;
+		}
+
+		io->tgt_io_cqe = &fake_cqe;
+		io->co.resume();
+	}
 }
 
 static void nbd_tgt_io_done(const struct ublksrv_queue *q,
@@ -552,8 +580,11 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 		ublk_assert(q_data->recv == NBD_RECV_REPLY);
 		nbd_handle_recv_reply(q, data, io, cqe);
 	} else {
-		io->tgt_io_cqe = cqe;
-		io->co.resume();
+		if (user_data_to_op(cqe->user_data) == UBLK_IO_OP_READ ||
+				cqe->res < 0) {
+			io->tgt_io_cqe = cqe;
+			io->co.resume();
+		}
 	}
 }
 
