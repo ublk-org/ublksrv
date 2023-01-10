@@ -466,7 +466,16 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 	if (cqe->res < 0) {
 		syslog(LOG_ERR, "%s %d: reply cqe %d\n", __func__,
 				__LINE__, cqe->res);
-		return cqe->res;
+		ret = cqe->res;
+		goto fail;
+	}
+
+	if (ntohl(q_data->reply.magic) != NBD_REPLY_MAGIC) {
+		syslog(LOG_ERR, "%s %d: reply bad magic %x res %d\n",
+				__func__, __LINE__,
+				ntohl(q_data->reply.magic), cqe->res);
+		ret = -EPROTO;
+		goto fail;
 	}
 
 	ublk_assert(cqe->res == sizeof(struct nbd_reply));
