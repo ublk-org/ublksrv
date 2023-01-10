@@ -356,25 +356,13 @@ static void nbd_recv_io(const struct ublksrv_queue *q,
 static int nbd_queue_send_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct nbd_request *req,
+		const struct msghdr *msg,
 		struct io_uring_sqe *sqe)
 {
-#if 0
-        struct iovec iov[2] = {
-		[0] = {
-			.iov_base = (void *)req,
-			.iov_len = sizeof(*req),
-		},
-		[1] = {
-			.iov_base = (void *)data->iod->addr,
-			.iov_len = data->iod->nr_sectors << 9,
-		},
-	};
-        struct msghdr msg = {0};
-
-	msg.msg_iov = iov;
-	msg.msg_iovlen = 2;
-
-	io_uring_prep_sendmsg(sqe, q->q_id + 1, &msg, 0);
+#if 1
+	io_uring_prep_sendmsg(sqe, q->q_id + 1, msg, MSG_WAITALL);
+	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+	sqe->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 0, 1);
 #else
 	struct io_uring_sqe *sqe2 = io_uring_get_sqe(q->ring_ptr);
 
@@ -390,14 +378,13 @@ static int nbd_queue_send_req(const struct ublksrv_queue *q,
 			data->iod->nr_sectors << 9, 0);
 	io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
 	sqe2->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 0, 1);
-
-	return 0;
 #endif
+	return 0;
 }
 
 static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
-		const struct nbd_request *req)
+		const struct nbd_request *req, const struct msghdr *msg)
 {
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
@@ -415,7 +402,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		sqe->user_data = build_user_data(data->tag, NBD_OP_READ_REQ, 0, 1);
 		break;
 	case UBLK_IO_OP_WRITE:
-		ret = nbd_queue_send_req(q, data, req, sqe);
+		ret = nbd_queue_send_req(q, data, req, msg, sqe);
 		break;
 	case UBLK_IO_OP_FLUSH:
 		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req),
@@ -471,6 +458,20 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 	int type = req_to_nbd_cmd_type(data->iod);
 	int ret = -EIO;
+	struct iovec iov[2] = {
+		[0] = {
+			.iov_base = (void *)&req,
+			.iov_len = sizeof(req),
+		},
+		[1] = {
+			.iov_base = (void *)data->iod->addr,
+			.iov_len = data->iod->nr_sectors << 9,
+		},
+	};
+	struct msghdr msg = {0};
+
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 2;
 
 	if (type == -1)
 		goto exit;
@@ -481,7 +482,7 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	q_data->in_flight_ios += 1;
 
 again:
-	ret = nbd_queue_req(q, data, &req);
+	ret = nbd_queue_req(q, data, &req, &msg);
 	if (!ret)
 		ret = -ENOMEM;
 	if (ret < 0)
