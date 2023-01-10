@@ -163,8 +163,8 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		{ NULL }
 	};
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	//const struct ublksrv_ctrl_dev_info *info =
+	//	ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
 	struct ublksrv_tgt_base_json tgt_json = {
@@ -220,7 +220,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			.physical_bs_shift	= 12,
 			.io_opt_shift		= 12,
 			.io_min_shift		= bs_shift,
-			.max_sectors		= info->max_io_buf_bytes >> 9,
+			.max_sectors		= 256/*info->max_io_buf_bytes >> 9*/,
 			.dev_sectors		= tgt->dev_size >> 9,
 		},
 	};
@@ -387,7 +387,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		return ret;
 	}
 
-	io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS |
+	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE);
 
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
@@ -609,8 +609,24 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 
 	ublk_assert(tag == data->tag);
 
-	io->tgt_io_cqe = cqe;
-	io->co.resume();
+	if (cqe->res < 0)
+		syslog(LOG_ERR, "%s: tag %d cqe fail %d %llx\n",
+				__func__, tag, cqe->res, cqe->user_data);
+
+	if (is_recv_io(q, data)) {
+		io->tgt_io_cqe = cqe;
+		io->co.resume();
+		return;
+	}
+
+	unsigned ublk_op = ublksrv_get_op(data->iod);
+
+	if (ublk_op == UBLK_IO_OP_WRITE) {
+		if (cqe->res < (data->iod->nr_sectors << 9))
+			syslog(LOG_ERR, "%s: short write tag %d, len %u written %u\n",
+					__func__, tag,
+					(data->iod->nr_sectors << 9), cqe->res);
+	}
 }
 
 static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
