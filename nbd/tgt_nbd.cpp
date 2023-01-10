@@ -438,21 +438,16 @@ again:
 
 	nbd_recv_reply(q);
 
-	/* READ IO is completed in the coroutine of __nbd_handle_recv() */
-	if (type == NBD_CMD_READ)
-		goto exit;
-
 	co_await__suspend_always(data->tag);
 	if (io->tgt_io_cqe->res == -EAGAIN)
 		goto again;
 	ret = io->tgt_io_cqe->res;
-
 fail:
 	if (ret < 0)
 		syslog(LOG_ERR, "%s: err %d\n", __func__, ret);
 	ublksrv_complete_io(q, data->tag, ret);
 	q_data->in_flight_ios -= 1;
-exit:
+
 	co_return;
 }
 
@@ -462,7 +457,7 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 		const struct ublk_io_data **io_data)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-	//struct nbd_io_data *nbd_data;
+	struct nbd_io_data *nbd_data;
 	u64 handle;
 	int tag, hwq;
 	unsigned ublk_op;
@@ -495,14 +490,13 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 
 	data = ublksrv_queue_get_io_data(q, tag);
 	io = __ublk_get_io_tgt_data(data);
-#if 0
 	nbd_data = io_tgt_to_nbd_data(io);
 	if (nbd_data->cmd_cookie != nbd_handle_to_cookie(handle)) {
-		syslog(LOG_ERR, "%s %d: cookie not match\n", __func__,
-				__LINE__);
+		syslog(LOG_ERR, "%s %d: cookie not match tag %d: %x %lx\n",
+				__func__, __LINE__, data->tag,
+				nbd_data->cmd_cookie, handle);
 		goto fail;
 	}
-#endif
 
 	ublk_op = ublksrv_get_op(data->iod);
 
@@ -563,7 +557,7 @@ read_reply:
 read_io:
 		ublk_assert(io_data != NULL);
 		ret = nbd_start_recv(q, (void *)io_data->iod->addr,
-			io_data->iod->nr_sectors << 9, io_data->tag, false);
+			io_data->iod->nr_sectors << 9, data->tag, false);
 		if (ret)
 			break;
 
@@ -573,8 +567,10 @@ read_io:
 		ret = io->tgt_io_cqe->res;
 		if (ret == -EAGAIN)
 			goto read_io;
-		ublksrv_complete_io(q, io_data->tag, ret);
-		q_data->in_flight_ios -= 1;
+
+		struct ublk_io_tgt *io_io = __ublk_get_io_tgt_data(io_data);
+		io_io->tgt_io_cqe = io->tgt_io_cqe;
+		io_io->co.resume();
 	}
 	q_data->recv_started = 0;
 	co_return;
@@ -603,17 +599,8 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 
 	ublk_assert(tag == data->tag);
 
-	if (!data->iod || ublksrv_get_op(data->iod) != UBLK_IO_OP_READ) {
-		io->tgt_io_cqe = cqe;
-		io->co.resume();
-	} else {
-		/* READ IO is waited in recv coroutine context */
-		data = ublksrv_queue_get_io_data(q, q->q_depth);
-		io = __ublk_get_io_tgt_data(data);
-
-		io->tgt_io_cqe = cqe;
-		io->co.resume();
-	}
+	io->tgt_io_cqe = cqe;
+	io->co.resume();
 }
 
 static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
