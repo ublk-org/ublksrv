@@ -36,7 +36,6 @@ enum nbd_recv_state {
 struct nbd_queue_data {
 	unsigned short recv_started;
 	unsigned short in_flight_ios;
-	struct io_uring_sqe *last_sqe;
 
 	struct nbd_reply reply;
 };
@@ -355,7 +354,6 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct nbd_request *req, const struct msghdr *msg)
 {
-	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
@@ -390,8 +388,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	}
 
 	io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS |
-			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
-	q_data->last_sqe = sqe;
+			IOSQE_FIXED_FILE);
 
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
@@ -658,20 +655,9 @@ static void nbd_deinit_queue(const struct ublksrv_queue *q)
 	free(data);
 }
 
-static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
-{
-	struct nbd_queue_data *data = nbd_get_queue_data(q);
-
-	if (data->last_sqe) {
-		data->last_sqe->flags &= ~IOSQE_IO_LINK;
-		data->last_sqe = NULL;
-	}
-}
-
 struct ublksrv_tgt_type  nbd_tgt_type = {
 	.handle_io_async = nbd_handle_io_async,
 	.tgt_io_done = nbd_tgt_io_done,
-	.handle_io_background = nbd_handle_io_bg,
 	.usage_for_add	=  nbd_usage_for_add,
 	.init_tgt = nbd_init_tgt,
 	.deinit_tgt = nbd_deinit_tgt,
