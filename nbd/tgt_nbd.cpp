@@ -124,6 +124,9 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
 
+	tgt->iowq_max_workers[0] = 1;
+	tgt->iowq_max_workers[1] = 1;
+
 	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
 		sizeof(struct nbd_io_data);
 }
@@ -388,7 +391,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	}
 
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
-			IOSQE_FIXED_FILE);
+			IOSQE_FIXED_FILE | IOSQE_ASYNC);
 
 	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
