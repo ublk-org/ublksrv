@@ -480,6 +480,10 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 				__LINE__, cqe->res);
 		ret = cqe->res;
 		goto fail;
+	} else if (cqe->res == 0) {
+		//return 0;
+		syslog(LOG_ERR, "%s %d: zero reply cqe %d %llx\n", __func__,
+				__LINE__, cqe->res, cqe->user_data);
 	}
 
 	if (ntohl(q_data->reply.magic) != NBD_REPLY_MAGIC) {
@@ -633,7 +637,8 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 	unsigned ublk_op = ublksrv_get_op(data->iod);
 
 	if (ublk_op == UBLK_IO_OP_WRITE) {
-		if (cqe->res < (data->iod->nr_sectors << 9) &&
+		if (cqe->res < ((data->iod->nr_sectors << 9) +
+					sizeof(struct nbd_request)) &&
 				!(cqe->flags & IORING_CQE_F_NOTIF))
 			syslog(LOG_ERR, "%s: short write tag %d, len %u written %u cqe flags %x\n",
 					__func__, tag,
