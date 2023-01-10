@@ -364,7 +364,8 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_READ:
-		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req), 0);
+		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req),
+				MSG_WAITALL);
 		sqe->user_data = build_user_data(data->tag, NBD_OP_READ_REQ, 0, 1);
 		break;
 	case UBLK_IO_OP_WRITE:
@@ -416,10 +417,10 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 			.iov_len = data->iod->nr_sectors << 9,
 		},
 	};
-	struct msghdr msg = {0};
-
-	msg.msg_iov = iov;
-	msg.msg_iovlen = 2;
+	struct msghdr msg = {
+		.msg_iov = iov,
+		.msg_iovlen = 2,
+	};
 
 	if (type == -1)
 		goto fail;
