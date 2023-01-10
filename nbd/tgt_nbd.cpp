@@ -367,21 +367,21 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_READ:
-		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req),
-				MSG_WAITALL);
+		io_uring_prep_send_zc(sqe, q->q_id + 1, req, sizeof(*req),
+				MSG_WAITALL, 0);
 		sqe->user_data = build_user_data(data->tag, NBD_OP_READ_REQ, 0, 1);
 		break;
 	case UBLK_IO_OP_WRITE:
-		io_uring_prep_sendmsg(sqe, q->q_id + 1, msg, MSG_WAITALL);
+		io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg, MSG_WAITALL);
 		sqe->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 0, 1);
 		break;
 	case UBLK_IO_OP_FLUSH:
-		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req),
-				MSG_WAITALL);
+		io_uring_prep_send_zc(sqe, q->q_id + 1, req, sizeof(*req),
+				MSG_WAITALL, 0);
 		sqe->user_data = build_user_data(data->tag, NBD_OP_FLUSH_REQ, 0, 1);
 	case UBLK_IO_OP_DISCARD:
-		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req),
-				MSG_WAITALL);
+		io_uring_prep_send_zc(sqe, q->q_id + 1, req, sizeof(*req),
+				MSG_WAITALL, 0);
 		sqe->user_data = build_user_data(data->tag, NBD_OP_TRIM_REQ, 0, 1);
 		break;
 	default:
@@ -405,15 +405,15 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, struct ublk_io_tgt *io)
 {
-	struct nbd_request req = {.magic = htonl(NBD_REQUEST_MAGIC)};
+	int ret = -EIO;
+	struct nbd_request *req = NULL;
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 	int type = req_to_nbd_cmd_type(data->iod);
-	int ret = -EIO;
 	struct iovec iov[2] = {
 		[0] = {
-			.iov_base = (void *)&req,
-			.iov_len = sizeof(req),
+			.iov_base = (void *)req,
+			.iov_len = sizeof(*req),
 		},
 		[1] = {
 			.iov_base = (void *)data->iod->addr,
@@ -425,16 +425,22 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 		.msg_iovlen = 2,
 	};
 
+	posix_memalign((void **)&req, 32, sizeof(*req));
+	if (!req)
+		goto fail;
+	req->magic = htonl(NBD_REQUEST_MAGIC);
+	iov[0].iov_base = (void *)req;
+
 	if (type == -1)
 		goto fail;
 
 	nbd_data->cmd_cookie += 1;
 
-	__nbd_build_req(q, data, nbd_data, type, &req);
+	__nbd_build_req(q, data, nbd_data, type, req);
 	q_data->in_flight_ios += 1;
 
 again:
-	ret = nbd_queue_req(q, data, &req, &msg);
+	ret = nbd_queue_req(q, data, req, &msg);
 	if (!ret)
 		ret = -ENOMEM;
 	if (ret < 0)
@@ -451,6 +457,7 @@ fail:
 		syslog(LOG_ERR, "%s: err %d\n", __func__, ret);
 	ublksrv_complete_io(q, data->tag, ret);
 	q_data->in_flight_ios -= 1;
+	free(req);
 
 	co_return;
 }
@@ -625,10 +632,12 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 	unsigned ublk_op = ublksrv_get_op(data->iod);
 
 	if (ublk_op == UBLK_IO_OP_WRITE) {
-		if (cqe->res < (data->iod->nr_sectors << 9))
-			syslog(LOG_ERR, "%s: short write tag %d, len %u written %u\n",
+		if (cqe->res < (data->iod->nr_sectors << 9) &&
+				!(cqe->flags & IORING_CQE_F_NOTIF))
+			syslog(LOG_ERR, "%s: short write tag %d, len %u written %u cqe flags %x\n",
 					__func__, tag,
-					(data->iod->nr_sectors << 9), cqe->res);
+					(data->iod->nr_sectors << 9), cqe->res,
+					cqe->flags);
 	}
 }
 
