@@ -462,7 +462,7 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 		const struct ublk_io_data **io_data)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-	struct nbd_io_data *nbd_data;
+	//struct nbd_io_data *nbd_data;
 	u64 handle;
 	int tag, hwq;
 	unsigned ublk_op;
@@ -495,13 +495,14 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 
 	data = ublksrv_queue_get_io_data(q, tag);
 	io = __ublk_get_io_tgt_data(data);
+#if 0
 	nbd_data = io_tgt_to_nbd_data(io);
-
 	if (nbd_data->cmd_cookie != nbd_handle_to_cookie(handle)) {
 		syslog(LOG_ERR, "%s %d: cookie not match\n", __func__,
 				__LINE__);
 		goto fail;
 	}
+#endif
 
 	ublk_op = ublksrv_get_op(data->iod);
 
