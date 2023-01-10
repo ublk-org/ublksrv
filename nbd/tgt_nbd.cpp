@@ -10,7 +10,9 @@
 
 #define NBD_OP_READ_REQ  0x80
 #define NBD_OP_WRITE_REQ  0x81
-#define NBD_OP_READ_REPLY  0x82
+#define NBD_OP_FLUSH_REQ  0x82
+#define NBD_OP_TRIM_REQ  0x83
+#define NBD_OP_READ_REPLY  0x84
 
 #define NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, name, val) do { \
 	int ret;						\
@@ -416,11 +418,15 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		ret = nbd_queue_send_req(q, data, req, sqe);
 		break;
 	case UBLK_IO_OP_FLUSH:
+		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req),
+				MSG_WAITALL);
+		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		sqe->user_data = build_user_data(data->tag, NBD_OP_FLUSH_REQ, 0, 1);
 	case UBLK_IO_OP_DISCARD:
 		io_uring_prep_send(sqe, q->q_id + 1, req, sizeof(*req),
 				MSG_WAITALL);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
-		sqe->user_data = build_user_data(data->tag, ublk_op, 0, 1);
+		sqe->user_data = build_user_data(data->tag, NBD_OP_TRIM_REQ, 0, 1);
 		break;
 	default:
 		ret = -EINVAL;
