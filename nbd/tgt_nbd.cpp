@@ -9,10 +9,7 @@
 #define NBD_MAX_NAME	512
 
 #define NBD_OP_READ_REQ  0x80
-#define NBD_OP_WRITE_REQ  0x81
-#define NBD_OP_FLUSH_REQ  0x82
-#define NBD_OP_TRIM_REQ  0x83
-#define NBD_OP_READ_REPLY  0x84
+#define NBD_OP_READ_REPLY  0x81
 
 #define NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, name, val) do { \
 	int ret;						\
@@ -360,37 +357,21 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
-	int ret = 0;
 
 	if (!sqe)
 		return 0;
 
-	switch (ublk_op) {
-	case UBLK_IO_OP_READ:
+	if (ublk_op != UBLK_IO_OP_WRITE) {
 		io_uring_prep_send_zc(sqe, q->q_id + 1, req, sizeof(*req),
 				MSG_WAITALL | MSG_NOSIGNAL, 0);
-		sqe->user_data = build_user_data(data->tag, NBD_OP_READ_REQ, 0, 1);
-		break;
-	case UBLK_IO_OP_WRITE:
+	} else {
 		io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
 				MSG_WAITALL | MSG_NOSIGNAL);
-		sqe->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, 0, 1);
-		break;
-	case UBLK_IO_OP_FLUSH:
-		io_uring_prep_send_zc(sqe, q->q_id + 1, req, sizeof(*req),
-				MSG_WAITALL | MSG_NOSIGNAL, 0);
-		sqe->user_data = build_user_data(data->tag, NBD_OP_FLUSH_REQ, 0, 1);
-	case UBLK_IO_OP_DISCARD:
-		io_uring_prep_send_zc(sqe, q->q_id + 1, req, sizeof(*req),
-				MSG_WAITALL | MSG_NOSIGNAL, 0);
-		sqe->user_data = build_user_data(data->tag, NBD_OP_TRIM_REQ, 0, 1);
-		break;
-	default:
-		ret = -EINVAL;
-		syslog(LOG_ERR, "%s %d failed ret %d\n", __func__, __LINE__, ret);
-		return ret;
 	}
 
+	if (ublk_op == UBLK_IO_OP_READ)
+		ublk_op = NBD_OP_READ_REQ;
+	sqe->user_data = build_user_data(data->tag, ublk_op, 0, 1);
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 
