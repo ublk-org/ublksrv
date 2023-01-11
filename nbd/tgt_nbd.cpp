@@ -34,8 +34,18 @@
 		break;						\
 } while (1)
 
+#define NBD_WRITE_TGT_LONG(dev, jbuf, jbuf_size, name, val) do { \
+	int ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size, \
+			name, val);					\
+	if (ret < 0)							\
+		jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);	\
+	else							\
+		break;						\
+} while (1)
+
 struct nbd_tgt_data {
 	bool unix_sock;
+	bool use_send_zc;
 };
 
 struct nbd_queue_data {
@@ -43,7 +53,7 @@ struct nbd_queue_data {
 	unsigned short in_flight_ios;
 	unsigned short in_flight_write_ios;
 
-	bool unix_sock;
+	bool use_send_zc;
 
 	struct nbd_reply reply;
 };
@@ -95,6 +105,8 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	char *tlshostname = NULL;
 	bool tls = false;
 
+	long send_zc = 0;
+
 	ublk_assert(jbuf);
 	ublk_assert(type == UBLKSRV_TGT_TYPE_NBD);
 	ublk_assert(!recovery || info->state == UBLK_S_DEV_QUIESCED);
@@ -105,6 +117,7 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 			unix_path);
 	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "export_name",
 			exp_name);
+	ublksrv_json_read_target_ulong_info(jbuf, "send_zc", &send_zc);
 
 	//fprintf(stderr, "%s: host %s unix %s exp_name %s\n", __func__,
 	//		host_name, unix_path, exp_name);
@@ -133,6 +146,7 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
 	data->unix_sock = strlen(unix_path) > 0 ? true : false;
+	data->use_send_zc = !!send_zc;
 
 	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
 		sizeof(struct nbd_io_data);
@@ -166,10 +180,12 @@ static void nbd_parse_flags(struct ublk_params *p, uint16_t flags, uint32_t bs)
 static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
+	int send_zc = 0;
 	static const struct option nbd_longopts[] = {
 		{ "host",	required_argument, 0, 0},
 		{ "unix",	required_argument, 0, 0},
 		{ "export_name",	required_argument, 0, 0},
+		{ "send_zc",  0,  &send_zc, 1},
 		{ NULL }
 	};
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
@@ -217,6 +233,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "host", host_name);
 	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "unix", unix_path);
 	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "export_name", exp_name);
+	NBD_WRITE_TGT_LONG(dev, jbuf, jbuf_size, "send_zc", send_zc);
 
 	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
@@ -376,7 +393,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		return 0;
 
 	if (ublk_op != UBLK_IO_OP_WRITE) {
-		if (!q_data->unix_sock)
+		if (q_data->use_send_zc)
 			io_uring_prep_send_zc(sqe, q->q_id + 1, req,
 					sizeof(*req), msg_flags, 0);
 		else
@@ -384,7 +401,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 					sizeof(*req), msg_flags);
 	} else {
 		q_data->in_flight_write_ios++;
-		if (!q_data->unix_sock)
+		if (q_data->use_send_zc)
 			io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
 				msg_flags);
 		else
@@ -697,9 +714,9 @@ static int nbd_init_queue(const struct ublksrv_queue *q,
 	if (!data)
 		return -ENOMEM;
 
-	data->unix_sock = ddata->unix_sock;
+	data->use_send_zc = ddata->unix_sock ? false : ddata->use_send_zc;
 	data->recv_started = 0;
-	//nbd_err("%s unix_sock %d\n", __func__, data->unix_sock);
+	//nbd_err("%s send zc %d\n", __func__, data->use_send_zc);
 
 	*queue_data_ptr = (void *)data;
 	return 0;
