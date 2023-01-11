@@ -34,6 +34,8 @@ struct nbd_queue_data {
 	unsigned short recv_started;
 	unsigned short in_flight_ios;
 
+	bool unix_sock;
+
 	struct nbd_reply reply;
 };
 
@@ -120,6 +122,7 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
+	tgt->tgt_data = strlen(unix_path) > 0 ? (void *)-1 : NULL;
 
 	//tgt->iowq_max_workers[0] = 1;
 	//tgt->iowq_max_workers[1] = 1;
@@ -354,6 +357,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct nbd_request *req, const struct msghdr *msg)
 {
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
@@ -362,10 +366,20 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		return 0;
 
 	if (ublk_op != UBLK_IO_OP_WRITE) {
-		io_uring_prep_send_zc(sqe, q->q_id + 1, req, sizeof(*req),
-				MSG_WAITALL | MSG_NOSIGNAL, 0);
+		if (!q_data->unix_sock)
+			io_uring_prep_send_zc(sqe, q->q_id + 1, req,
+					sizeof(*req),
+					MSG_WAITALL | MSG_NOSIGNAL, 0);
+		else
+			io_uring_prep_send(sqe, q->q_id + 1, req,
+					sizeof(*req),
+					MSG_WAITALL | MSG_NOSIGNAL);
 	} else {
-		io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
+		if (!q_data->unix_sock)
+			io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
+				MSG_WAITALL | MSG_NOSIGNAL);
+		else
+			io_uring_prep_sendmsg(sqe, q->q_id + 1, msg,
 				MSG_WAITALL | MSG_NOSIGNAL);
 	}
 
@@ -657,7 +671,9 @@ static int nbd_init_queue(const struct ublksrv_queue *q,
 	if (!data)
 		return -ENOMEM;
 
+	data->unix_sock = q->dev->tgt.tgt_data != NULL;
 	data->recv_started = 0;
+	//syslog(LOG_ERR, "%s unix_sock %d\n", __func__, data->unix_sock);
 
 	*queue_data_ptr = (void *)data;
 	return 0;
