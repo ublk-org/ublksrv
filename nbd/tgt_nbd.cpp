@@ -54,6 +54,7 @@ struct nbd_queue_data {
 	unsigned short in_flight_write_ios;
 
 	bool use_send_zc;
+	bool use_unix_sock;
 
 	struct nbd_reply reply;
 };
@@ -387,10 +388,17 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
-	unsigned msg_flags = MSG_NOSIGNAL | MSG_WAITALL;
+	unsigned msg_flags = MSG_NOSIGNAL;
 
 	if (!sqe)
 		return 0;
+
+	/*
+	 * WAITALL can trigger short send in case of unix sock
+	 * but TCP can't trigger short send if WAITALL is enabled
+	 * */
+	if (q_data->use_unix_sock)
+		msg_flags |= MSG_WAITALL;
 
 	if (ublk_op != UBLK_IO_OP_WRITE) {
 		if (q_data->use_send_zc)
@@ -715,6 +723,7 @@ static int nbd_init_queue(const struct ublksrv_queue *q,
 		return -ENOMEM;
 
 	data->use_send_zc = ddata->unix_sock ? false : ddata->use_send_zc;
+	data->use_unix_sock = ddata->unix_sock;
 	data->recv_started = 0;
 	//nbd_err("%s send zc %d\n", __func__, data->use_send_zc);
 
