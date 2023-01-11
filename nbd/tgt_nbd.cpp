@@ -34,6 +34,10 @@
 		break;						\
 } while (1)
 
+struct nbd_tgt_data {
+	bool unix_sock;
+};
+
 struct nbd_queue_data {
 	unsigned short recv_started;
 	unsigned short in_flight_ios;
@@ -72,6 +76,7 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
 	int i;
+	struct nbd_tgt_data *data = (struct nbd_tgt_data *)dev->tgt.tgt_data;
 
 	const char *port = NBD_DEFAULT_PORT;
 	uint16_t needed_flags = 0;
@@ -127,7 +132,7 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
-	tgt->tgt_data = strlen(unix_path) > 0 ? (void *)-1 : NULL;
+	data->unix_sock = strlen(unix_path) > 0 ? true : false;
 
 	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
 		sizeof(struct nbd_io_data);
@@ -212,6 +217,8 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "host", host_name);
 	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "unix", unix_path);
 	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "export_name", exp_name);
+
+	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
 	nbd_setup_tgt(dev, type, false, &flags);
 
@@ -630,7 +637,11 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
 	ublk_assert(tag == data->tag);
-
+#if 0
+	nbd_err("%s: tag %d cqe(res %d flags %x user data %llx)\n",
+			__func__, tag,
+			cqe->res, cqe->flags, cqe->user_data);
+#endif
 	if (cqe->res < 0)
 		nbd_err("%s: tag %d cqe fail %d %llx\n",
 				__func__, tag, cqe->res, cqe->user_data);
@@ -661,6 +672,8 @@ static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int i;
 
+	free(tgt->tgt_data);
+
 	for (i = 0; i < info->nr_hw_queues; i++) {
 		int fd = tgt->fds[i + 1];
 
@@ -679,11 +692,12 @@ static int nbd_init_queue(const struct ublksrv_queue *q,
 {
 	struct nbd_queue_data *data =
 		(struct nbd_queue_data *)calloc(sizeof(*data), 1);
+	struct nbd_tgt_data *ddata = (struct nbd_tgt_data*)q->dev->tgt.tgt_data;
 
 	if (!data)
 		return -ENOMEM;
 
-	data->unix_sock = q->dev->tgt.tgt_data != NULL;
+	data->unix_sock = ddata->unix_sock;
 	data->recv_started = 0;
 	//nbd_err("%s unix_sock %d\n", __func__, data->unix_sock);
 
