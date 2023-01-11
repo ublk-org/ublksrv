@@ -6,6 +6,14 @@
 #include "cliserv.h"
 #include "nbd.h"
 
+//#define NBD_DBG_WR 1
+
+#ifdef NBD_DBG_WR
+#define NBD_WR_DEBUG(...) syslog(LOG_ERR, __VA_ARGS__)
+#else
+#define NBD_WR_DEBUG(...)
+#endif
+
 #define NBD_MAX_NAME	512
 
 #define NBD_OP_READ_REQ  0x80
@@ -33,6 +41,7 @@ enum nbd_recv_state {
 struct nbd_queue_data {
 	unsigned short recv_started;
 	unsigned short in_flight_ios;
+	unsigned short in_flight_write_ios;
 
 	bool unix_sock;
 
@@ -375,6 +384,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 					sizeof(*req),
 					MSG_WAITALL | MSG_NOSIGNAL);
 	} else {
+		q_data->in_flight_write_ios++;
 		if (!q_data->unix_sock)
 			io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
 				MSG_WAITALL | MSG_NOSIGNAL);
@@ -389,11 +399,14 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 
-	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
+	if (ublk_op == UBLK_IO_OP_WRITE) {
+		NBD_WR_DEBUG("%s: queue io op %d(%llu %x %llx) pending write %u"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
 			__func__, ublk_op, data->iod->start_sector,
 			data->iod->nr_sectors, sqe->addr,
+			q_data->in_flight_write_ios,
 			q->q_id, data->tag, ublk_op, 1, sqe->user_data);
+	}
 
 	return 1;
 }
@@ -454,6 +467,10 @@ fail:
 	ublksrv_complete_io(q, data->tag, ret);
 	q_data->in_flight_ios -= 1;
 	free(req);
+	if (ublksrv_get_op(data->iod) == UBLK_IO_OP_WRITE) {
+		q_data->in_flight_write_ios--;
+		NBD_WR_DEBUG("%s: tag %d res %d\n", __func__, data->tag, ret);
+	}
 
 	co_return;
 }
@@ -519,13 +536,16 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 	}
 
 	ublk_op = ublksrv_get_op(data->iod);
-
 	if (ublk_op == UBLK_IO_OP_READ) {
 		*io_data = data;
 		return 1;
 	} else {
 		int err = ntohl(q_data->reply.error);
 		struct io_uring_cqe fake_cqe;
+
+		if (ublk_op == UBLK_IO_OP_WRITE)
+			NBD_WR_DEBUG("%s: got write reply, tag %d res %d\n",
+					__func__, data->tag, err);
 
 		if (err) {
 			fake_cqe.res = -EIO;
@@ -686,9 +706,20 @@ static void nbd_deinit_queue(const struct ublksrv_queue *q)
 	free(data);
 }
 
+static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+
+	if (q_data->in_flight_write_ios)
+		NBD_WR_DEBUG("%s: pending write %u queued ios %d/%d\n",
+				__func__, q_data->in_flight_write_ios,
+				q_data->in_flight_ios, nr_queued_io );
+}
+
 struct ublksrv_tgt_type  nbd_tgt_type = {
 	.handle_io_async = nbd_handle_io_async,
 	.tgt_io_done = nbd_tgt_io_done,
+	.handle_io_background = nbd_handle_io_bg,
 	.usage_for_add	=  nbd_usage_for_add,
 	.init_tgt = nbd_init_tgt,
 	.deinit_tgt = nbd_deinit_tgt,
