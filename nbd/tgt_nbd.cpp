@@ -14,6 +14,8 @@
 #define NBD_WR_DEBUG(...)
 #endif
 
+#define nbd_err(...) syslog(LOG_ERR, __VA_ARGS__)
+
 #define NBD_MAX_NAME	512
 
 #define NBD_OP_READ_REQ  0x80
@@ -31,12 +33,6 @@
 	else							\
 		break;						\
 } while (1)
-
-enum nbd_recv_state {
-	NBD_RECV_IDLE,
-	NBD_RECV_REPLY,
-	NBD_RECV_DATA,
-};
 
 struct nbd_queue_data {
 	unsigned short recv_started;
@@ -132,9 +128,6 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
 	tgt->tgt_data = strlen(unix_path) > 0 ? (void *)-1 : NULL;
-
-	//tgt->iowq_max_workers[0] = 1;
-	//tgt->iowq_max_workers[1] = 1;
 
 	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
 		sizeof(struct nbd_io_data);
@@ -463,7 +456,7 @@ again:
 	ret = io->tgt_io_cqe->res;
 fail:
 	if (ret < 0)
-		syslog(LOG_ERR, "%s: err %d\n", __func__, ret);
+		nbd_err("%s: err %d\n", __func__, ret);
 	ublksrv_complete_io(q, data->tag, ret);
 	q_data->in_flight_ios -= 1;
 	free(req);
@@ -488,18 +481,18 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 	int ret = -EINVAL;
 
 	if (cqe->res < 0) {
-		syslog(LOG_ERR, "%s %d: reply cqe %d\n", __func__,
+		nbd_err("%s %d: reply cqe %d\n", __func__,
 				__LINE__, cqe->res);
 		ret = cqe->res;
 		goto fail;
 	} else if (cqe->res == 0) {
 		//return 0;
-		syslog(LOG_ERR, "%s %d: zero reply cqe %d %llx\n", __func__,
+		nbd_err("%s %d: zero reply cqe %d %llx\n", __func__,
 				__LINE__, cqe->res, cqe->user_data);
 	}
 
 	if (ntohl(q_data->reply.magic) != NBD_REPLY_MAGIC) {
-		syslog(LOG_ERR, "%s %d: reply bad magic %x res %d\n",
+		nbd_err("%s %d: reply bad magic %x res %d\n",
 				__func__, __LINE__,
 				ntohl(q_data->reply.magic), cqe->res);
 		ret = -EPROTO;
@@ -514,13 +507,13 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 	tag = ublk_unique_tag_to_tag(tag);
 
 	if (tag >= q->q_depth) {
-		syslog(LOG_ERR, "%s %d: tag is too big %d\n", __func__,
+		nbd_err("%s %d: tag is too big %d\n", __func__,
 				__LINE__, tag);
 		goto fail;
 	}
 
 	if (hwq != q->q_id) {
-		syslog(LOG_ERR, "%s %d: hwq is too big %d\n", __func__,
+		nbd_err("%s %d: hwq is too big %d\n", __func__,
 				__LINE__, hwq);
 		goto fail;
 	}
@@ -529,7 +522,7 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 	io = __ublk_get_io_tgt_data(data);
 	nbd_data = io_tgt_to_nbd_data(io);
 	if (nbd_data->cmd_cookie != nbd_handle_to_cookie(handle)) {
-		syslog(LOG_ERR, "%s %d: cookie not match tag %d: %x %lx\n",
+		nbd_err("%s %d: cookie not match tag %d: %x %lx\n",
 				__func__, __LINE__, data->tag,
 				nbd_data->cmd_cookie, handle);
 		goto fail;
@@ -640,7 +633,7 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 	ublk_assert(tag == data->tag);
 
 	if (cqe->res < 0)
-		syslog(LOG_ERR, "%s: tag %d cqe fail %d %llx\n",
+		nbd_err("%s: tag %d cqe fail %d %llx\n",
 				__func__, tag, cqe->res, cqe->user_data);
 
 	if (is_recv_io(q, data)) {
@@ -655,7 +648,7 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 		if (cqe->res < ((data->iod->nr_sectors << 9) +
 					sizeof(struct nbd_request)) &&
 				!(cqe->flags & IORING_CQE_F_NOTIF))
-			syslog(LOG_ERR, "%s: short write tag %d, len %u written %u cqe flags %x\n",
+			nbd_err("%s: short write tag %d, len %u written %u cqe flags %x\n",
 					__func__, tag,
 					(data->iod->nr_sectors << 9), cqe->res,
 					cqe->flags);
@@ -693,7 +686,7 @@ static int nbd_init_queue(const struct ublksrv_queue *q,
 
 	data->unix_sock = q->dev->tgt.tgt_data != NULL;
 	data->recv_started = 0;
-	//syslog(LOG_ERR, "%s unix_sock %d\n", __func__, data->unix_sock);
+	//nbd_err("%s unix_sock %d\n", __func__, data->unix_sock);
 
 	*queue_data_ptr = (void *)data;
 	return 0;
