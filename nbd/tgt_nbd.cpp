@@ -182,11 +182,13 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
 	int send_zc = 0;
+	int read_only = 0;
 	static const struct option nbd_longopts[] = {
 		{ "host",	required_argument, 0, 0},
 		{ "unix",	required_argument, 0, 0},
 		{ "export_name",	required_argument, 0, 0},
 		{ "send_zc",  0,  &send_zc, 1},
+		{ "read_only",  0,  &read_only, 1},
 		{ NULL }
 	};
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
@@ -246,6 +248,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
 		.basic = {
+			.attrs = read_only ? UBLK_ATTR_READ_ONLY : 0U,
 			.logical_bs_shift	= bs_shift,
 			.physical_bs_shift	= 12,
 			.io_opt_shift		= 12,
