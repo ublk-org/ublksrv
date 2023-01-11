@@ -363,6 +363,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	const struct ublksrv_io_desc *iod = data->iod;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
+	unsigned msg_flags = MSG_NOSIGNAL | MSG_WAITALL;
 
 	if (!sqe)
 		return 0;
@@ -370,20 +371,18 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	if (ublk_op != UBLK_IO_OP_WRITE) {
 		if (!q_data->unix_sock)
 			io_uring_prep_send_zc(sqe, q->q_id + 1, req,
-					sizeof(*req),
-					MSG_WAITALL | MSG_NOSIGNAL, 0);
+					sizeof(*req), msg_flags, 0);
 		else
 			io_uring_prep_send(sqe, q->q_id + 1, req,
-					sizeof(*req),
-					MSG_WAITALL | MSG_NOSIGNAL);
+					sizeof(*req), msg_flags);
 	} else {
 		q_data->in_flight_write_ios++;
 		if (!q_data->unix_sock)
 			io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
-				MSG_WAITALL | MSG_NOSIGNAL);
+				msg_flags);
 		else
 			io_uring_prep_sendmsg(sqe, q->q_id + 1, msg,
-				MSG_WAITALL | MSG_NOSIGNAL);
+				msg_flags);
 	}
 
 	if (ublk_op == UBLK_IO_OP_READ)
