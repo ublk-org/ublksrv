@@ -168,8 +168,8 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		{ NULL }
 	};
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	//const struct ublksrv_ctrl_dev_info *info =
-	//	ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
 	struct ublksrv_tgt_base_json tgt_json = {
@@ -225,7 +225,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			.physical_bs_shift	= 12,
 			.io_opt_shift		= 12,
 			.io_min_shift		= bs_shift,
-			.max_sectors		= 256/*info->max_io_buf_bytes >> 9*/,
+			.max_sectors		= info->max_io_buf_bytes >> 9,
 			.dev_sectors		= tgt->dev_size >> 9,
 		},
 	};
