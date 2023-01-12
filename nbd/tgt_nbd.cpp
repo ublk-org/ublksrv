@@ -363,7 +363,7 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
 	/* bit63 marks us as tgt io */
 	sqe->user_data = build_user_data(tag, op, 0, 1);
 
-	ublksrv_log(LOG_INFO, "%s: q_inflight %d queue recv %s"
+	NBD_WR_DEBUG("%s: q_inflight %d queue recv %s"
 				"(qid %d tag %u, target: %d, user_data %llx)\n",
 			__func__, q_data->in_flight_ios, reply ? "reply" : "io",
 			q->q_id, tag, 1, sqe->user_data);
