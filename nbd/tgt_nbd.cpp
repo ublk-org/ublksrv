@@ -684,10 +684,8 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 			__func__, tag,
 			cqe->res, cqe->flags, cqe->user_data);
 #endif
-	if (cqe->res < 0)
-		nbd_err("%s: tag %d cqe fail %d %llx\n",
-				__func__, tag, cqe->res, cqe->user_data);
 
+	/* both reply and read io is done in recv io coroutine */
 	if (is_recv_io(q, data)) {
 		struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
@@ -704,17 +702,30 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 		return;
 	}
 
-	unsigned ublk_op = ublksrv_get_op(data->iod);
+	/*
+	 * In case of failure, how to tell recv work to handle the
+	 * request? So far just warn it, maybe nbd server will
+	 * send one err reply.
+	 */
+	if (cqe->res < 0)
+		nbd_err("%s: tag %d cqe fail %d %llx\n",
+				__func__, tag, cqe->res, cqe->user_data);
 
-	if (ublk_op == UBLK_IO_OP_WRITE) {
-		if (cqe->res < ((data->iod->nr_sectors << 9) +
-					sizeof(struct nbd_request)) &&
-				!(cqe->flags & IORING_CQE_F_NOTIF))
-			nbd_err("%s: short write tag %d, len %u written %u cqe flags %x\n",
-					__func__, tag,
-					(data->iod->nr_sectors << 9), cqe->res,
-					cqe->flags);
-	}
+	/*
+	 * We have set MSG_WAITALL, so short send shouldn't be possible,
+	 * but just warn in case of io_uring regression
+	 */
+	unsigned ublk_op = ublksrv_get_op(data->iod);
+	unsigned total;
+
+	if (ublk_op == UBLK_IO_OP_WRITE)
+		total = sizeof(nbd_request) + (data->iod->nr_sectors << 9);
+	else
+		total = sizeof(nbd_request);
+	if (cqe->res < total)
+		nbd_err("%s: short send/receive tag %d op %d %llx, len %u written %u cqe flags %x\n",
+				__func__, tag, ublk_op, cqe->user_data,
+				total, cqe->res, cqe->flags);
 }
 
 static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
