@@ -563,6 +563,12 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 		goto fail;
 	}
 
+	if (cqe->res + nbd_data->done != sizeof(struct nbd_reply)) {
+		nbd_err("%s %d: bad reply cqe %d %llx, done %u\n",
+				__func__, __LINE__,
+				cqe->res, cqe->user_data,
+				nbd_data->done);
+	}
 	ublk_assert(cqe->res + nbd_data->done == sizeof(struct nbd_reply));
 
 	memcpy(&handle, q_data->reply.handle, sizeof(handle));
@@ -643,13 +649,30 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 {
 	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	int fd = q->dev->tgt.fds[q->q_id + 1];
+	unsigned msg_flags = MSG_DONTWAIT | MSG_WAITALL;
+	unsigned int len;
+	u64 cqe_buf[2];
+	struct io_uring_cqe *fake_cqe = (struct io_uring_cqe *)cqe_buf;
 
 	while (q_data->in_flight_ios > 0) {
 		const struct ublk_io_data *io_data = NULL;
 		int ret;
 read_reply:
+		/* try to no-wait read first */
+		ret = recv(fd, &q_data->reply, sizeof(q_data->reply),
+				msg_flags);
+		if (ret == sizeof(q_data->reply)) {
+			nbd_data->done = 0;
+			fake_cqe->res = ret;
+			io->tgt_io_cqe = fake_cqe;
+			goto handle_recv;
+		} else if (ret < 0)
+			ret = 0;
+		NBD_IO_DBG("%s: recv reply %d/%lu\n", __func__, ret, sizeof(q_data->reply));
+
 		ret = nbd_start_recv(q, nbd_data, &q_data->reply,
-				sizeof(q_data->reply), true, 0);
+				sizeof(q_data->reply), true, ret);
 		if (ret)
 			break;
 
@@ -657,6 +680,7 @@ read_reply:
 		if (io->tgt_io_cqe->res == -EAGAIN)
 			goto read_reply;
 
+handle_recv:
 		ret = nbd_handle_recv_reply(q, nbd_data, io->tgt_io_cqe, &io_data);
 		if (ret < 0)
 			break;
@@ -664,8 +688,21 @@ read_reply:
 			continue;
 read_io:
 		ublk_assert(io_data != NULL);
+
+		len = io_data->iod->nr_sectors << 9;
+		/* try no-wait read first */
+		ret = recv(fd, (void *)io_data->iod->addr, len, msg_flags);
+		if (ret == len) {
+			nbd_data->done = 0;
+			fake_cqe->res = ret;
+			io->tgt_io_cqe = fake_cqe;
+			goto handle_read_io;
+		} else if (ret < 0)
+			ret = 0;
+		NBD_IO_DBG("%s: recv read io %d/%u\n", __func__, ret, len);
+
 		ret = nbd_start_recv(q, nbd_data, (void *)io_data->iod->addr,
-			io_data->iod->nr_sectors << 9, false, 0);
+			len, false, ret);
 		if (ret)
 			break;
 
@@ -676,6 +713,7 @@ read_io:
 		if (ret == -EAGAIN)
 			goto read_io;
 
+handle_read_io:
 		__nbd_resume_read_req(io_data, io->tgt_io_cqe, nbd_data->done);
 	}
 	q_data->recv_started = 0;
