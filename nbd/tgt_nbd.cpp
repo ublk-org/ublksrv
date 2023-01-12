@@ -796,14 +796,9 @@ static void nbd_deinit_queue(const struct ublksrv_queue *q)
 	free(data);
 }
 
-static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
+static void nbd_handle_send_bg(const struct ublksrv_queue *q,
+		struct nbd_queue_data *q_data)
 {
-	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-
-	NBD_IO_DBG("%s: pending ios %d/%d queued sqes %u\n",
-				__func__, q_data->in_flight_ios,
-				q_data->chained_send_ios, nr_queued_io);
-
 	if (q_data->chained_send_ios && !q_data->send_sqe_chain_busy)
 		q_data->send_sqe_chain_busy = 1;
 
@@ -814,19 +809,21 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
 		q_data->last_send_sqe = NULL;
 	}
+}
 
-	/*
-	 * recv SQE can't cut in send SQE chain, so it has to be
-	 * moved here after the send SQE chain is built
-	 */
+static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
+		struct nbd_queue_data *q_data)
+{
 	if (q_data->in_flight_ios) {
 		const struct ublk_io_data *data =
 			ublksrv_queue_get_io_data(q, q->q_depth);
 		struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
+		ublk_assert(data->tag == q->q_depth);
+
 		nbd_recv_reply(q);
+
 		if (q_data->need_recv) {
-			ublk_assert(data->tag == q->q_depth);
 			io->co = __nbd_handle_recv(q, data, io);
 			q_data->need_recv = 0;
 		}
@@ -837,6 +834,23 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 			q_data->need_handle_recv = 0;
 		}
 	}
+}
+
+static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+
+	NBD_IO_DBG("%s: pending ios %d/%d queued sqes %u\n",
+				__func__, q_data->in_flight_ios,
+				q_data->chained_send_ios, nr_queued_io);
+
+	nbd_handle_send_bg(q, q_data);
+
+	/*
+	 * recv SQE can't cut in send SQE chain, so it has to be
+	 * moved here after the send SQE chain is built
+	 */
+	nbd_handle_recv_bg(q, q_data);
 }
 
 struct ublksrv_tgt_type  nbd_tgt_type = {
