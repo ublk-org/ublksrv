@@ -7,6 +7,7 @@
 #include "nbd.h"
 
 //#define NBD_DEBUG_IO 1
+//#define NBD_DEBUG_CQE 1
 
 #ifdef NBD_DEBUG_IO
 #define NBD_IO_DBG(...) syslog(LOG_ERR, __VA_ARGS__)
@@ -405,9 +406,12 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		return 0;
 
 	/*
-	 * Always set WAITALL, see below link:
+	 * Always set WAITALL, so io_uring will handle retry in case of
+	 * short send, see below link:
 	 *
 	 * https://lore.kernel.org/io-uring/b8011ec8-8d43-9b9b-4dcc-53b6cb272354@samba.org/
+	 *
+	 * note: It was added for recv* in 5.18 and send* in 5.19.
 	 */
 	msg_flags |= MSG_WAITALL;
 
@@ -671,7 +675,7 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 	int tag = user_data_to_tag(cqe->user_data);
 
 	ublk_assert(tag == data->tag);
-#if 0
+#if NBD_DEBUG_CQE == 1
 	nbd_err("%s: tag %d cqe(res %d flags %x user data %llx)\n",
 			__func__, tag,
 			cqe->res, cqe->flags, cqe->user_data);
@@ -683,6 +687,14 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 	if (is_recv_io(q, data)) {
 		struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
+		/*
+		 * Delay recv data handling into nbd_handle_io_bg(), so
+		 * any recv sqe won't cut in the send sqe chain.
+		 *
+		 * So far, recv is strictly serialized, so saving
+		 * this single cqe works; in the future, if
+		 * recv becomes batched, here has to be fixed
+		 */
 		q_data->recv_cqe = cqe;
 		q_data->need_handle_recv = 1;
 		return;
