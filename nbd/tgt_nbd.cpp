@@ -65,6 +65,9 @@ struct nbd_queue_data {
 	unsigned short use_unix_sock:1;
 	unsigned short need_recv:1;
 	unsigned short need_handle_recv:1;
+	unsigned short send_sqe_chain_busy:1;
+
+	unsigned int chained_send_ios;
 
 	const struct io_uring_cqe *recv_cqe;
 	struct io_uring_sqe *last_send_sqe;
@@ -443,11 +446,11 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 	q_data->last_send_sqe = sqe;
 
-	NBD_IO_DBG("%s: queue io op %d(%llu %x %llx) pending write %u"
+	NBD_IO_DBG("%s: queue io op %d(%llu %x %llx) ios(%u %u)"
 			" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
 		__func__, ublk_op, data->iod->start_sector,
 		data->iod->nr_sectors, sqe->addr,
-		q_data->in_flight_write_ios,
+		q_data->in_flight_ios, q_data->chained_send_ios,
 		q->q_id, data->tag, ublk_op, 1, sqe->user_data);
 
 	return 1;
@@ -489,6 +492,7 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 
 	__nbd_build_req(q, data, nbd_data, type, req);
 	q_data->in_flight_ios += 1;
+	q_data->chained_send_ios += 1;
 
 again:
 	ret = nbd_queue_req(q, data, req, &msg);
@@ -671,6 +675,43 @@ static int nbd_handle_io_async(const struct ublksrv_queue *q,
 	return 0;
 }
 
+static void nbd_send_req_done(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct io_uring_cqe *cqe)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	unsigned ublk_op = ublksrv_get_op(data->iod);
+	unsigned total;
+
+	/* nothing to do for send_zc notification */
+	if (cqe->flags & IORING_CQE_F_NOTIF)
+		return;
+
+	ublk_assert(q_data->chained_send_ios);
+	q_data->chained_send_ios--;
+
+	/*
+	 * In case of failure, how to tell recv work to handle the
+	 * request? So far just warn it, maybe nbd server will
+	 * send one err reply.
+	 */
+	if (cqe->res < 0)
+		nbd_err("%s: tag %d cqe fail %d %llx\n",
+				__func__, data->tag, cqe->res, cqe->user_data);
+
+	/*
+	 * We have set MSG_WAITALL, so short send shouldn't be possible,
+	 * but just warn in case of io_uring regression
+	 */
+	if (ublk_op == UBLK_IO_OP_WRITE)
+		total = sizeof(nbd_request) + (data->iod->nr_sectors << 9);
+	else
+		total = sizeof(nbd_request);
+	if (cqe->res < total)
+		nbd_err("%s: short send/receive tag %d op %d %llx, len %u written %u cqe flags %x\n",
+				__func__, data->tag, ublk_op, cqe->user_data,
+				total, cqe->res, cqe->flags);
+}
 
 static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
@@ -680,8 +721,10 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 
 	ublk_assert(tag == data->tag);
 #if NBD_DEBUG_CQE == 1
-	nbd_err("%s: tag %d cqe(res %d flags %x user data %llx)\n",
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	nbd_err("%s: tag %d queue(ios %u %u) cqe(res %d flags %x user data %llx)\n",
 			__func__, tag,
+			q_data->in_flight_ios, q_data->chained_send_ios,
 			cqe->res, cqe->flags, cqe->user_data);
 #endif
 
@@ -702,30 +745,7 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 		return;
 	}
 
-	/*
-	 * In case of failure, how to tell recv work to handle the
-	 * request? So far just warn it, maybe nbd server will
-	 * send one err reply.
-	 */
-	if (cqe->res < 0)
-		nbd_err("%s: tag %d cqe fail %d %llx\n",
-				__func__, tag, cqe->res, cqe->user_data);
-
-	/*
-	 * We have set MSG_WAITALL, so short send shouldn't be possible,
-	 * but just warn in case of io_uring regression
-	 */
-	unsigned ublk_op = ublksrv_get_op(data->iod);
-	unsigned total;
-
-	if (ublk_op == UBLK_IO_OP_WRITE)
-		total = sizeof(nbd_request) + (data->iod->nr_sectors << 9);
-	else
-		total = sizeof(nbd_request);
-	if (cqe->res < total)
-		nbd_err("%s: short send/receive tag %d op %d %llx, len %u written %u cqe flags %x\n",
-				__func__, tag, ublk_op, cqe->user_data,
-				total, cqe->res, cqe->flags);
+	nbd_send_req_done(q, data, cqe);
 }
 
 static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
@@ -780,9 +800,15 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
-	NBD_IO_DBG("%s: pending write %u queued ios %d/%d\n",
-				__func__, q_data->in_flight_write_ios,
-				q_data->in_flight_ios, nr_queued_io );
+	NBD_IO_DBG("%s: pending ios %d/%d queued sqes %u\n",
+				__func__, q_data->in_flight_ios,
+				q_data->chained_send_ios, nr_queued_io);
+
+	if (q_data->chained_send_ios && !q_data->send_sqe_chain_busy)
+		q_data->send_sqe_chain_busy = 1;
+
+	if (q_data->send_sqe_chain_busy && !q_data->chained_send_ios)
+		q_data->send_sqe_chain_busy = 0;
 
 	if (q_data->last_send_sqe) {
 		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
