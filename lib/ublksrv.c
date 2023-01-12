@@ -313,47 +313,6 @@ static inline int ublk_io_buf_size(struct _ublksrv_dev *dev)
 	return ublk_queue_io_buf_size(dev) * nr_queues;
 }
 
-/* mmap vm space for remapping block io request pages */
-static void ublksrv_dev_deinit_io_bufs(struct _ublksrv_dev *dev)
-{
-	unsigned long sz = ublk_io_buf_size(dev);
-
-	if (dev->io_buf_start) {
-		munmap(dev->io_buf_start, sz);
-		dev->io_buf_start = NULL;
-	}
-}
-
-/* mmap vm space for remapping block io request pages */
-static int ublksrv_dev_init_io_bufs(struct _ublksrv_dev *dev)
-{
-	unsigned long sz = ublk_io_buf_size(dev);
-	unsigned nr_queues = dev->ctrl_dev->dev_info.nr_hw_queues;
-	int i;
-	void *addr;
-
-	dev->io_buf_start = NULL;
-	if (!(dev->ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY))
-		return 0;
-
-	addr = mmap(0, sz, PROT_READ | PROT_WRITE,
-			MAP_SHARED | MAP_POPULATE, dev->cdev_fd,
-			UBLKSRV_IO_BUF_OFFSET);
-	if (addr == MAP_FAILED)
-		return -1;
-
-	dev->io_buf_start = (char *)addr;
-
-	for (i = 0; i < nr_queues; i++) {
-		struct _ublksrv_queue *q = (struct _ublksrv_queue *)
-			ublksrv_get_queue(local_to_tdev(dev), i);
-
-		q->io_buf = dev->io_buf_start + i * ublk_queue_io_buf_size(dev);
-	}
-
-	return 0;
-}
-
 static void ublksrv_dev_init_io_cmds(struct _ublksrv_dev *dev, struct _ublksrv_queue *q)
 {
 	struct io_uring *r = &q->ring;
@@ -686,8 +645,6 @@ void ublksrv_dev_deinit(const struct ublksrv_dev *tdev)
 
 	ublksrv_remove_pid_file(dev);
 
-	ublksrv_dev_deinit_io_bufs(dev);
-
 	ublksrv_tgt_deinit(dev);
 	free(dev->thread);
 
@@ -721,12 +678,6 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 	}
 
 	tgt->fds[0] = dev->cdev_fd;
-
-	ret = ublksrv_dev_init_io_bufs(dev);
-	if (ret) {
-		syslog(LOG_ERR, "init buf failed\n");
-		goto fail;
-	}
 
 	ret = ublksrv_tgt_init(dev, ctrl_dev->tgt_type, ctrl_dev->tgt_ops,
 			ctrl_dev->tgt_argc, ctrl_dev->tgt_argv);
