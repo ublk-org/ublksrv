@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
 #include <config.h>
+#include <vector>
 #include "ublksrv_tgt.h"
 #include "ublksrv_tgt_endian.h"
 #include "cliserv.h"
@@ -68,6 +69,14 @@ struct nbd_queue_data {
 	unsigned short send_sqe_chain_busy:1;
 
 	unsigned int chained_send_ios;
+
+	/*
+	 * When the current chain is busy, staggering send ios
+	 * into this queue(next_chain). After the current chain
+	 * is consumed, submit all send ios in 'next_chain' as
+	 * one whole batch.
+	 */
+	std::vector <const struct ublk_io_data *> next_chain;
 
 	const struct io_uring_cqe *recv_cqe;
 	struct io_uring_sqe *last_send_sqe;
@@ -662,13 +671,18 @@ static int nbd_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
-	if (data->tag < q->q_depth)
-		io->co = __nbd_handle_io_async(q, data, io);
-	else {
-		struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-		//io->co = __nbd_handle_recv(q, data, io);
-
+	if (data->tag < q->q_depth) {
+		/*
+		 * Put the io in the queue and submit them after
+		 * the current chain becomes idle.
+		 */
+		if (q_data->send_sqe_chain_busy)
+			q_data->next_chain.push_back(data);
+		else
+			io->co = __nbd_handle_io_async(q, data, io);
+	} else {
 		q_data->need_recv = 1;
 	}
 
@@ -780,6 +794,7 @@ static int nbd_init_queue(const struct ublksrv_queue *q,
 	if (!data)
 		return -ENOMEM;
 
+	data->next_chain.clear();
 	data->use_send_zc = ddata->unix_sock ? false : ddata->use_send_zc;
 	data->use_unix_sock = ddata->unix_sock;
 	data->recv_started = 0;
@@ -808,6 +823,24 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 	if (q_data->last_send_sqe) {
 		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
 		q_data->last_send_sqe = NULL;
+	}
+
+	if (!q_data->send_sqe_chain_busy) {
+		std::vector<const struct ublk_io_data *> &ios =
+			q_data->next_chain;
+
+		for (auto it = ios.cbegin(); it != ios.cend(); ++it) {
+			auto data = *it;
+			struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+			ublk_assert(data->tag < q->q_depth);
+			io->co = __nbd_handle_io_async(q, data, io);
+		}
+
+		ios.clear();
+
+		if (q_data->chained_send_ios && !q_data->send_sqe_chain_busy)
+			q_data->send_sqe_chain_busy = 1;
 	}
 }
 
