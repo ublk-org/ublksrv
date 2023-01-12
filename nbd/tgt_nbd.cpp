@@ -53,8 +53,8 @@ struct nbd_queue_data {
 	unsigned short in_flight_ios;
 	unsigned short in_flight_write_ios;
 
-	bool use_send_zc;
-	bool use_unix_sock;
+	unsigned short use_send_zc:1;
+	unsigned short use_unix_sock:1;
 
 	struct nbd_reply reply;
 };
