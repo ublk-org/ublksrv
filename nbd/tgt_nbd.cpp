@@ -6,6 +6,7 @@
 #include "cliserv.h"
 #include "nbd.h"
 
+//#define NBD_DEBUG_HANDSHAKE 1
 //#define NBD_DEBUG_IO 1
 //#define NBD_DEBUG_CQE 1
 
@@ -13,6 +14,12 @@
 #define NBD_IO_DBG(...) syslog(LOG_ERR, __VA_ARGS__)
 #else
 #define NBD_IO_DBG(...)
+#endif
+
+#ifdef NBD_DEBUG_HANDSHAKE
+#define NBD_HS_DBG(...) syslog(LOG_ERR, __VA_ARGS__)
+#else
+#define NBD_HS_DBG(...)
 #endif
 
 #define nbd_err(...) syslog(LOG_ERR, __VA_ARGS__)
@@ -125,8 +132,8 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 			exp_name);
 	ublksrv_json_read_target_ulong_info(jbuf, "send_zc", &send_zc);
 
-	//fprintf(stderr, "%s: host %s unix %s exp_name %s\n", __func__,
-	//		host_name, unix_path, exp_name);
+	NBD_HS_DBG("%s: host %s unix %s exp_name %s send_zc\n", __func__,
+			host_name, unix_path, exp_name, send_zc);
 	for (i = 0; i < info->nr_hw_queues; i++) {
 		int sock;
 		unsigned int opts = 0;
@@ -143,8 +150,9 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 					can_opt_go);
 
 		tgt->fds[i + 1] = sock;
-		//fprintf(stderr, "%s:%s size %luMB flags %x sock %d\n",
-		//		hostname, port, size64 >> 20, *flags, sock);
+		NBD_HS_DBG("%s:qid %d %s-%s size %luMB flags %x sock %d\n",
+				__func__, i, host_name, port,
+				size64 >> 20, *flags, sock);
 	}
 
 	tgt->dev_size = size64;
@@ -162,7 +170,7 @@ static void nbd_parse_flags(struct ublk_params *p, uint16_t flags, uint32_t bs)
 {
 	__u32 attrs = 0;
 
-	ublksrv_log(LOG_INFO, "%s: negotiated flags %x\n", __func__, flags);
+	NBD_HS_DBG("%s: negotiated flags %x\n", __func__, flags);
 
 	if (flags & NBD_FLAG_READ_ONLY)
 		attrs |= UBLK_ATTR_READ_ONLY;
@@ -225,10 +233,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		if (opt > 0)
 			continue;
 
-		//fprintf(stderr, "option %s", nbd_longopts[option_index].name);
-		//if (optarg)
-		//    fprintf(stderr, " with arg %s", optarg);
-		//printf("\n");
 		if (!strcmp(nbd_longopts[option_index].name, "host"))
 		      host_name = optarg;
 		if (!strcmp(nbd_longopts[option_index].name, "unix"))
