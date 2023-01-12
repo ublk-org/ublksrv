@@ -405,11 +405,11 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		return 0;
 
 	/*
-	 * WAITALL can trigger short send in case of unix sock
-	 * but TCP can't trigger short send if WAITALL is enabled
-	 * */
-	if (q_data->use_unix_sock)
-		msg_flags |= MSG_WAITALL;
+	 * Always set WAITALL, see below link:
+	 *
+	 * https://lore.kernel.org/io-uring/b8011ec8-8d43-9b9b-4dcc-53b6cb272354@samba.org/
+	 */
+	msg_flags |= MSG_WAITALL;
 
 	if (ublk_op != UBLK_IO_OP_WRITE) {
 		if (q_data->use_send_zc)
