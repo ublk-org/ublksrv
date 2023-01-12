@@ -77,9 +77,9 @@ struct nbd_queue_data {
 	 */
 	std::vector <const struct ublk_io_data *> next_chain;
 
-	const struct io_uring_cqe *recv_cqe;
 	struct io_uring_sqe *last_send_sqe;
 	struct nbd_reply reply;
+	struct io_uring_cqe recv_cqe;
 };
 
 struct nbd_io_data {
@@ -769,7 +769,7 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 		 * this single cqe works; in the future, if
 		 * recv becomes batched, here has to be fixed
 		 */
-		q_data->recv_cqe = cqe;
+		q_data->recv_cqe = *cqe;
 		q_data->need_handle_recv = 1;
 		return;
 	}
@@ -877,7 +877,7 @@ static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
 		}
 
 		if (q_data->need_handle_recv) {
-			io->tgt_io_cqe = q_data->recv_cqe;
+			io->tgt_io_cqe = &q_data->recv_cqe;
 			io->co.resume();
 			q_data->need_handle_recv = 0;
 		}
