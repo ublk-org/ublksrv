@@ -524,11 +524,12 @@ fail:
 }
 
 static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
-		const struct ublk_io_data *data, struct ublk_io_tgt *io,
 		const struct io_uring_cqe *cqe,
 		const struct ublk_io_data **io_data)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	const struct ublk_io_data *data;
+	struct ublk_io_tgt *io;
 	struct nbd_io_data *nbd_data;
 	u64 handle;
 	int tag, hwq;
@@ -636,7 +637,7 @@ read_reply:
 		if (io->tgt_io_cqe->res == -EAGAIN)
 			goto read_reply;
 
-		ret = nbd_handle_recv_reply(q, data, io, io->tgt_io_cqe, &io_data);
+		ret = nbd_handle_recv_reply(q, io->tgt_io_cqe, &io_data);
 		if (ret < 0)
 			break;
 		if (!ret)
