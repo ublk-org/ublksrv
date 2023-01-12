@@ -55,7 +55,11 @@ struct nbd_queue_data {
 
 	unsigned short use_send_zc:1;
 	unsigned short use_unix_sock:1;
+	unsigned short need_recv:1;
+	unsigned short need_handle_recv:1;
 
+	const struct io_uring_cqe *recv_cqe;
+	struct io_uring_sqe *last_send_sqe;
 	struct nbd_reply reply;
 };
 
@@ -372,6 +376,9 @@ static void nbd_recv_reply(const struct ublksrv_queue *q)
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	const struct ublk_io_data *data;
 
+	if (!q_data->in_flight_ios)
+		return;
+
 	if (q_data->recv_started)
 		return;
 
@@ -425,6 +432,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	sqe->user_data = build_user_data(data->tag, ublk_op, 0, 1);
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+	q_data->last_send_sqe = sqe;
 
 	if (ublk_op == UBLK_IO_OP_WRITE) {
 		NBD_WR_DEBUG("%s: queue io op %d(%llu %x %llx) pending write %u"
@@ -481,8 +489,6 @@ again:
 		ret = -ENOMEM;
 	if (ret < 0)
 		goto fail;
-
-	nbd_recv_reply(q);
 
 	co_await__suspend_always(data->tag);
 	if (io->tgt_io_cqe->res == -EAGAIN)
@@ -650,8 +656,12 @@ static int nbd_handle_io_async(const struct ublksrv_queue *q,
 
 	if (data->tag < q->q_depth)
 		io->co = __nbd_handle_io_async(q, data, io);
-	else
-		io->co = __nbd_handle_recv(q, data, io);
+	else {
+		struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+		//io->co = __nbd_handle_recv(q, data, io);
+
+		q_data->need_recv = 1;
+	}
 
 	return 0;
 }
@@ -662,7 +672,6 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 		const struct io_uring_cqe *cqe)
 {
 	int tag = user_data_to_tag(cqe->user_data);
-	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
 	ublk_assert(tag == data->tag);
 #if 0
@@ -675,8 +684,10 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 				__func__, tag, cqe->res, cqe->user_data);
 
 	if (is_recv_io(q, data)) {
-		io->tgt_io_cqe = cqe;
-		io->co.resume();
+		struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+
+		q_data->recv_cqe = cqe;
+		q_data->need_handle_recv = 1;
 		return;
 	}
 
@@ -749,6 +760,34 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 		NBD_WR_DEBUG("%s: pending write %u queued ios %d/%d\n",
 				__func__, q_data->in_flight_write_ios,
 				q_data->in_flight_ios, nr_queued_io );
+
+	if (q_data->last_send_sqe) {
+		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
+		q_data->last_send_sqe = NULL;
+	}
+
+	/*
+	 * recv SQE can't cut in send SQE chain, so it has to be
+	 * moved here after the send SQE chain is built
+	 */
+	if (q_data->in_flight_ios) {
+		const struct ublk_io_data *data =
+			ublksrv_queue_get_io_data(q, q->q_depth);
+		struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+		nbd_recv_reply(q);
+		if (q_data->need_recv) {
+			ublk_assert(data->tag == q->q_depth);
+			io->co = __nbd_handle_recv(q, data, io);
+			q_data->need_recv = 0;
+		}
+
+		if (q_data->need_handle_recv) {
+			io->tgt_io_cqe = q_data->recv_cqe;
+			io->co.resume();
+			q_data->need_handle_recv = 0;
+		}
+	}
 }
 
 struct ublksrv_tgt_type  nbd_tgt_type = {
