@@ -60,7 +60,6 @@ struct nbd_tgt_data {
 struct nbd_queue_data {
 	unsigned short recv_started;
 	unsigned short in_flight_ios;
-	unsigned short in_flight_write_ios;
 
 	unsigned short use_send_zc:1;
 	unsigned short use_unix_sock:1;
@@ -439,7 +438,6 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 			io_uring_prep_send(sqe, q->q_id + 1, req,
 					sizeof(*req), msg_flags);
 	} else {
-		q_data->in_flight_write_ios++;
 		if (q_data->use_send_zc)
 			io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
 				msg_flags);
@@ -520,8 +518,6 @@ fail:
 	ublksrv_complete_io(q, data->tag, ret);
 	q_data->in_flight_ios -= 1;
 	free(req);
-	if (ublksrv_get_op(data->iod) == UBLK_IO_OP_WRITE)
-		q_data->in_flight_write_ios--;
 	NBD_IO_DBG("%s: tag %d res %d\n", __func__, data->tag, ret);
 
 	co_return;
