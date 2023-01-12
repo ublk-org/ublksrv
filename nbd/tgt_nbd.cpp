@@ -84,6 +84,7 @@ struct nbd_queue_data {
 
 struct nbd_io_data {
 	unsigned int cmd_cookie;
+	unsigned int done;	//for handling partial recv
 };
 
 static int nbd_handle_io_async(const struct ublksrv_queue *q,
@@ -364,7 +365,8 @@ static inline void __nbd_build_req(const struct ublksrv_queue *q,
 
 /* recv completion drives the whole IO flow */
 static inline int nbd_start_recv(const struct ublksrv_queue *q,
-		void *buf, int len, bool reply)
+		struct nbd_io_data *nbd_data, void *buf, int len,
+		bool reply, unsigned done)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
@@ -374,7 +376,8 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
 	if (!sqe)
 		return -ENOMEM;
 
-	io_uring_prep_recv(sqe, q->q_id + 1, buf, len, MSG_WAITALL);
+	nbd_data->done = done;
+	io_uring_prep_recv(sqe, q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 
 	/* bit63 marks us as tgt io */
@@ -502,6 +505,8 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	q_data->in_flight_ios += 1;
 	q_data->chained_send_ios += 1;
 
+	nbd_data->done = 0;
+
 again:
 	ret = nbd_queue_req(q, data, req, &msg);
 	if (!ret)
@@ -516,6 +521,8 @@ again:
 fail:
 	if (ret < 0)
 		nbd_err("%s: err %d\n", __func__, ret);
+	else
+		ret += nbd_data->done;
 	ublksrv_complete_io(q, data->tag, ret);
 	q_data->in_flight_ios -= 1;
 	free(req);
@@ -525,13 +532,13 @@ fail:
 }
 
 static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
+		struct nbd_io_data *nbd_data,
 		const struct io_uring_cqe *cqe,
 		const struct ublk_io_data **io_data)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	const struct ublk_io_data *data;
 	struct ublk_io_tgt *io;
-	struct nbd_io_data *nbd_data;
 	u64 handle;
 	int tag, hwq;
 	unsigned ublk_op;
@@ -556,7 +563,7 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 		goto fail;
 	}
 
-	ublk_assert(cqe->res == sizeof(struct nbd_reply));
+	ublk_assert(cqe->res + nbd_data->done == sizeof(struct nbd_reply));
 
 	memcpy(&handle, q_data->reply.handle, sizeof(handle));
 	tag = nbd_handle_to_tag(handle);
@@ -614,10 +621,12 @@ fail:
 }
 
 static void __nbd_resume_read_req(const struct ublk_io_data *data,
-		const struct io_uring_cqe *cqe)
+		const struct io_uring_cqe *cqe, unsigned done)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 
+	nbd_data->done = done;
 	io->tgt_io_cqe = cqe;
 	io->co.resume();
 }
@@ -632,14 +641,15 @@ static void __nbd_resume_read_req(const struct ublk_io_data *data,
 static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, struct ublk_io_tgt *io)
 {
+	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
 	while (q_data->in_flight_ios > 0) {
 		const struct ublk_io_data *io_data = NULL;
 		int ret;
 read_reply:
-		ret = nbd_start_recv(q, &q_data->reply, sizeof(q_data->reply),
-				true);
+		ret = nbd_start_recv(q, nbd_data, &q_data->reply,
+				sizeof(q_data->reply), true, 0);
 		if (ret)
 			break;
 
@@ -647,15 +657,15 @@ read_reply:
 		if (io->tgt_io_cqe->res == -EAGAIN)
 			goto read_reply;
 
-		ret = nbd_handle_recv_reply(q, io->tgt_io_cqe, &io_data);
+		ret = nbd_handle_recv_reply(q, nbd_data, io->tgt_io_cqe, &io_data);
 		if (ret < 0)
 			break;
 		if (!ret)
 			continue;
 read_io:
 		ublk_assert(io_data != NULL);
-		ret = nbd_start_recv(q, (void *)io_data->iod->addr,
-			io_data->iod->nr_sectors << 9, false);
+		ret = nbd_start_recv(q, nbd_data, (void *)io_data->iod->addr,
+			io_data->iod->nr_sectors << 9, false, 0);
 		if (ret)
 			break;
 
@@ -666,7 +676,7 @@ read_io:
 		if (ret == -EAGAIN)
 			goto read_io;
 
-		__nbd_resume_read_req(io_data, io->tgt_io_cqe);
+		__nbd_resume_read_req(io_data, io->tgt_io_cqe, nbd_data->done);
 	}
 	q_data->recv_started = 0;
 	co_return;
