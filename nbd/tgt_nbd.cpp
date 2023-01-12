@@ -612,6 +612,15 @@ fail:
 	return ret;
 }
 
+static void __nbd_resume_read_req(const struct ublk_io_data *data,
+		const struct io_uring_cqe *cqe)
+{
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+	io->tgt_io_cqe = cqe;
+	io->co.resume();
+}
+
 /*
  * Every request will be responded with one reply, and we complete the
  * request after the reply is received.
@@ -656,9 +665,7 @@ read_io:
 		if (ret == -EAGAIN)
 			goto read_io;
 
-		struct ublk_io_tgt *io_io = __ublk_get_io_tgt_data(io_data);
-		io_io->tgt_io_cqe = io->tgt_io_cqe;
-		io_io->co.resume();
+		__nbd_resume_read_req(io_data, io->tgt_io_cqe);
 	}
 	q_data->recv_started = 0;
 	co_return;
