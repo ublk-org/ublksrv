@@ -626,11 +626,6 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 	if (q_data->send_sqe_chain_busy && !q_data->chained_send_ios)
 		q_data->send_sqe_chain_busy = 0;
 
-	if (q_data->last_send_sqe) {
-		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
-		q_data->last_send_sqe = NULL;
-	}
-
 	if (!q_data->send_sqe_chain_busy) {
 		std::vector<const struct ublk_io_data *> &ios =
 			q_data->next_chain;
@@ -647,6 +642,10 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 
 		if (q_data->chained_send_ios && !q_data->send_sqe_chain_busy)
 			q_data->send_sqe_chain_busy = 1;
+	}
+	if (q_data->last_send_sqe) {
+		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
+		q_data->last_send_sqe = NULL;
 	}
 }
 
