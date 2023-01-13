@@ -447,7 +447,8 @@ static int nbd_do_recv(const struct ublksrv_queue *q,
 	if (done == len)
 		return done;
 
-	NBD_IO_DBG("%s: sync(non-blocking) recv %d/%lu\n", __func__, ret, len);
+	NBD_IO_DBG("%s: sync(non-blocking) recv %d/%d/%u\n",
+			__func__, ret, done, len);
 	ret = nbd_start_recv(q, nbd_data, buf, len, len < 512, done);
 
 	return ret;
