@@ -170,6 +170,9 @@ ublksrv is running as one daemon process, so most of debug messages won't be
 shown in terminal. If any issue is observed, please collect log via command
 of "journalctl | grep ublksrvd"
 
+``./configure --enable-debug`` can build a debug version of ublk which
+dumps lots of runtime debug messages, and can't be used in production
+environment, should be for debug purpose only.
 
 License
 =======

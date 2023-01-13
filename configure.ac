@@ -60,6 +60,16 @@ if test "x$gcc_warnings" = "xyes"; then
     AC_SUBST([WARNINGS_CFLAGS])
 fi
 
+AC_ARG_ENABLE(
+  debug,
+  AS_HELP_STRING([--enable-debug],[Build a debug version of ublk(default disabled)]),
+  [
+    if test "x$enableval" = "xyes"; then
+      AC_DEFINE(DEBUG, 1, [Define to 1 if you want to build debug version])
+    fi
+  ]
+)
+
 dnl Check for liburing (required).
 PKG_CHECK_MODULES([LIBURING], [liburing >= 2.2])
 
