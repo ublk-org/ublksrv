@@ -364,11 +364,12 @@ static inline void __nbd_build_req(const struct ublksrv_queue *q,
 
 /* recv completion drives the whole IO flow */
 static inline int nbd_start_recv(const struct ublksrv_queue *q,
-		void *buf, int len, int tag, bool reply)
+		void *buf, int len, bool reply)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
+	unsigned int tag = q->q_depth;	//recv always use this extra tag
 
 	if (!sqe)
 		return -ENOMEM;
@@ -638,7 +639,7 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 		int ret;
 read_reply:
 		ret = nbd_start_recv(q, &q_data->reply, sizeof(q_data->reply),
-				q->q_depth, true);
+				true);
 		if (ret)
 			break;
 
@@ -654,7 +655,7 @@ read_reply:
 read_io:
 		ublk_assert(io_data != NULL);
 		ret = nbd_start_recv(q, (void *)io_data->iod->addr,
-			io_data->iod->nr_sectors << 9, data->tag, false);
+			io_data->iod->nr_sectors << 9, false);
 		if (ret)
 			break;
 
