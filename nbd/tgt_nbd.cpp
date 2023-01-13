@@ -87,9 +87,6 @@ struct nbd_io_data {
 	unsigned int done;	//for handling partial recv
 };
 
-static int nbd_handle_io_async(const struct ublksrv_queue *q,
-		const struct ublk_io_data *data);
-
 static inline struct nbd_queue_data *
 nbd_get_queue_data(const struct ublksrv_queue *q)
 {
@@ -164,54 +161,6 @@ static inline void __nbd_build_req(const struct ublksrv_queue *q,
 
 	handle = nbd_cmd_handle(q, data, nbd_data);
 	memcpy(req->handle, &handle, sizeof(handle));
-}
-
-/* recv completion drives the whole IO flow */
-static inline int nbd_start_recv(const struct ublksrv_queue *q,
-		struct nbd_io_data *nbd_data, void *buf, int len,
-		bool reply, unsigned done)
-{
-	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
-	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
-	unsigned int tag = q->q_depth;	//recv always use this extra tag
-
-	if (!sqe)
-		return -ENOMEM;
-
-	nbd_data->done = done;
-	io_uring_prep_recv(sqe, q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
-	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
-
-	/* bit63 marks us as tgt io */
-	sqe->user_data = build_user_data(tag, op, 0, 1);
-
-	ublk_assert(q_data->in_flight_ios);
-	NBD_IO_DBG("%s: q_inflight %d queue recv %s"
-				"(qid %d tag %u, target: %d, user_data %llx)\n",
-			__func__, q_data->in_flight_ios, reply ? "reply" : "io",
-			q->q_id, tag, 1, sqe->user_data);
-
-	return 0;
-}
-
-static void nbd_recv_reply(const struct ublksrv_queue *q)
-{
-	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-	const struct ublk_io_data *data;
-
-	if (!q_data->in_flight_ios)
-		return;
-
-	if (q_data->recv_started)
-		return;
-
-	q_data->recv_started = 1;
-
-	data = ublksrv_queue_get_io_data(q, q->q_depth);
-
-	ublk_assert(data->tag == q->q_depth);
-	nbd_handle_io_async(q, data);
 }
 
 static int nbd_queue_req(const struct ublksrv_queue *q,
@@ -438,6 +387,35 @@ static void __nbd_resume_read_req(const struct ublk_io_data *data,
 	nbd_data->done = done;
 	io->tgt_io_cqe = cqe;
 	io->co.resume();
+}
+
+/* recv completion drives the whole IO flow */
+static inline int nbd_start_recv(const struct ublksrv_queue *q,
+		struct nbd_io_data *nbd_data, void *buf, int len,
+		bool reply, unsigned done)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
+	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
+	unsigned int tag = q->q_depth;	//recv always use this extra tag
+
+	if (!sqe)
+		return -ENOMEM;
+
+	nbd_data->done = done;
+	io_uring_prep_recv(sqe, q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
+	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+
+	/* bit63 marks us as tgt io */
+	sqe->user_data = build_user_data(tag, op, 0, 1);
+
+	ublk_assert(q_data->in_flight_ios);
+	NBD_IO_DBG("%s: q_inflight %d queue recv %s"
+				"(qid %d tag %u, target: %d, user_data %llx)\n",
+			__func__, q_data->in_flight_ios, reply ? "reply" : "io",
+			q->q_id, tag, 1, sqe->user_data);
+
+	return 0;
 }
 
 /*
@@ -669,6 +647,25 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 		if (q_data->chained_send_ios && !q_data->send_sqe_chain_busy)
 			q_data->send_sqe_chain_busy = 1;
 	}
+}
+
+static void nbd_recv_reply(const struct ublksrv_queue *q)
+{
+	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
+	const struct ublk_io_data *data;
+
+	if (!q_data->in_flight_ios)
+		return;
+
+	if (q_data->recv_started)
+		return;
+
+	q_data->recv_started = 1;
+
+	data = ublksrv_queue_get_io_data(q, q->q_depth);
+
+	ublk_assert(data->tag == q->q_depth);
+	nbd_handle_io_async(q, data);
 }
 
 static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
