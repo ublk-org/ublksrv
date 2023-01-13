@@ -102,203 +102,6 @@ io_tgt_to_nbd_data(const struct ublk_io_tgt *io)
 	return (struct nbd_io_data *)(io + 1);
 }
 
-static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
-		uint16_t *flags)
-{
-	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
-	int jbuf_size;
-	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
-	int i;
-	struct nbd_tgt_data *data = (struct nbd_tgt_data *)dev->tgt.tgt_data;
-
-	const char *port = NBD_DEFAULT_PORT;
-	uint16_t needed_flags = 0;
-	uint32_t cflags = NBD_FLAG_C_FIXED_NEWSTYLE;
-
-	char host_name[NBD_MAX_NAME] = {0};
-	char exp_name[NBD_MAX_NAME] = {0};
-	char unix_path[NBD_MAX_NAME] = {0};
-	u64 size64 = 0;
-	bool can_opt_go = true;
-
-	/* todo: support tls */
-	char *certfile = NULL;
-	char *keyfile = NULL;
-	char *cacertfile = NULL;
-	char *tlshostname = NULL;
-	bool tls = false;
-
-	long send_zc = 0;
-
-	ublk_assert(jbuf);
-	ublk_assert(type == UBLKSRV_TGT_TYPE_NBD);
-	ublk_assert(!recovery || info->state == UBLK_S_DEV_QUIESCED);
-
-	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "host",
-			host_name);
-	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "unix",
-			unix_path);
-	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "export_name",
-			exp_name);
-	ublksrv_json_read_target_ulong_info(jbuf, "send_zc", &send_zc);
-
-	NBD_HS_DBG("%s: host %s unix %s exp_name %s send_zc\n", __func__,
-			host_name, unix_path, exp_name, send_zc);
-	for (i = 0; i < info->nr_hw_queues; i++) {
-		int sock;
-		unsigned int opts = 0;
-
-		if (strlen(unix_path))
-			sock = openunix(unix_path);
-		else
-			sock = opennet(host_name, port, false);
-
-		if (sock >= 0)
-			negotiate(&sock, &size64, flags, exp_name,
-					needed_flags, cflags, opts, certfile,
-					keyfile, cacertfile, tlshostname, tls,
-					can_opt_go);
-
-		tgt->fds[i + 1] = sock;
-		NBD_HS_DBG("%s:qid %d %s-%s size %luMB flags %x sock %d\n",
-				__func__, i, host_name, port,
-				size64 >> 20, *flags, sock);
-	}
-
-	tgt->dev_size = size64;
-	tgt->tgt_ring_depth = info->queue_depth;
-	tgt->nr_fds = info->nr_hw_queues;
-	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
-	data->unix_sock = strlen(unix_path) > 0 ? true : false;
-	data->use_send_zc = !!send_zc;
-
-	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
-		sizeof(struct nbd_io_data);
-}
-
-static void nbd_parse_flags(struct ublk_params *p, uint16_t flags, uint32_t bs)
-{
-	__u32 attrs = 0;
-
-	NBD_HS_DBG("%s: negotiated flags %x\n", __func__, flags);
-
-	if (flags & NBD_FLAG_READ_ONLY)
-		attrs |= UBLK_ATTR_READ_ONLY;
-	if (flags & NBD_FLAG_SEND_FLUSH) {
-		if (flags & NBD_FLAG_SEND_FUA)
-			attrs |= UBLK_ATTR_FUA;
-		else
-			attrs |= UBLK_ATTR_VOLATILE_CACHE;
-	}
-
-	p->basic.attrs |= attrs;
-
-	if (flags & NBD_FLAG_SEND_TRIM) {
-		p->discard.discard_granularity = bs;
-		p->discard.max_discard_sectors = UINT_MAX >> 9;
-		p->discard.max_discard_segments	= 1;
-		p->types |= UBLK_PARAM_TYPE_DISCARD;
-        }
-}
-
-static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
-		char *argv[])
-{
-	int send_zc = 0;
-	int read_only = 0;
-	static const struct option nbd_longopts[] = {
-		{ "host",	required_argument, 0, 0},
-		{ "unix",	required_argument, 0, 0},
-		{ "export_name",	required_argument, 0, 0},
-		{ "send_zc",  0,  &send_zc, 1},
-		{ "read_only",  0,  &read_only, 1},
-		{ NULL }
-	};
-	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
-	int jbuf_size;
-	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
-	struct ublksrv_tgt_base_json tgt_json = {
-		.type = type,
-	};
-	int ret;
-	int opt;
-	int option_index = 0;
-	unsigned char bs_shift = 9;
-	const char *host_name = NULL;
-	const char *unix_path = NULL;
-	const char *exp_name = NULL;
-	uint16_t flags = 0;
-
-	strcpy(tgt_json.name, "nbd");
-
-	if (type != UBLKSRV_TGT_TYPE_NBD)
-		return -1;
-
-	while ((opt = getopt_long(argc, argv, "-:f:",
-				  nbd_longopts, &option_index)) != -1) {
-		if (opt < 0)
-			break;
-		if (opt > 0)
-			continue;
-
-		if (!strcmp(nbd_longopts[option_index].name, "host"))
-		      host_name = optarg;
-		if (!strcmp(nbd_longopts[option_index].name, "unix"))
-		      unix_path = optarg;
-		if (!strcmp(nbd_longopts[option_index].name, "export_name"))
-			exp_name = optarg;
-	}
-
-	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
-	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "host", host_name);
-	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "unix", unix_path);
-	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "export_name", exp_name);
-	NBD_WRITE_TGT_LONG(dev, jbuf, jbuf_size, "send_zc", send_zc);
-
-	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
-
-	nbd_setup_tgt(dev, type, false, &flags);
-
-	tgt_json.dev_size = tgt->dev_size;
-	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
-
-	struct ublk_params p = {
-		.types = UBLK_PARAM_TYPE_BASIC,
-		.basic = {
-			.attrs = read_only ? UBLK_ATTR_READ_ONLY : 0U,
-			.logical_bs_shift	= bs_shift,
-			.physical_bs_shift	= 12,
-			.io_opt_shift		= 12,
-			.io_min_shift		= bs_shift,
-			.max_sectors		= info->max_io_buf_bytes >> 9,
-			.dev_sectors		= tgt->dev_size >> 9,
-		},
-	};
-
-	nbd_parse_flags(&p, flags, 1U << bs_shift);
-
-	do {
-		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
-		if (ret < 0)
-			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	} while (ret < 0);
-
-	return 0;
-}
-
-static int nbd_recovery_tgt(struct ublksrv_dev *dev, int type)
-{
-	uint16_t flags = 0;
-
-	nbd_setup_tgt(dev, type, true, &flags);
-
-	return 0;
-}
-
 static int req_to_nbd_cmd_type(const struct ublksrv_io_desc *iod)
 {
 	switch (ublksrv_get_op(iod)) {
@@ -835,55 +638,6 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 	nbd_send_req_done(q, data, cqe);
 }
 
-static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
-{
-	const struct ublksrv_tgt_info *tgt = &dev->tgt;
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
-	int i;
-
-	free(tgt->tgt_data);
-
-	for (i = 0; i < info->nr_hw_queues; i++) {
-		int fd = tgt->fds[i + 1];
-
-		shutdown(fd, SHUT_RDWR);
-		close(fd);
-	}
-}
-
-static void nbd_usage_for_add(void)
-{
-	printf("           nbd: --host=$HOST [--port=$PORT] | --unix=$UNIX_PATH\n");
-}
-
-static int nbd_init_queue(const struct ublksrv_queue *q,
-		void **queue_data_ptr)
-{
-	struct nbd_queue_data *data =
-		(struct nbd_queue_data *)calloc(sizeof(*data), 1);
-	struct nbd_tgt_data *ddata = (struct nbd_tgt_data*)q->dev->tgt.tgt_data;
-
-	if (!data)
-		return -ENOMEM;
-
-	data->next_chain.clear();
-	data->use_send_zc = ddata->unix_sock ? false : ddata->use_send_zc;
-	data->use_unix_sock = ddata->unix_sock;
-	data->recv_started = 0;
-	//nbd_err("%s send zc %d\n", __func__, data->use_send_zc);
-
-	*queue_data_ptr = (void *)data;
-	return 0;
-}
-
-static void nbd_deinit_queue(const struct ublksrv_queue *q)
-{
-	struct nbd_queue_data *data = nbd_get_queue_data(q);
-
-	free(data);
-}
-
 static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 		struct nbd_queue_data *q_data)
 {
@@ -957,6 +711,252 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 	 * moved here after the send SQE chain is built
 	 */
 	nbd_handle_recv_bg(q, q_data);
+}
+
+static void nbd_usage_for_add(void)
+{
+	printf("           nbd: --host=$HOST [--port=$PORT] | --unix=$UNIX_PATH\n");
+}
+
+static int nbd_init_queue(const struct ublksrv_queue *q,
+		void **queue_data_ptr)
+{
+	struct nbd_queue_data *data =
+		(struct nbd_queue_data *)calloc(sizeof(*data), 1);
+	struct nbd_tgt_data *ddata = (struct nbd_tgt_data*)q->dev->tgt.tgt_data;
+
+	if (!data)
+		return -ENOMEM;
+
+	data->next_chain.clear();
+	data->use_send_zc = ddata->unix_sock ? false : ddata->use_send_zc;
+	data->use_unix_sock = ddata->unix_sock;
+	data->recv_started = 0;
+	//nbd_err("%s send zc %d\n", __func__, data->use_send_zc);
+
+	*queue_data_ptr = (void *)data;
+	return 0;
+}
+
+static void nbd_deinit_queue(const struct ublksrv_queue *q)
+{
+	struct nbd_queue_data *data = nbd_get_queue_data(q);
+
+	free(data);
+}
+
+static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
+{
+	const struct ublksrv_tgt_info *tgt = &dev->tgt;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	int i;
+
+	free(tgt->tgt_data);
+
+	for (i = 0; i < info->nr_hw_queues; i++) {
+		int fd = tgt->fds[i + 1];
+
+		shutdown(fd, SHUT_RDWR);
+		close(fd);
+	}
+}
+
+static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
+		uint16_t *flags)
+{
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	int jbuf_size;
+	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
+	int i;
+	struct nbd_tgt_data *data = (struct nbd_tgt_data *)dev->tgt.tgt_data;
+
+	const char *port = NBD_DEFAULT_PORT;
+	uint16_t needed_flags = 0;
+	uint32_t cflags = NBD_FLAG_C_FIXED_NEWSTYLE;
+
+	char host_name[NBD_MAX_NAME] = {0};
+	char exp_name[NBD_MAX_NAME] = {0};
+	char unix_path[NBD_MAX_NAME] = {0};
+	u64 size64 = 0;
+	bool can_opt_go = true;
+
+	/* todo: support tls */
+	char *certfile = NULL;
+	char *keyfile = NULL;
+	char *cacertfile = NULL;
+	char *tlshostname = NULL;
+	bool tls = false;
+
+	long send_zc = 0;
+
+	ublk_assert(jbuf);
+	ublk_assert(type == UBLKSRV_TGT_TYPE_NBD);
+	ublk_assert(!recovery || info->state == UBLK_S_DEV_QUIESCED);
+
+	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "host",
+			host_name);
+	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "unix",
+			unix_path);
+	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "export_name",
+			exp_name);
+	ublksrv_json_read_target_ulong_info(jbuf, "send_zc", &send_zc);
+
+	NBD_HS_DBG("%s: host %s unix %s exp_name %s send_zc\n", __func__,
+			host_name, unix_path, exp_name, send_zc);
+	for (i = 0; i < info->nr_hw_queues; i++) {
+		int sock;
+		unsigned int opts = 0;
+
+		if (strlen(unix_path))
+			sock = openunix(unix_path);
+		else
+			sock = opennet(host_name, port, false);
+
+		if (sock >= 0)
+			negotiate(&sock, &size64, flags, exp_name,
+					needed_flags, cflags, opts, certfile,
+					keyfile, cacertfile, tlshostname, tls,
+					can_opt_go);
+
+		tgt->fds[i + 1] = sock;
+		NBD_HS_DBG("%s:qid %d %s-%s size %luMB flags %x sock %d\n",
+				__func__, i, host_name, port,
+				size64 >> 20, *flags, sock);
+	}
+
+	tgt->dev_size = size64;
+	tgt->tgt_ring_depth = info->queue_depth;
+	tgt->nr_fds = info->nr_hw_queues;
+	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
+	data->unix_sock = strlen(unix_path) > 0 ? true : false;
+	data->use_send_zc = !!send_zc;
+
+	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
+		sizeof(struct nbd_io_data);
+}
+
+static void nbd_parse_flags(struct ublk_params *p, uint16_t flags, uint32_t bs)
+{
+	__u32 attrs = 0;
+
+	NBD_HS_DBG("%s: negotiated flags %x\n", __func__, flags);
+
+	if (flags & NBD_FLAG_READ_ONLY)
+		attrs |= UBLK_ATTR_READ_ONLY;
+	if (flags & NBD_FLAG_SEND_FLUSH) {
+		if (flags & NBD_FLAG_SEND_FUA)
+			attrs |= UBLK_ATTR_FUA;
+		else
+			attrs |= UBLK_ATTR_VOLATILE_CACHE;
+	}
+
+	p->basic.attrs |= attrs;
+
+	if (flags & NBD_FLAG_SEND_TRIM) {
+		p->discard.discard_granularity = bs;
+		p->discard.max_discard_sectors = UINT_MAX >> 9;
+		p->discard.max_discard_segments	= 1;
+		p->types |= UBLK_PARAM_TYPE_DISCARD;
+        }
+}
+
+static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
+		char *argv[])
+{
+	int send_zc = 0;
+	int read_only = 0;
+	static const struct option nbd_longopts[] = {
+		{ "host",	required_argument, 0, 0},
+		{ "unix",	required_argument, 0, 0},
+		{ "export_name",	required_argument, 0, 0},
+		{ "send_zc",  0,  &send_zc, 1},
+		{ "read_only",  0,  &read_only, 1},
+		{ NULL }
+	};
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	int jbuf_size;
+	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
+	struct ublksrv_tgt_base_json tgt_json = {
+		.type = type,
+	};
+	int ret;
+	int opt;
+	int option_index = 0;
+	unsigned char bs_shift = 9;
+	const char *host_name = NULL;
+	const char *unix_path = NULL;
+	const char *exp_name = NULL;
+	uint16_t flags = 0;
+
+	strcpy(tgt_json.name, "nbd");
+
+	if (type != UBLKSRV_TGT_TYPE_NBD)
+		return -1;
+
+	while ((opt = getopt_long(argc, argv, "-:f:",
+				  nbd_longopts, &option_index)) != -1) {
+		if (opt < 0)
+			break;
+		if (opt > 0)
+			continue;
+
+		if (!strcmp(nbd_longopts[option_index].name, "host"))
+		      host_name = optarg;
+		if (!strcmp(nbd_longopts[option_index].name, "unix"))
+		      unix_path = optarg;
+		if (!strcmp(nbd_longopts[option_index].name, "export_name"))
+			exp_name = optarg;
+	}
+
+	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
+	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "host", host_name);
+	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "unix", unix_path);
+	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "export_name", exp_name);
+	NBD_WRITE_TGT_LONG(dev, jbuf, jbuf_size, "send_zc", send_zc);
+
+	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
+
+	nbd_setup_tgt(dev, type, false, &flags);
+
+	tgt_json.dev_size = tgt->dev_size;
+	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
+
+	struct ublk_params p = {
+		.types = UBLK_PARAM_TYPE_BASIC,
+		.basic = {
+			.attrs = read_only ? UBLK_ATTR_READ_ONLY : 0U,
+			.logical_bs_shift	= bs_shift,
+			.physical_bs_shift	= 12,
+			.io_opt_shift		= 12,
+			.io_min_shift		= bs_shift,
+			.max_sectors		= info->max_io_buf_bytes >> 9,
+			.dev_sectors		= tgt->dev_size >> 9,
+		},
+	};
+
+	nbd_parse_flags(&p, flags, 1U << bs_shift);
+
+	do {
+		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
+		if (ret < 0)
+			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
+	} while (ret < 0);
+
+	return 0;
+}
+
+static int nbd_recovery_tgt(struct ublksrv_dev *dev, int type)
+{
+	uint16_t flags = 0;
+
+	nbd_setup_tgt(dev, type, true, &flags);
+
+	return 0;
 }
 
 struct ublksrv_tgt_type  nbd_tgt_type = {
