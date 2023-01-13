@@ -638,6 +638,35 @@ static void __nbd_resume_read_req(const struct ublk_io_data *data,
 }
 
 /*
+ * Submit recv worker for reading nbd reply or read io data
+ *
+ * return value:
+ *
+ * 0 : queued via io_uring
+ * len : data read already, must be same with len
+ * < 0 : failure
+ */
+static int nbd_do_recv(const struct ublksrv_queue *q,
+		struct nbd_io_data *nbd_data, int fd,
+		void *buf, unsigned len)
+{
+	unsigned msg_flags = MSG_DONTWAIT | MSG_WAITALL;
+	int ret;
+
+	/* try to no-wait read first */
+	ret = recv(fd, buf, len, msg_flags);
+	if (ret == len)
+		return ret;
+	else if (ret < 0)
+		ret = 0;
+
+	NBD_IO_DBG("%s: sync(non-blocking) recv %d/%lu\n", __func__, ret, len);
+	ret = nbd_start_recv(q, nbd_data, buf, len, len < 512, ret);
+
+	return ret;
+}
+
+/*
  * Every request will be responded with one reply, and we complete the
  * request after the reply is received.
  *
@@ -650,30 +679,22 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	int fd = q->dev->tgt.fds[q->q_id + 1];
-	unsigned msg_flags = MSG_DONTWAIT | MSG_WAITALL;
 	unsigned int len;
-	u64 cqe_buf[2];
+	u64 cqe_buf[2] = {0};
 	struct io_uring_cqe *fake_cqe = (struct io_uring_cqe *)cqe_buf;
 
 	while (q_data->in_flight_ios > 0) {
 		const struct ublk_io_data *io_data = NULL;
 		int ret;
 read_reply:
-		/* try to no-wait read first */
-		ret = recv(fd, &q_data->reply, sizeof(q_data->reply),
-				msg_flags);
+		ret = nbd_do_recv(q, nbd_data, fd, &q_data->reply,
+				sizeof(q_data->reply));
 		if (ret == sizeof(q_data->reply)) {
-			nbd_data->done = 0;
-			fake_cqe->res = ret;
+			nbd_data->done = ret;
+			fake_cqe->res = 0;
 			io->tgt_io_cqe = fake_cqe;
 			goto handle_recv;
 		} else if (ret < 0)
-			ret = 0;
-		NBD_IO_DBG("%s: recv reply %d/%lu\n", __func__, ret, sizeof(q_data->reply));
-
-		ret = nbd_start_recv(q, nbd_data, &q_data->reply,
-				sizeof(q_data->reply), true, ret);
-		if (ret)
 			break;
 
 		co_await__suspend_always(data->tag);
@@ -690,20 +711,13 @@ read_io:
 		ublk_assert(io_data != NULL);
 
 		len = io_data->iod->nr_sectors << 9;
-		/* try no-wait read first */
-		ret = recv(fd, (void *)io_data->iod->addr, len, msg_flags);
+		ret = nbd_do_recv(q, nbd_data, fd, (void *)io_data->iod->addr, len);
 		if (ret == len) {
-			nbd_data->done = 0;
-			fake_cqe->res = ret;
+			nbd_data->done = ret;
+			fake_cqe->res = 0;
 			io->tgt_io_cqe = fake_cqe;
 			goto handle_read_io;
 		} else if (ret < 0)
-			ret = 0;
-		NBD_IO_DBG("%s: recv read io %d/%u\n", __func__, ret, len);
-
-		ret = nbd_start_recv(q, nbd_data, (void *)io_data->iod->addr,
-			len, false, ret);
-		if (ret)
 			break;
 
 		/* still wait on recv coroutine context */
