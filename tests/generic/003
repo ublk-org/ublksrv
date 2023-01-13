@@ -4,6 +4,7 @@
 . common/fio_common
 . common/loop_common
 . common/qcow2_common
+. common/nbd_common
 
 ublk_run_mount_test()
 {
@@ -42,7 +43,11 @@ ublk_run_mount_type()
 	file=`_create_image $type "null" 1G`
 
 	for NEED_GET_DATA in `seq 0 1`; do
-		export T_TYPE_PARAMS="-t $type -q $queues -g $NEED_GET_DATA -f $file"
+		if [ "$type" == "nbd" ]; then
+			export T_TYPE_PARAMS="-t $type -q $queues -g $NEED_GET_DATA -d 127 --host $NBDSRV"
+		else
+			export T_TYPE_PARAMS="-t $type -q $queues -g $NEED_GET_DATA -f $file"
+		fi
 		ublk_run_mount_test $mnt
 	done
 	_remove_image ${type} $file
@@ -50,7 +55,7 @@ ublk_run_mount_type()
 
 MNT=`mktemp -d`
 
-for TYPE in "loop" "qcow2"; do
+for TYPE in "loop" "qcow2" "nbd"; do
 	ublk_run_mount_type $TYPE $MNT
 done
 

@@ -1,0 +1,21 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+
+. common/fio_common
+. common/nbd_common
+
+echo "run perf test via nbd-client(nbd server: $NBDSRV:nbdkit memory $NBD_SIZE)"
+
+nbd_dev=/dev/nbd11
+
+modprobe nbd
+
+file=`_create_image "nbd" "none" $NBD_SIZE`
+
+nbd-client -d $nbd_dev
+nbd-client $NBDSRV $nbd_dev
+
+__run_dev_perf_no_create "nbd" 1  $nbd_dev
+
+nbd-client -d $nbd_dev
+_remove_image "nbd" $file

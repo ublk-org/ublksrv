@@ -80,7 +80,7 @@ if [ "${TDIR:0:1}" != "/" ]; then
 	TDIR=`dirname $PWD`/${TDIR}
 fi
 
-export ALL_TGTS="null loop qcow2"
+export ALL_TGTS="null loop qcow2 nbd"
 export TRUNTIME=$2
 export UBLK_TMP_DIR=$TDIR
 export T_TYPE_PARAMS=""
