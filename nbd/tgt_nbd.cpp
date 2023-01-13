@@ -651,17 +651,23 @@ static int nbd_do_recv(const struct ublksrv_queue *q,
 		void *buf, unsigned len)
 {
 	unsigned msg_flags = MSG_DONTWAIT | MSG_WAITALL;
+	int i = 0, done = 0;
+	const int loops = 5;
 	int ret;
 
-	/* try to no-wait read first */
-	ret = recv(fd, buf, len, msg_flags);
-	if (ret == len)
-		return ret;
-	else if (ret < 0)
-		ret = 0;
+	while (i++ < loops && done < len) {
+		ret = recv(fd, (char *)buf + done, len - done, msg_flags);
+		if (ret > 0)
+			done += ret;
+
+		if (!done)
+			break;
+	}
+	if (done == len)
+		return done;
 
 	NBD_IO_DBG("%s: sync(non-blocking) recv %d/%lu\n", __func__, ret, len);
-	ret = nbd_start_recv(q, nbd_data, buf, len, len < 512, ret);
+	ret = nbd_start_recv(q, nbd_data, buf, len, len < 512, done);
 
 	return ret;
 }
