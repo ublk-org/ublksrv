@@ -138,8 +138,11 @@ struct _ublksrv_dev {
 
 	const struct ublksrv_ctrl_dev *ctrl_dev;
 	void	*target_data;
+	int	cq_depth;
+	int	pad;
 
-	unsigned long reserved[4];
+	/* reserved isn't necessary any more */
+	unsigned long reserved[3];
 };
 
 #define local_to_tq(q)	((struct ublksrv_queue *)(q))
@@ -185,16 +188,16 @@ static inline int is_target_io(__u64 user_data)
 }
 
 /* two helpers for setting up io_uring */
-static inline int ublksrv_setup_ring(int depth, struct io_uring *r,
-		unsigned flags)
+static inline int ublksrv_setup_ring(struct io_uring *r, int depth,
+		int cq_depth, unsigned flags)
 {
 	struct io_uring_params p;
 
 	memset(&p, 0, sizeof(p));
-        p.flags = flags | IORING_SETUP_CQSIZE;
-        p.cq_entries = depth;
+	p.flags = flags | IORING_SETUP_CQSIZE;
+	p.cq_entries = cq_depth;
 
-        return io_uring_queue_init_params(depth, r, &p);
+	return io_uring_queue_init_params(depth, r, &p);
 }
 
 static inline struct io_uring_sqe *ublksrv_uring_get_sqe(struct io_uring *r,

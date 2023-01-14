@@ -120,7 +120,7 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 	dev->tgt_argv = data->tgt_argv;
 
 	/* 32 is enough to send ctrl commands */
-	ret = ublksrv_setup_ring(32, &dev->ring, IORING_SETUP_SQE128);
+	ret = ublksrv_setup_ring(&dev->ring, 32, 32, IORING_SETUP_SQE128);
 	if (ret < 0) {
 		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
 		free(dev);

@@ -325,6 +325,8 @@ extern void ublksrv_dev_deinit(const struct ublksrv_dev *dev);
 extern const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 		const struct ublksrv_dev *dev);
 extern int ublksrv_get_pidfile_fd(const struct ublksrv_dev *dev);
+extern void ublksrv_dev_set_cq_depth(struct ublksrv_dev *tdev, int cq_depth);
+extern int ublksrv_dev_get_cq_depth(struct ublksrv_dev *tdev);
 
 /* target json has to include the following key/value */
 #define UBLKSRV_TGT_NAME_MAX_LEN 32
