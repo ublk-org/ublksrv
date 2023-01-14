@@ -440,7 +440,7 @@ static int nbd_do_recv(const struct ublksrv_queue *q,
 {
 	unsigned msg_flags = MSG_DONTWAIT | MSG_WAITALL;
 	int i = 0, done = 0;
-	const int loops = 5;
+	const int loops = len < 512 ? 16 : 32;
 	int ret;
 
 	while (i++ < loops && done < len) {
@@ -454,8 +454,8 @@ static int nbd_do_recv(const struct ublksrv_queue *q,
 	if (done == len)
 		return done;
 
-	NBD_IO_DBG("%s: sync(non-blocking) recv %d/%d/%u\n",
-			__func__, ret, done, len);
+	NBD_IO_DBG("%s: sync(non-blocking) recv %d(%s)/%d/%u\n",
+			__func__, ret, strerror(errno), done, len);
 	ret = nbd_start_recv(q, nbd_data, buf, len, len < 512, done);
 
 	return ret;
