@@ -187,12 +187,8 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	msg_flags |= MSG_WAITALL;
 
 	if (ublk_op != UBLK_IO_OP_WRITE) {
-		if (q_data->use_send_zc)
-			io_uring_prep_send_zc(sqe, q->q_id + 1, req,
-					sizeof(*req), msg_flags, 0);
-		else
-			io_uring_prep_send(sqe, q->q_id + 1, req,
-					sizeof(*req), msg_flags);
+		io_uring_prep_send(sqe, q->q_id + 1, req,
+				sizeof(*req), msg_flags);
 	} else {
 		if (q_data->use_send_zc)
 			io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
