@@ -63,7 +63,6 @@ struct nbd_queue_data {
 
 	unsigned short use_send_zc:1;
 	unsigned short use_unix_sock:1;
-	unsigned short need_recv:1;
 	unsigned short need_handle_recv:1;
 	unsigned short send_sqe_chain_busy:1;
 
@@ -474,6 +473,8 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 	u64 cqe_buf[2] = {0};
 	struct io_uring_cqe *fake_cqe = (struct io_uring_cqe *)cqe_buf;
 
+	q_data->recv_started = 1;
+
 	while (q_data->in_flight_ios > 0) {
 		const struct ublk_io_data *io_data = NULL;
 		int ret;
@@ -531,18 +532,14 @@ static int nbd_handle_io_async(const struct ublksrv_queue *q,
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
-	if (data->tag < q->q_depth) {
-		/*
-		 * Put the io in the queue and submit them after
-		 * the current chain becomes idle.
-		 */
-		if (q_data->send_sqe_chain_busy)
-			q_data->next_chain.push_back(data);
-		else
-			io->co = __nbd_handle_io_async(q, data, io);
-	} else {
-		q_data->need_recv = 1;
-	}
+	/*
+	 * Put the io in the queue and submit them after
+	 * the current chain becomes idle.
+	 */
+	if (q_data->send_sqe_chain_busy)
+		q_data->next_chain.push_back(data);
+	else
+		io->co = __nbd_handle_io_async(q, data, io);
 
 	return 0;
 }
@@ -659,47 +656,30 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 	}
 }
 
-static void nbd_recv_reply(const struct ublksrv_queue *q)
-{
-	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-	const struct ublk_io_data *data;
-
-	if (!q_data->in_flight_ios)
-		return;
-
-	if (q_data->recv_started)
-		return;
-
-	q_data->recv_started = 1;
-
-	data = ublksrv_queue_get_io_data(q, q->q_depth);
-
-	ublk_assert(data->tag == q->q_depth);
-	nbd_handle_io_async(q, data);
-}
-
 static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
 		struct nbd_queue_data *q_data)
 {
-	if (q_data->in_flight_ios) {
+	if (q_data->in_flight_ios && !q_data->recv_started) {
 		const struct ublk_io_data *data =
 			ublksrv_queue_get_io_data(q, q->q_depth);
 		struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
 		ublk_assert(data->tag == q->q_depth);
 
-		nbd_recv_reply(q);
+		io->co = __nbd_handle_recv(q, data, io);
+	}
 
-		if (q_data->need_recv) {
-			io->co = __nbd_handle_recv(q, data, io);
-			q_data->need_recv = 0;
-		}
+	/* reply or read io data is comming */
+	if (q_data->need_handle_recv) {
+		const struct ublk_io_data *data =
+			ublksrv_queue_get_io_data(q, q->q_depth);
+		struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-		if (q_data->need_handle_recv) {
-			io->tgt_io_cqe = &q_data->recv_cqe;
-			io->co.resume();
-			q_data->need_handle_recv = 0;
-		}
+		ublk_assert(data->tag == q->q_depth);
+
+		io->tgt_io_cqe = &q_data->recv_cqe;
+		io->co.resume();
+		q_data->need_handle_recv = 0;
 	}
 }
 
