@@ -703,6 +703,17 @@ static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
 	}
 }
 
+/*
+ * The initial send request batch should be in same send sqe batch, before
+ * this batch isn't done, all new send requests are staggered into next_chain
+ * which will be flushed after the current chain is completed.
+ *
+ * Also recv work is always started after send requests are queued, because
+ * the recv sqe may cut the send sqe chain, and the ublk io cmd sqe may cut
+ * the send sqe chain too.
+ *
+ * This is why nbd_handle_recv_bg() always follows nbd_handle_send_bg().
+ */
 static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
