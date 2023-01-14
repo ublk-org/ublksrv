@@ -484,6 +484,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 	unsigned nr_ios = depth + dev->tgt.extra_ios;
 	int io_data_size = round_up(dev->tgt.io_data_size,
 			sizeof(unsigned long));
+	int cq_depth = dev->cq_depth ? dev->cq_depth : ring_depth;
 
 	/*
 	 * Too many extra ios
@@ -553,8 +554,8 @@ skip_alloc_buf:
 		//ublk_assert(io_data_size ^ (unsigned long)q->ios[i].data.private_data);
 	}
 
-	ret = ublksrv_setup_ring(ring_depth, &q->ring, IORING_SETUP_SQE128 |
-			IORING_SETUP_COOP_TASKRUN);
+	ret = ublksrv_setup_ring(&q->ring, ring_depth, cq_depth,
+			IORING_SETUP_SQE128 | IORING_SETUP_COOP_TASKRUN);
 	if (ret < 0) {
 		syslog(LOG_INFO, "ublk dev %d queue %d setup io_uring failed %d",
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
@@ -963,4 +964,22 @@ ublksrv_queue_get_io_data(const struct ublksrv_queue *tq, int tag)
 	struct _ublksrv_queue *q = tq_to_local(tq);
 
 	return &q->ios[tag].data;
+}
+
+/*
+ * The default io_uring cq depth equals to queue depth plus
+ * .tgt_ring_depth, which is usually enough for typical ublk targets,
+ * such as loop and qcow2, but it may not be enough for nbd with send_zc
+ * which needs extra cqe for buffer notification.
+ *
+ * So add API to allow target to override default io_uring cq depth.
+ */
+void ublksrv_dev_set_cq_depth(struct ublksrv_dev *tdev, int cq_depth)
+{
+	tdev_to_local(tdev)->cq_depth = cq_depth;
+}
+
+int ublksrv_dev_get_cq_depth(struct ublksrv_dev *tdev)
+{
+	return tdev_to_local(tdev)->cq_depth;
 }
