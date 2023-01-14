@@ -722,6 +722,29 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 	 * moved here after the send SQE chain is built
 	 */
 	nbd_handle_recv_bg(q, q_data);
+
+	/*
+	 * io can be completed in recv work since we do sync recv, so
+	 * io could be completed before the send seq's cqe is returned.
+	 *
+	 * When this happens, simply clear chain busy, so that we can
+	 * queue more requests.
+	 */
+	if (!q_data->in_flight_ios && q_data->send_sqe_chain_busy) {
+		/* all inflight ios are done, so it is safe to send request */
+		q_data->send_sqe_chain_busy = 0;
+
+		if (!q_data->next_chain.empty()) {
+			nbd_handle_send_bg(q, q_data);
+			nbd_handle_recv_bg(q, q_data);
+		}
+	}
+
+	if (!q_data->recv_started && !q_data->send_sqe_chain_busy &&
+			!q_data->next_chain.empty())
+		nbd_err("%s: hang risk: pending ios %d/%d\n",
+				__func__, q_data->in_flight_ios,
+				q_data->chained_send_ios);
 }
 
 static void nbd_usage_for_add(void)
