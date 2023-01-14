@@ -208,6 +208,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 	q_data->last_send_sqe = sqe;
+	q_data->chained_send_ios += 1;
 
 	NBD_IO_DBG("%s: queue io op %d(%llu %x %llx) ios(%u %u)"
 			" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
@@ -255,7 +256,6 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 
 	__nbd_build_req(q, data, nbd_data, type, req);
 	q_data->in_flight_ios += 1;
-	q_data->chained_send_ios += 1;
 
 	nbd_data->done = 0;
 
@@ -557,7 +557,10 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 		return;
 
 	ublk_assert(q_data->chained_send_ios);
-	q_data->chained_send_ios--;
+	if (!--q_data->chained_send_ios) {
+		if (q_data->send_sqe_chain_busy)
+			q_data->send_sqe_chain_busy = 0;
+	}
 
 	/*
 	 * In case of failure, how to tell recv work to handle the
@@ -622,9 +625,6 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 {
 	if (q_data->chained_send_ios && !q_data->send_sqe_chain_busy)
 		q_data->send_sqe_chain_busy = 1;
-
-	if (q_data->send_sqe_chain_busy && !q_data->chained_send_ios)
-		q_data->send_sqe_chain_busy = 0;
 
 	if (!q_data->send_sqe_chain_busy) {
 		std::vector<const struct ublk_io_data *> &ios =
