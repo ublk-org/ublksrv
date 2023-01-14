@@ -204,7 +204,14 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 
 	if (ublk_op == UBLK_IO_OP_READ)
 		ublk_op = NBD_OP_READ_REQ;
-	sqe->user_data = build_user_data(data->tag, ublk_op, 0, 1);
+
+	/*
+	 * The encoded nr_sectors should only be used for validating write req
+	 * when its cqe is completed, since iod data isn't available at that time
+	 * because request can be reused.
+	 */
+	sqe->user_data = build_user_data(data->tag, ublk_op,
+			data->iod->nr_sectors, 1);
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 	q_data->last_send_sqe = sqe;
@@ -544,12 +551,19 @@ static int nbd_handle_io_async(const struct ublksrv_queue *q,
 	return 0;
 }
 
+/*
+ * Don't touch @data because the pointed ublk io request may have been
+ * completed before this send cqe is handled. And ublk io request completion
+ * is triggered by reply received from nbd server.
+ */
 static void nbd_send_req_done(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct io_uring_cqe *cqe)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-	unsigned ublk_op = ublksrv_get_op(data->iod);
+	unsigned ublk_op = user_data_to_op(cqe->user_data);
+	int tag = user_data_to_tag(cqe->user_data);
+	unsigned int nr_sects = user_data_to_tgt_data(cqe->user_data);
 	unsigned total;
 
 	/* nothing to do for send_zc notification */
@@ -569,19 +583,19 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 	 */
 	if (cqe->res < 0)
 		nbd_err("%s: tag %d cqe fail %d %llx\n",
-				__func__, data->tag, cqe->res, cqe->user_data);
+				__func__, tag, cqe->res, cqe->user_data);
 
 	/*
 	 * We have set MSG_WAITALL, so short send shouldn't be possible,
 	 * but just warn in case of io_uring regression
 	 */
 	if (ublk_op == UBLK_IO_OP_WRITE)
-		total = sizeof(nbd_request) + (data->iod->nr_sectors << 9);
+		total = sizeof(nbd_request) + (nr_sects << 9);
 	else
 		total = sizeof(nbd_request);
 	if (cqe->res < total)
 		nbd_err("%s: short send/receive tag %d op %d %llx, len %u written %u cqe flags %x\n",
-				__func__, data->tag, ublk_op, cqe->user_data,
+				__func__, tag, ublk_op, cqe->user_data,
 				total, cqe->res, cqe->flags);
 }
 
