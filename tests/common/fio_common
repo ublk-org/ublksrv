@@ -289,6 +289,12 @@ __run_dev_perf_no_create()
 	echo -e "\t$RW($BS): jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}, $cpu_util"
 
 	RW="rw"
+	BS=64k
+	__run_fio_perf $DEV $BS $RW $JOBS $RT
+	cpu_util=`__get_cpu_utils`
+	echo -e "\t$RW($BS): jobs $JOBS, iops read ${TEST_RUN["read iops"]} write ${TEST_RUN["write iops"]}, $cpu_util"
+
+	RW="rw"
 	BS=512k
 	__run_fio_perf $DEV $BS $RW $JOBS $RT
 	cpu_util=`__get_cpu_utils`
