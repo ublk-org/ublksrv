@@ -862,7 +862,14 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	}
 
 	tgt->dev_size = size64;
-	tgt->tgt_ring_depth = info->queue_depth;
+
+	/*
+	 * one extra slot for receiving reply & read io, so
+	 * the preferred queue depth should be 127 or 255,
+	 * then half of SQ memory consumption can be saved
+	 * especially we use IORING_SETUP_SQE128
+	 */
+	tgt->tgt_ring_depth = info->queue_depth + 1;
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
 	data->unix_sock = strlen(unix_path) > 0 ? true : false;
@@ -870,6 +877,8 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 
 	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
 		sizeof(struct nbd_io_data);
+
+	ublksrv_dev_set_cq_depth(dev, 2 * tgt->tgt_ring_depth);
 }
 
 static void nbd_parse_flags(struct ublk_params *p, uint16_t flags, uint32_t bs)
