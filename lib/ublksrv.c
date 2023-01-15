@@ -470,6 +470,34 @@ static void ublksrv_queue_adjust_uring_io_wq_workers(struct _ublksrv_queue *q)
 				__func__, ret);
 }
 
+static void ublksrv_calculate_depths(const struct _ublksrv_dev *dev, int
+		*ring_depth, int *cq_depth, int *nr_ios)
+{
+	const struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
+
+	/*
+	 * eventfd consumes one extra sqe, and it can be thought as one target
+	 * depth
+	 */
+	int aio_depth = (cdev->dev_info.ublksrv_flags & UBLKSRV_F_NEED_EVENTFD)
+		? 1 : 0;
+	int depth = cdev->dev_info.queue_depth;
+	int tgt_depth = dev->tgt.tgt_ring_depth + aio_depth;
+
+	*nr_ios = depth + dev->tgt.extra_ios;
+
+	/*
+	 * queue_depth represents the max count of io commands issued from ublk driver.
+	 *
+	 * After io command is fetched from ublk driver, the consumed sqe for
+	 * fetching io command has been available for target usage, so the uring
+	 * depth can be set as the max(queue_depth, tgt_depth).
+	 */
+	depth = depth > tgt_depth ? depth : tgt_depth;
+	*ring_depth = depth;
+	*cq_depth = dev->cq_depth ? dev->cq_depth : depth;
+}
+
 const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 		unsigned short q_id, void *queue_data)
 {
@@ -480,11 +508,11 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 	int i, ret = -1;
 	int cmd_buf_size, io_buf_size;
 	unsigned long off;
-	int ring_depth = depth + dev->tgt.tgt_ring_depth;
-	unsigned nr_ios = depth + dev->tgt.extra_ios;
 	int io_data_size = round_up(dev->tgt.io_data_size,
 			sizeof(unsigned long));
-	int cq_depth = dev->cq_depth ? dev->cq_depth : ring_depth;
+	int ring_depth, cq_depth, nr_ios;
+
+	ublksrv_calculate_depths(dev, &ring_depth, &cq_depth, &nr_ios);
 
 	/*
 	 * Too many extra ios
