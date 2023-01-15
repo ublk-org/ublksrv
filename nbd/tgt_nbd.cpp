@@ -208,8 +208,8 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	 * when its cqe is completed, since iod data isn't available at that time
 	 * because request can be reused.
 	 */
-	sqe->user_data = build_user_data(data->tag, ublk_op,
-			data->iod->nr_sectors, 1);
+	sqe->user_data = build_user_data(data->tag, ublk_op, ublk_op ==
+			UBLK_IO_OP_WRITE ? data->iod->nr_sectors : 0, 1);
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 	q_data->last_send_sqe = sqe;
