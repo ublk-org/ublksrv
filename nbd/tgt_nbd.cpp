@@ -229,14 +229,14 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, struct ublk_io_tgt *io)
 {
 	int ret = -EIO;
-	struct nbd_request *req = NULL;
+	struct nbd_request req = {.magic = htonl(NBD_REQUEST_MAGIC),};
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 	int type = req_to_nbd_cmd_type(data->iod);
 	struct iovec iov[2] = {
 		[0] = {
-			.iov_base = (void *)req,
-			.iov_len = sizeof(*req),
+			.iov_base = (void *)&req,
+			.iov_len = sizeof(req),
 		},
 		[1] = {
 			.iov_base = (void *)data->iod->addr,
@@ -248,24 +248,18 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 		.msg_iovlen = 2,
 	};
 
-	posix_memalign((void **)&req, 32, sizeof(*req));
-	if (!req)
-		goto fail;
-	req->magic = htonl(NBD_REQUEST_MAGIC);
-	iov[0].iov_base = (void *)req;
-
 	if (type == -1)
 		goto fail;
 
 	nbd_data->cmd_cookie += 1;
 
-	__nbd_build_req(q, data, nbd_data, type, req);
+	__nbd_build_req(q, data, nbd_data, type, &req);
 	q_data->in_flight_ios += 1;
 
 	nbd_data->done = 0;
 
 again:
-	ret = nbd_queue_req(q, data, req, &msg);
+	ret = nbd_queue_req(q, data, &req, &msg);
 	if (ret < 0)
 		goto fail;
 
@@ -280,7 +274,6 @@ fail:
 		ret += nbd_data->done;
 	ublksrv_complete_io(q, data->tag, ret);
 	q_data->in_flight_ios -= 1;
-	free(req);
 	NBD_IO_DBG("%s: tag %d res %d\n", __func__, data->tag, ret);
 
 	co_return;
