@@ -172,8 +172,11 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	unsigned ublk_op = ublksrv_get_op(iod);
 	unsigned msg_flags = MSG_NOSIGNAL;
 
-	if (!sqe)
-		return 0;
+	if (!sqe) {
+		nbd_err("%s: get sqe failed, tag %d op %d\n",
+				__func__, data->tag, ublk_op);
+		return -ENOMEM;
+	}
 
 	/*
 	 * Always set WAITALL, so io_uring will handle retry in case of
@@ -263,8 +266,6 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 
 again:
 	ret = nbd_queue_req(q, data, req, &msg);
-	if (!ret)
-		ret = -ENOMEM;
 	if (ret < 0)
 		goto fail;
 
@@ -401,8 +402,11 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
 	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
 	unsigned int tag = q->q_depth;	//recv always use this extra tag
 
-	if (!sqe)
+	if (!sqe) {
+		nbd_err("%s: get sqe failed, len %d reply %d done %d\n",
+				__func__, len, reply, done);
 		return -ENOMEM;
+	}
 
 	nbd_data->done = done;
 	io_uring_prep_recv(sqe, q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
@@ -698,9 +702,13 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
-	NBD_IO_DBG("%s: pending ios %d/%d queued sqes %u\n",
+	NBD_IO_DBG("%s: pending ios %d/%d chain_busy %d next_chain %ld recv(%d) sqes %u\n",
 				__func__, q_data->in_flight_ios,
-				q_data->chained_send_ios, nr_queued_io);
+				q_data->chained_send_ios,
+				q_data->send_sqe_chain_busy,
+				q_data->next_chain.size(),
+				q_data->recv_started,
+				nr_queued_io);
 
 	nbd_handle_send_bg(q, q_data);
 
