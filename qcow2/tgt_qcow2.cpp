@@ -156,6 +156,7 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 	int fd, ret;
 	char file[PATH_MAX];
 	struct ublk_params p;
+	int tgt_depth;
 
 	ublk_assert(jbuf);
 	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
@@ -182,9 +183,11 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 		return fd;
 	}
 
+	tgt_depth = QCOW2_PARA::META_MAX_TAGS > info->queue_depth * 2 ?
+			QCOW2_PARA::META_MAX_TAGS : info->queue_depth * 2;
 	tgt->dev_size = p.basic.dev_sectors << 9;
 	tgt->extra_ios = QCOW2_PARA::META_MAX_TAGS;
-	tgt->tgt_ring_depth = info->queue_depth * 4;
+	tgt->tgt_ring_depth = tgt_depth;
 	tgt->iowq_max_workers[0] = 1;
 	tgt->nr_fds = 1;
 	tgt->fds[1] = fd;
