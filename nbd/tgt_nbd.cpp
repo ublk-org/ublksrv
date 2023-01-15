@@ -58,9 +58,9 @@ struct nbd_tgt_data {
 };
 
 struct nbd_queue_data {
-	unsigned short recv_started;
 	unsigned short in_flight_ios;
 
+	unsigned short recv_started:1;
 	unsigned short use_send_zc:1;
 	unsigned short use_unix_sock:1;
 	unsigned short need_handle_recv:1;
