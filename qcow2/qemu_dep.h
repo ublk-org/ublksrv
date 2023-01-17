@@ -15,7 +15,8 @@
 #define	 s8	int8_t
 
 #define MiB (1U << 20)
-#define QEMU_PACKED __attribute__((gcc_struct, packed))
+
+#define QEMU_PACKED __attribute__((packed))
 
 #define QEMU_BUILD_BUG_MSG(x, msg) _Static_assert(!(x), msg)
 #define QEMU_BUILD_BUG_ON(x) QEMU_BUILD_BUG_MSG(x, "not expecting: " #x)
