@@ -136,7 +136,7 @@ void Qcow2HeaderExtFeatureNameTable::dump() const
 			__a[i].feature_name);
 }
 
-Qcow2Header::Qcow2Header(Qcow2State &state): Qcow2Meta(qs.header, 0, 4096,
+Qcow2Header::Qcow2Header(Qcow2State &state): Qcow2Meta(*this, 0, 4096,
 	typeid(this).name(), 0), magic(0), version(0), cluster_bits(0),
 	refcount_order(0), qs(state)
 {
