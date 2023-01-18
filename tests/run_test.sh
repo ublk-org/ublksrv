@@ -26,7 +26,17 @@ run_test() {
 	GRP=`basename $TMP`
 
 	echo "running $GRP/$NAME"
-	sh -c $TS
+	sh -c $TS &
+	local TPID=$!
+	local timeout=250
+	local count=0
+	while [ $count -lt $timeout ]; do
+		sleep 1
+		kill -0 $TPID > /dev/null 2>&1
+		[ $? -ne 0 ] && break
+		let count++
+	done
+	[ $count -ge $timeout ] && echo "timedout"
 }
 
 run_test_grp() {
