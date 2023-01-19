@@ -67,6 +67,7 @@ jobs:
 
   test:
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
     steps:
     - name: "install: mkosi + dependencies"
       shell: bash
