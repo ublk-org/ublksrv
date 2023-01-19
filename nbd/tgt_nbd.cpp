@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT or GPL-2.0-only
+// SPDX-License-Identifier: GPL-2.0
 
 #include <config.h>
 #include <vector>
