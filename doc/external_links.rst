@@ -18,7 +18,7 @@ Uses
 
 `How to use ublk on Oracle Linux 8 <https://blogs.oracle.com/linux/post/how-to-use-ublk-on-oracle-linux-8>`
 
-`ublk on Aliyum[Chinese] <https://developer.aliyun.com/article/989552>`
+`ublk on Aliyun[Chinese] <https://developer.aliyun.com/article/989552>`
 
 `Testing ublk on Ubuntu 22.04 <https://dev.to/amarjargal/testing-ublk-on-ubuntu-2204-9pe>`
 
