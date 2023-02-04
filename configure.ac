@@ -73,6 +73,19 @@ AC_ARG_ENABLE(
 dnl Check for liburing (required).
 PKG_CHECK_MODULES([LIBURING], [liburing >= 2.2])
 
+dnl Check if io_uring_prep_sendmsg_zc which isn't supported on 2.2 yet
+AC_MSG_CHECKING([for io_uring_prep_sendmsg_zc])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  #include <liburing.h>
+]], [[
+	 int i = IORING_CQE_F_NOTIF;
+]])],
+[AC_MSG_RESULT([yes])
+ AM_CONDITIONAL([HAVE_LIBURING_SEND_ZC], true)
+ AC_DEFINE([HAVE_LIBURING_SEND_ZC], [1], [Define to 1 if liburing supports send zc])],
+[AC_MSG_RESULT([no])
+ AM_CONDITIONAL([HAVE_LIBURING_SEND_ZC], false)])
+
 #gnutls is only for nbd target, borrowed from nbd-client project
 AC_ARG_WITH([gnutls],
 	[AS_HELP_STRING([--without-gnutls],

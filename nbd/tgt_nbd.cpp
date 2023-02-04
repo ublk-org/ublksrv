@@ -57,6 +57,11 @@ struct nbd_tgt_data {
 	bool use_send_zc;
 };
 
+#ifndef HAVE_LIBURING_SEND_ZC
+#define io_uring_prep_sendmsg_zc io_uring_prep_sendmsg
+#define IORING_CQE_F_NOTIF (1U << 3)
+#endif
+
 struct nbd_queue_data {
 	unsigned short in_flight_ios;
 
@@ -950,6 +955,11 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		if (!strcmp(nbd_longopts[option_index].name, "export_name"))
 			exp_name = optarg;
 	}
+
+#ifndef HAVE_LIBURING_SEND_ZC
+	if (send_zc)
+		return -EINVAL;
+#endif
 
 	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
 	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "host", host_name);
