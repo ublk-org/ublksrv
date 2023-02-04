@@ -38,9 +38,15 @@ jobs:
         make -j$(nproc)
         sudo make install
 
+    - name: "build: ubdsrv with --enable-debug"
+      working-directory: ubdsrv
+      run: |
+        LIBURING_DIR=${{ github.workspace }}/liburing-$URING_VER ./build_with_liburing_src --enable-debug
+
     - name: "build: ubdsrv"
       working-directory: ubdsrv
       run: |
+        make distclean
         LIBURING_DIR=${{ github.workspace }}/liburing-$URING_VER ./build_with_liburing_src
 
     - name: "build: installable artifacts"
