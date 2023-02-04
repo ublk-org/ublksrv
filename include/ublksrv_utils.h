@@ -43,6 +43,9 @@ static inline void ublksrv_log(int priority, const char *fmt, ...) { }
 static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
 #endif
 
+extern void ublk_err(const char *fmt, ...)
+	__attribute__ ((format (printf, 1, 2)));
+
 #define round_up(val, rnd) \
 	(((val) + ((rnd) - 1)) & ~((rnd) - 1))
 

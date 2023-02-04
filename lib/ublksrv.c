@@ -150,7 +150,7 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 
 	sqe = io_uring_get_sqe(&q->ring);
 	if (!sqe) {
-		syslog(LOG_ERR, "%s: run out of sqe %d, tag %d\n",
+		ublk_err("%s: run out of sqe %d, tag %d\n",
 				__func__, q->q_id, tag);
 		return -1;
 	}
@@ -209,7 +209,7 @@ static inline int __ublksrv_queue_event(struct _ublksrv_queue *q)
 
 		sqe = io_uring_get_sqe(&q->ring);
 		if (!sqe) {
-			syslog(LOG_ERR, "%s: queue %d run out of sqe\n",
+			ublk_err("%s: queue %d run out of sqe\n",
 				__func__, q->q_id);
 			return -1;
 		}
@@ -234,7 +234,7 @@ int ublksrv_queue_handled_event(const struct ublksrv_queue *tq)
 
 		/* read has to be done, otherwise poll event won't be stopped */
 		if (read(q->efd, &data, cnt) != cnt)
-			syslog(LOG_ERR, "%s: read wrong bytes from eventfd\n",
+			ublk_err("%s: read wrong bytes from eventfd\n",
 					__func__);
 		/*
 		 * event needs to be issued immediately, since other io may rely
@@ -262,7 +262,7 @@ int ublksrv_queue_send_event(const struct ublksrv_queue *tq)
 		const int cnt = sizeof(uint64_t);
 
 		if (write(q->efd, &data, cnt) != cnt) {
-			syslog(LOG_ERR, "%s: read wrong bytes from eventfd\n",
+			ublk_err("%s: read wrong bytes from eventfd\n",
 					__func__);
 			return -EPIPE;
 		}
@@ -404,7 +404,7 @@ static void ublksrv_set_sched_affinity(struct _ublksrv_dev *dev,
 
 	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), cpuset);
 	if (ret)
-		syslog(LOG_INFO, "ublk dev %u queue %u set affinity failed",
+		ublk_err("ublk dev %u queue %u set affinity failed",
 				dev_id, q_id);
 }
 
@@ -427,13 +427,13 @@ static int ublksrv_setup_eventfd(struct _ublksrv_queue *q)
 	}
 
 	if (q->dev->tgt.tgt_ring_depth == 0) {
-		syslog(LOG_INFO, "ublk dev %d queue %d zero tgt queue depth",
+		ublk_err("ublk dev %d queue %d zero tgt queue depth",
 			info->dev_id, q->q_id);
 		return -EINVAL;
 	}
 
 	if (!q->dev->tgt.ops->handle_event) {
-		syslog(LOG_INFO, "ublk dev %d/%d not define ->handle_event",
+		ublk_err("ublk dev %d/%d not define ->handle_event",
 			info->dev_id, q->q_id);
 		return -EINVAL;
 	}
@@ -455,7 +455,7 @@ static void ublksrv_queue_adjust_uring_io_wq_workers(struct _ublksrv_queue *q)
 
 	ret = io_uring_register_iowq_max_workers(&q->ring, val);
 	if (ret)
-		syslog(LOG_ERR, "%s: register iowq max workers failed %d\n",
+		ublk_err("%s: register iowq max workers failed %d\n",
 				__func__, ret);
 
 	if (!dev->tgt.iowq_max_workers[0])
@@ -466,7 +466,7 @@ static void ublksrv_queue_adjust_uring_io_wq_workers(struct _ublksrv_queue *q)
 	ret = io_uring_register_iowq_max_workers(&q->ring,
 			dev->tgt.iowq_max_workers);
 	if (ret)
-		syslog(LOG_ERR, "%s: register iowq max workers failed %d\n",
+		ublk_err("%s: register iowq max workers failed %d\n",
 				__func__, ret);
 }
 
@@ -540,7 +540,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 	q->io_cmd_buf = (char *)mmap(0, cmd_buf_size, PROT_READ,
 			MAP_SHARED | MAP_POPULATE, dev->cdev_fd, off);
 	if (q->io_cmd_buf == MAP_FAILED) {
-		syslog(LOG_INFO, "ublk dev %d queue %d map io_cmd_buf failed",
+		ublk_err("ublk dev %d queue %d map io_cmd_buf failed",
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 		goto fail;
 	}
@@ -560,13 +560,13 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 		else
 			if (posix_memalign((void **)&q->ios[i].buf_addr,
 						getpagesize(), io_buf_size)) {
-				syslog(LOG_INFO, "ublk dev %d queue %d io %d posix_memalign failed",
+				ublk_err("ublk dev %d queue %d io %d posix_memalign failed",
 						q->dev->ctrl_dev->dev_info.dev_id, q->q_id, i);
 				goto fail;
 			}
 		//q->ios[i].buf_addr = malloc(io_buf_size);
 		if (!q->ios[i].buf_addr) {
-			syslog(LOG_INFO, "ublk dev %d queue %d io %d alloc io_buf failed",
+			ublk_err("ublk dev %d queue %d io %d alloc io_buf failed",
 					q->dev->ctrl_dev->dev_info.dev_id, q->q_id, i);
 			goto fail;
 		}
@@ -585,7 +585,7 @@ skip_alloc_buf:
 	ret = ublksrv_setup_ring(&q->ring, ring_depth, cq_depth,
 			IORING_SETUP_SQE128 | IORING_SETUP_COOP_TASKRUN);
 	if (ret < 0) {
-		syslog(LOG_INFO, "ublk dev %d queue %d setup io_uring failed %d",
+		ublk_err("ublk dev %d queue %d setup io_uring failed %d",
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
 		goto fail;
 	}
@@ -596,7 +596,7 @@ skip_alloc_buf:
 	ret = io_uring_register_files(&q->ring, dev->tgt.fds,
 			dev->tgt.nr_fds + 1);
 	if (ret) {
-		syslog(LOG_INFO, "ublk dev %d queue %d register files failed %d",
+		ublk_err("ublk dev %d queue %d register files failed %d",
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
 		goto fail;
 	}
@@ -608,7 +608,7 @@ skip_alloc_buf:
 	*/
 #if defined(PR_SET_IO_FLUSHER)
 	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
-		syslog(LOG_INFO, "ublk dev %d queue %d set_io_flusher failed",
+		ublk_err("ublk dev %d queue %d set_io_flusher failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 #endif
 
@@ -628,7 +628,7 @@ skip_alloc_buf:
 	setpriority(PRIO_PROCESS, getpid(), -20);
 
 	if (ublksrv_setup_eventfd(q) < 0) {
-		syslog(LOG_INFO, "ublk dev %d queue %d setup eventfd failed",
+		ublk_err("ublk dev %d queue %d setup eventfd failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 		goto fail;
 	}
@@ -639,7 +639,7 @@ skip_alloc_buf:
 	return (struct ublksrv_queue *)q;
  fail:
 	ublksrv_queue_deinit(local_to_tq(q));
-	syslog(LOG_INFO, "ublk dev %d queue %d failed",
+	ublk_err("ublk dev %d queue %d failed",
 			ctrl_dev->dev_info.dev_id, q_id);
 	return NULL;
 }
@@ -716,7 +716,7 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 	snprintf(buf, 64, "%s%d", UBLKC_DEV, dev_id);
 	dev->cdev_fd = open(buf, O_RDWR);
 	if (dev->cdev_fd < 0) {
-		syslog(LOG_ERR, "can't open %s, ret %d\n", buf, dev->cdev_fd);
+		ublk_err("can't open %s, ret %d\n", buf, dev->cdev_fd);
 		goto fail;
 	}
 
@@ -725,7 +725,7 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 	ret = ublksrv_tgt_init(dev, ctrl_dev->tgt_type, ctrl_dev->tgt_ops,
 			ctrl_dev->tgt_argc, ctrl_dev->tgt_argv);
 	if (ret) {
-		syslog(LOG_ERR, "can't init tgt %d/%s/%d, ret %d\n",
+		ublk_err( "can't init tgt %d/%s/%d, ret %d\n",
 				dev_id, ctrl_dev->tgt_type, ctrl_dev->tgt_argc,
 				ret);
 		goto fail;
@@ -733,7 +733,7 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 
 	ret = ublksrv_create_pid_file(dev);
 	if (ret) {
-		syslog(LOG_ERR, "can't create pid file for dev %d, ret %d\n",
+		ublk_err( "can't create pid file for dev %d, ret %d\n",
 				dev_id, ret);
 		goto fail;
 	}
@@ -751,7 +751,7 @@ static inline void ublksrv_handle_tgt_cqe(struct _ublksrv_queue *q,
 	unsigned tag = user_data_to_tag(cqe->user_data);
 
 	if (cqe->res < 0 && cqe->res != -EAGAIN) {
-		syslog(LOG_WARNING, "%s: failed tgt io: res %d qid %u tag %u, cmd_op %u\n",
+		ublk_err("%s: failed tgt io: res %d qid %u tag %u, cmd_op %u\n",
 			__func__, cqe->res, q->q_id,
 			user_data_to_tag(cqe->user_data),
 			user_data_to_op(cqe->user_data));

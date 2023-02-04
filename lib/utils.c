@@ -21,20 +21,20 @@ int create_pid_file(const char *pid_file, int *pid_fd)
 	fd = open(pid_file, O_RDWR | O_CREAT | O_CLOEXEC,
 			S_IRUSR | S_IWUSR);
 	if (fd < 0) {
-		syslog(LOG_ERR, "Fail to open file %s", pid_file);
+		ublk_err( "Fail to open file %s", pid_file);
 		return fd;
 	}
 
 	ret = ftruncate(fd, 0);
 	if (ret == -1) {
-		syslog(LOG_ERR, "Could not truncate pid file %s, err %s",
+		ublk_err( "Could not truncate pid file %s, err %s",
 				pid_file, strerror(errno));
 		goto fail;
 	}
 
 	snprintf(buf, PID_PATH_LEN, "%ld\n", (long) getpid());
 	if (write(fd, buf, strlen(buf)) != strlen(buf)) {
-		syslog(LOG_ERR, "Fail to write %s to file %s",
+		ublk_err( "Fail to write %s to file %s",
 				buf, pid_file);
 		ret = -1;
 	} else {
@@ -46,4 +46,12 @@ int create_pid_file(const char *pid_file, int *pid_fd)
 		unlink(pid_file);
 	}
 	return ret;
+}
+
+void ublk_err(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vsyslog(LOG_ERR, fmt, ap);
 }
