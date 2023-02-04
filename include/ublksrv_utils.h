@@ -59,6 +59,8 @@ extern void ublk_err(const char *fmt, ...)
 	((type *)(__mptr - offsetof(type, member))); })
 #endif
 
+#define ublk_ignore_result(x) ({ typeof(x) z = x; (void)sizeof z; })
+
 #ifdef __cplusplus
 }
 #endif

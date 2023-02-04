@@ -43,7 +43,7 @@ again:
 			aio_list_add(done, req);
 	}
 
-	read(ctx->efd, &data, 8);
+	ublk_ignore_result(read(ctx->efd, &data, 8));
 
 	pthread_spin_lock(&ctx->submit.lock);
 	more = !aio_list_empty(&ctx->submit.list);
@@ -148,9 +148,13 @@ struct ublksrv_aio_ctx *ublksrv_aio_ctx_init(const struct ublksrv_dev *dev,
 void ublksrv_aio_ctx_shutdown(struct ublksrv_aio_ctx *ctx)
 {
 	unsigned long long data = 1;
+	int ret;
 
 	ctx->dead = true;
-	write(ctx->efd, &data, 8);
+	ret = write(ctx->efd, &data, 8);
+	if (ret != 8)
+		ublk_err("%s:%d write fail %d/%d\n",
+				__func__, __LINE__, ret, 8);
 }
 
 /* called afer pthread_join() of the pthread context returns */
@@ -201,8 +205,13 @@ void ublksrv_aio_submit_req(struct ublksrv_aio_ctx *ctx,
 	aio_list_add(&ctx->submit.list, req);
 	pthread_spin_unlock(&ctx->submit.lock);
 
-	if (!ublksrv_aio_add_ctx_for_submit(q, ctx))
-		write(ctx->efd, &data, 8);
+	if (!ublksrv_aio_add_ctx_for_submit(q, ctx)) {
+		int ret = write(ctx->efd, &data, 8);
+
+		if (ret != 8)
+			ublk_err("%s:%d write fail %d/%d\n",
+				__func__, __LINE__, ret, 8);
+	}
 }
 
 void ublksrv_aio_get_completed_reqs(struct ublksrv_aio_ctx *ctx,

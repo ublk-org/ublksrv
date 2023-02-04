@@ -412,8 +412,12 @@ static void ublksrv_kill_eventfd(struct _ublksrv_queue *q)
 {
 	if ((q->state & UBLKSRV_QUEUE_STOPPING) && q->efd > 0) {
 		unsigned long long data = 1;
+		int ret;
 
-		write(q->efd, &data, 8);
+		ret = write(q->efd, &data, 8);
+		if (ret != 8)
+			ublk_err("%s:%d write fail %d/%d\n",
+					__func__, __LINE__, ret, 8);
 	}
 }
 
@@ -884,8 +888,12 @@ static void ublksrv_submit_aio_batch(struct _ublksrv_queue *q)
 	for (i = 0; i < q->nr_ctxs; i++) {
 		struct ublksrv_aio_ctx *ctx = q->ctxs[i];
 		unsigned long data = 1;
+		int ret;
 
-		write(ctx->efd, &data, 8);
+		ret = write(ctx->efd, &data, 8);
+		if (ret != 8)
+			ublk_err("%s:%d write fail %d/%d\n",
+					__func__, __LINE__, ret, 8);
 	}
 }
 
@@ -955,10 +963,13 @@ void ublksrv_apply_oom_protection()
 	fd = open(oom_score_adj_path, O_RDWR);
 	if (fd > 0) {
 		char val[32];
-		int len;
+		int len, ret;
 
 		len = snprintf(val, 32, "%d", -1000);
-		write(fd, val, len);
+		ret = write(fd, val, len);
+		if (ret != len)
+			ublk_err("%s:%d write fail %d/%d\n",
+					__func__, __LINE__, ret, len);
 		close(fd);
 	}
 }
