@@ -371,7 +371,7 @@ Qcow2TopTable::Qcow2TopTable(Qcow2State &qs, u64 off, u32 buf_sz,
 	min_bs_bits(qs.min_bs_bits),
 	dirty(qs.get_l1_table_max_size() >> qs.min_bs_bits)
 {
-	ublksrv_log(LOG_INFO, "%s: %s dirty size %zd %u/%u\n", __func__,
+	ublk_dbg(LOG_INFO, "%s: %s dirty size %zd %u/%u\n", __func__,
 			cls_name, dirty.size(),
 		qs.get_l1_table_max_size(),qs.min_bs_bits);
 	for (int i = 0; i < dirty.size(); i++)
@@ -666,7 +666,7 @@ int Qcow2SliceMeta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	/* meta io id starts from one and zero is reserved for plain ublk io */
 	sqe->user_data = build_user_data(tag, IORING_OP_READ, mio_id + 1, 1);
 
-	ublksrv_log(LOG_INFO, "%s: queue io op %d(%llx %x %llx)"
+	ublk_dbg(LOG_INFO, "%s: queue io op %d(%llx %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d tgt_data %d)\n",
 			__func__, sqe->opcode, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, sqe->opcode, 1, mio_id + 1);

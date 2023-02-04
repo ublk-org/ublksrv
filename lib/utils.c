@@ -55,3 +55,13 @@ void ublk_err(const char *fmt, ...)
 	va_start(ap, fmt);
 	vsyslog(LOG_ERR, fmt, ap);
 }
+
+#ifdef DEBUG
+void ublk_dbg(int level, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vsyslog(LOG_ERR, fmt, ap);
+}
+#endif

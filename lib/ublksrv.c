@@ -177,7 +177,7 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 
 	q->cmd_inflight += 1;
 
-	ublksrv_log(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
+	ublk_dbg(LOG_INFO, "%s: (qid %d tag %u cmd_op %u) iof %x stopping %d\n",
 			__func__, q->q_id, tag, cmd_op,
 			io->flags, !!(q->state & UBLKSRV_QUEUE_STOPPING));
 	return 1;
@@ -781,7 +781,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 		!(q->state & UBLKSRV_QUEUE_STOPPING);
 	struct ublk_io *io;
 
-	ublksrv_log(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d event %d) stopping %d\n",
+	ublk_dbg(LOG_INFO, "%s: res %d (qid %d tag %u cmd_op %u target %d event %d) stopping %d\n",
 			__func__, cqe->res, q->q_id, tag, cmd_op,
 			is_target_io(cqe->user_data),
 			is_eventfd_io(cqe->user_data),
@@ -856,7 +856,7 @@ static void ublksrv_queue_idle_enter(struct _ublksrv_queue *q)
 	if (q->state & UBLKSRV_QUEUE_IDLE)
 		return;
 
-	ublksrv_log(LOG_INFO, "dev%d-q%d: enter idle %x\n",
+	ublk_dbg(LOG_INFO, "dev%d-q%d: enter idle %x\n",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id, q->state);
 	ublksrv_queue_discard_io_pages(q);
 	q->state |= UBLKSRV_QUEUE_IDLE;
@@ -868,7 +868,7 @@ static void ublksrv_queue_idle_enter(struct _ublksrv_queue *q)
 static inline void ublksrv_queue_idle_exit(struct _ublksrv_queue *q)
 {
 	if (q->state & UBLKSRV_QUEUE_IDLE) {
-		ublksrv_log(LOG_INFO, "dev%d-q%d: exit idle %x\n",
+		ublk_dbg(LOG_INFO, "dev%d-q%d: exit idle %x\n",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id, q->state);
 		q->state &= ~UBLKSRV_QUEUE_IDLE;
 		if (q->tgt_ops->idle_fn)
@@ -909,7 +909,7 @@ int ublksrv_process_io(const struct ublksrv_queue *tq)
 		NULL : &ts;
 	struct io_uring_cqe *cqe;
 
-	ublksrv_log(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
+	ublk_dbg(LOG_INFO, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
 				q->dev->ctrl_dev->dev_info.dev_id,
 				q->q_id, io_uring_sq_ready(&q->ring),
 				q->cmd_inflight, q->tgt_io_inflight,
@@ -928,7 +928,7 @@ int ublksrv_process_io(const struct ublksrv_queue *tq)
 		q->tgt_ops->handle_io_background(local_to_tq(q),
 				io_uring_sq_ready(&q->ring));
 
-	ublksrv_log(LOG_INFO, "submit result %d, reapped %d stop %d idle %d",
+	ublk_dbg(LOG_INFO, "submit result %d, reapped %d stop %d idle %d",
 			ret, reapped, (q->state & UBLKSRV_QUEUE_STOPPING),
 			(q->state & UBLKSRV_QUEUE_IDLE));
 

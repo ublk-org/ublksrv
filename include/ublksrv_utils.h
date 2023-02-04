@@ -17,6 +17,7 @@ static inline int ublksrv_gettid(void)
 	return syscall(SYS_gettid);
 }
 
+/* The following two are obsolete, use new ublk_err/ublk_dbg/ublk_log */
 static inline void ublksrv_log(int priority, const char *fmt, ...)
 	__attribute__ ((format (printf, 2, 3)));
 static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
@@ -41,6 +42,13 @@ static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
 #else
 static inline void ublksrv_log(int priority, const char *fmt, ...) { }
 static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
+#endif
+
+#ifdef DEBUG
+extern void ublk_dbg(int level, const char *fmt, ...)
+	__attribute__ ((format (printf, 2, 3)));
+#else
+static inline void ublk_dbg(int level, const char *fmt, ...) { }
 #endif
 
 extern void ublk_err(const char *fmt, ...)

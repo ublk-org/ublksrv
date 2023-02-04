@@ -837,7 +837,7 @@ Qcow2L2Table *Qcow2ClusterMapping::load_l2_slice(const qcow2_io_ctx_t &ioc, u64 
 		return l2;
 	}
 
-	ublksrv_log(LOG_INFO, "cache: alloc: key %" PRIx64 " val %p, update %d\n",
+	ublk_dbg(LOG_INFO, "cache: alloc: key %" PRIx64 " val %p, update %d\n",
 			start, l2, l2->get_update());
 	l2->load(state, ioc, QCOW2_PARA::L2_TABLE_SLICE_BYTES, false);
 	l2->add_waiter(ioc.get_tag());
