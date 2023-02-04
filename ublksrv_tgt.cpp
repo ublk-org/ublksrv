@@ -103,11 +103,14 @@ static int start_daemon(void (*child_fn)(void *), void *data)
 {
 	char path[PATH_MAX];
 	int fd;
+	char *res;
 
 	if (setsid() == -1)
 		return -1;
 
-	getcwd(path, PATH_MAX);
+	res = getcwd(path, PATH_MAX);
+	if (!res)
+		ublk_err("%s: %d getcwd failed %m\n", __func__, __LINE__);
 
 	switch (fork()) {
 	case -1: return -1;
@@ -115,7 +118,8 @@ static int start_daemon(void (*child_fn)(void *), void *data)
 	default: _exit(EXIT_SUCCESS);
 	}
 
-	chdir(path);
+	if (chdir(path) != 0)
+		ublk_err("%s: %d chdir failed %m\n", __func__, __LINE__);
 
 	close(STDIN_FILENO);
 	fd = open("/dev/null", O_RDWR);
