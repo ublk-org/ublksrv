@@ -16,7 +16,7 @@ Qcow2Meta::Qcow2Meta(Qcow2Header &h, u64 off, u32 sz, const char *name, u32 f):
 		return;
 
 	if (posix_memalign((void **)&addr, getpagesize(), sz))
-		syslog(LOG_ERR, "allocate memory %d bytes failed, %s\n",
+		ublk_err( "allocate memory %d bytes failed, %s\n",
 				sz, name);
 #ifdef DEBUG_QCOW2_META_OBJ
 	id = name;
@@ -61,7 +61,7 @@ int Qcow2Meta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc, u32 len, bool syn
 	if (addr == NULL)
 		return -EINVAL;
 	if (len > buf_sz) {
-		syslog(LOG_ERR, "%s %s: load too much %d(%d) \n",
+		ublk_err( "%s %s: load too much %d(%d) \n",
 				__func__, typeid(*this).name(), len, buf_sz);
 		return -EINVAL;
 	}
@@ -90,7 +90,7 @@ int Qcow2Meta::flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc, u64 off,
 		return 0;
 
 	if (!(flags & QCOW2_META_UPDATE))
-		syslog(LOG_ERR, "%s %s: buf isn't update\n", __func__,
+		ublk_err( "%s %s: buf isn't update\n", __func__,
 				typeid(*this).name());
 
 	//qcow2_log("%s: write %s offset %llx len %lu  \n", __func__,
@@ -252,7 +252,7 @@ int Qcow2Header::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc, u32 len, bool s
 	ret = populate();
 	return ret;
  fail:
-	syslog(LOG_ERR, "%s: load failed %d", __func__, ret);
+	ublk_err( "%s: load failed %d", __func__, ret);
 	return ret;
 }
 
@@ -306,24 +306,24 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	qcow2_assert(flags & QCOW2_META_DIRTY);
 
 	if (!(flags & QCOW2_META_UPDATE))
-		syslog(LOG_ERR, "%s %s: buf isn't update\n", __func__,
+		ublk_err( "%s %s: buf isn't update\n", __func__,
 				typeid(*this).name());
 
 	if (off < offset || off >= offset + buf_sz) {
-		syslog(LOG_ERR, "%s %s: offset %" PRIx64 " is wrong\n", __func__,
+		ublk_err( "%s %s: offset %" PRIx64 " is wrong\n", __func__,
 				typeid(*this).name(), offset);
 		return -EINVAL;
 	}
 
 	if (len > offset + buf_sz - off) {
-		syslog(LOG_ERR, "%s %s: len %x is wrong\n", __func__,
+		ublk_err( "%s %s: len %x is wrong\n", __func__,
 				typeid(*this).name(), len);
 		return -EINVAL;
 	}
 
 	sqe = io_uring_get_sqe(q->ring_ptr);
 	if (!sqe) {
-		syslog(LOG_ERR, "%s %s: not get sqe allocated",
+		ublk_err( "%s %s: not get sqe allocated",
 				__func__, typeid(*this).name());
 		return -ENOMEM;
 	}
@@ -331,7 +331,7 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	if (run_fsync) {
 		sqe2 = io_uring_get_sqe(q->ring_ptr);
 		if (!sqe2) {
-			syslog(LOG_ERR, "%s %s: not get sqe2 allocated",
+			ublk_err( "%s %s: not get sqe2 allocated",
 				__func__, typeid(*this).name());
 			return -ENOMEM;
 		}
@@ -484,7 +484,7 @@ int Qcow2L1Table::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc, u32 len, bool 
 
 	ret = Qcow2Meta::load(qs, ioc, len, sync);
 	if (ret < 0)
-		syslog(LOG_ERR, "%s %s: load failed %d", __func__,
+		ublk_err( "%s %s: load failed %d", __func__,
 				typeid(*this).name(), ret);
 	return ret;
 }
@@ -519,7 +519,7 @@ int Qcow2RefcountTable::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 
 	ret = Qcow2Meta::load(qs, ioc, len, sync);
 	if (ret < 0)
-		syslog(LOG_ERR, "%s %s: load failed %d", __func__,
+		ublk_err( "%s %s: load failed %d", __func__,
 				typeid(*this).name(), ret);
 	return ret;
 }
@@ -554,7 +554,7 @@ Qcow2SliceMeta::Qcow2SliceMeta(Qcow2State &qs, u64 off, u32 buf_sz,
 #endif
 #ifdef DEBUG_QCOW2_META_VALIDATE
 	if (posix_memalign((void **)&validate_addr, getpagesize(), buf_sz))
-		syslog(LOG_ERR, "%s: allocate validate memory %d bytes failed\n",
+		ublk_err( "%s: allocate validate memory %d bytes failed\n",
 				__func__, buf_sz);
 #endif
 }
@@ -639,20 +639,20 @@ int Qcow2SliceMeta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	int mio_id;
 
 	if (sync) {
-		syslog(LOG_ERR, "%s %s: we only support async load",
+		ublk_err( "%s %s: we only support async load",
 				__func__, typeid(*this).name());
 		return -EINVAL;
 	}
 
 	if (flags & QCOW2_META_UPDATE) {
-		syslog(LOG_ERR, "%s %s: we are update, need to load?",
+		ublk_err( "%s %s: we are update, need to load?",
 				__func__, typeid(*this).name());
 		return -EINVAL;
 	}
 
 	sqe = io_uring_get_sqe(q->ring_ptr);
 	if (!sqe) {
-		syslog(LOG_ERR, "%s %s: not get sqe allocated",
+		ublk_err( "%s %s: not get sqe allocated",
 				__func__, typeid(*this).name());
 		return ret;
 	}
@@ -761,7 +761,7 @@ void Qcow2SliceMeta::io_done(Qcow2State &qs, const struct ublksrv_queue *q,
 	} else if (op == IORING_OP_FALLOCATE)
 		qs.cluster_allocator.alloc_cluster_zeroed(q, tag, cluster_off);
 	else
-		syslog(LOG_ERR, "%s: unknown op: tag %d op %d meta_id %d res %d\n",
+		ublk_err( "%s: unknown op: tag %d op %d meta_id %d res %d\n",
 			__func__, tag, op, meta_id, cqe->res);
 
 	meta_log("%s: tag %d, tgt_data %d op %d meta (%p %x %lx %d) res %d\n",

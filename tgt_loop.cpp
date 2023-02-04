@@ -49,7 +49,7 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 
 	ret = ublksrv_json_read_target_str_info(jbuf, PATH_MAX, "backing_file", file);
 	if (ret < 0) {
-		syslog(LOG_ERR, "%s: backing file can't be retrieved from jbuf %d\n",
+		ublk_err( "%s: backing file can't be retrieved from jbuf %d\n",
 				__func__, ret);
 		return ret;
 	}
@@ -57,21 +57,21 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 	ret = ublksrv_json_read_target_ulong_info(jbuf, "direct_io",
 			&direct_io);
 	if (ret) {
-		syslog(LOG_ERR, "%s: read target direct_io failed %d\n",
+		ublk_err( "%s: read target direct_io failed %d\n",
 				__func__, ret);
 		return ret;
 	}
 
 	ret = ublksrv_json_read_params(&p, jbuf);
 	if (ret) {
-		syslog(LOG_ERR, "%s: read ublk params failed %d\n",
+		ublk_err( "%s: read ublk params failed %d\n",
 				__func__, ret);
 		return ret;
 	}
 
 	fd = open(file, O_RDWR);
 	if (fd < 0) {
-		syslog(LOG_ERR, "%s: backing file %s can't be opened\n",
+		ublk_err( "%s: backing file %s can't be opened\n",
 				__func__, file);
 		return fd;
 	}
@@ -145,7 +145,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 	fd = open(file, O_RDWR);
 	if (fd < 0) {
-		syslog(LOG_ERR, "%s: backing file %s can't be opened\n",
+		ublk_err( "%s: backing file %s can't be opened\n",
 				__func__, file);
 		return -2;
 	}
@@ -328,9 +328,9 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 
 		ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);
 	} else if (ret < 0) {
-		syslog(LOG_ERR, "fail to queue io %d, ret %d\n", tag, tag);
+		ublk_err( "fail to queue io %d, ret %d\n", tag, tag);
 	} else {
-		syslog(LOG_ERR, "no sqe %d\n", tag);
+		ublk_err( "no sqe %d\n", tag);
 	}
 }
 

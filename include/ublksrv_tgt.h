@@ -23,7 +23,7 @@
 
 #define ublk_assert(x)  do { \
 	if (!(x)) {	\
-		syslog(LOG_ERR, "%s %d: assert!\n", __func__, __LINE__); \
+		ublk_err("%s %d: assert!\n", __func__, __LINE__); \
 		assert(x);	\
 	}	\
 } while (0)

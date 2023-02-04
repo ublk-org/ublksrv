@@ -71,7 +71,7 @@ again:
 	}
 
 	if (ret < 0) {
-		syslog(LOG_ERR, "%s: zero my cluster failed %d\n",
+		ublk_err( "%s: zero my cluster failed %d\n",
 				__func__, ret);
 		goto exit;
 	}
@@ -167,7 +167,7 @@ again:
 	}
 
 	if (ret < 0) {
-		syslog(LOG_ERR, "%s: zero my cluster failed %d\n",
+		ublk_err( "%s: zero my cluster failed %d\n",
 				__func__, ret);
 		goto exit;
 	}
@@ -301,7 +301,7 @@ again:
 	}
 
 	if (ret < 0) {
-		syslog(LOG_ERR, "%s: zero my cluster failed %d\n",
+		ublk_err( "%s: zero my cluster failed %d\n",
 				__func__, ret);
 		goto exit;
 	}
@@ -557,10 +557,10 @@ void Qcow2MetaFlushing::free_tag(const struct ublksrv_queue *q, int tag) {
 
 void Qcow2MetaFlushing::dump()
 {
-	syslog(LOG_ERR, "meta flushing: mapping: dirty slices %u, l1 dirty blocks %u\n",
+	ublk_err( "meta flushing: mapping: dirty slices %u, l1 dirty blocks %u\n",
 			mapping_stat.slice_dirtied,
 			state.l1_table.dirty_blks());
-	syslog(LOG_ERR, "meta flushing: refcount: dirty slices %u, refcount table dirty blocks %u\n",
+	ublk_err( "meta flushing: refcount: dirty slices %u, refcount table dirty blocks %u\n",
 			refcount_stat.slice_dirtied,
 			state.refcount_table.dirty_blks());
 }

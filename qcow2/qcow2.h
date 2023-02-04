@@ -734,7 +734,7 @@ static inline int qcow2_meta_io_done(const struct ublksrv_queue *q,
 
 	/* plain IO's tgt_data is zero */
 	if (tgt_data == 0) {
-		syslog(LOG_ERR, "%s target data is zero for meta io(tag %d op %u %llx)\n",
+		ublk_err( "%s target data is zero for meta io(tag %d op %u %llx)\n",
 				__func__, tag, op, cqe->user_data);
 		return -EAGAIN;
 	}
@@ -744,7 +744,7 @@ static inline int qcow2_meta_io_done(const struct ublksrv_queue *q,
 	Qcow2MappingMeta *meta = qs->get_meta_io(q->q_id, tgt_data - 1);
 
 	if (cqe->res < 0)
-		syslog(LOG_ERR, "%s: tag %d op %d tgt_data %d meta %p userdata %d\n",
+		ublk_err( "%s: tag %d op %d tgt_data %d meta %p userdata %d\n",
 			__func__, tag, user_data_to_op(cqe->user_data),
 			tgt_data, meta, cqe->res);
 	meta->io_done(*qs, q, cqe);

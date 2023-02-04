@@ -68,7 +68,7 @@ static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 
 	ret = ublksrv_json_read_params(&p, jbuf);
 	if (ret) {
-		syslog(LOG_ERR, "%s: read ublk params failed %d\n",
+		ublk_err( "%s: read ublk params failed %d\n",
 				__func__, ret);
 		return ret;
 	}

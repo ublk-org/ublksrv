@@ -184,14 +184,14 @@ static int ublksrv_tgt_store_dev_data(const struct ublksrv_dev *dev,
 	int fd = ublksrv_get_pidfile_fd(dev);
 
 	if (fd < 0) {
-		syslog(LOG_ERR, "fail to get fd of pid file, ret %d\n",
+		ublk_err( "fail to get fd of pid file, ret %d\n",
 				fd);
 		return fd;
 	}
 
 	ret = pwrite(fd, buf, len, JSON_OFFSET);
 	if (ret <= 0)
-		syslog(LOG_ERR, "fail to write json data to pid file, ret %d\n",
+		ublk_err( "fail to write json data to pid file, ret %d\n",
 				ret);
 
 	return ret;
@@ -274,7 +274,7 @@ static void *ublksrv_io_handler_fn(void *data)
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
-		syslog(LOG_INFO, "ublk dev %d queue %d init queue failed",
+		ublk_err("ublk dev %d queue %d init queue failed",
 				dev_id, q_id);
 		return NULL;
 	}
@@ -349,7 +349,7 @@ static void ublksrv_io_handler(void *data)
 
 	dev = ublksrv_dev_init(ctrl_dev);
 	if (!dev) {
-		syslog(LOG_ERR, "dev-%d start ubsrv failed", dev_id);
+		ublk_err( "dev-%d start ubsrv failed", dev_id);
 		goto out;
 	}
 

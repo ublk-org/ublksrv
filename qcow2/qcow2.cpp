@@ -4,7 +4,7 @@
 Qcow2Image:: Qcow2Image(const char *path): fpath(path) {
 	fd = open(path, O_RDWR | O_DIRECT);
 	if (fd < 0)
-		syslog(LOG_ERR, "%s: backing file %s can't be opened %d\n",
+		ublk_err( "%s: backing file %s can't be opened %d\n",
 				__func__, path, fd);
 }
 
@@ -317,7 +317,7 @@ T *slice_cache<T>::alloc_slice(Qcow2State &state, const qcow2_io_ctx_t &ioc,
 	}
 
 	if (virt_offset != t->virt_offset()) {
-		syslog(LOG_ERR, "%s %d: %s %" PRIx64 "/%" PRIx64 " parent_idx %d host_off %" PRIx64 " flags %x\n",
+		ublk_err( "%s %d: %s %" PRIx64 "/%" PRIx64 " parent_idx %d host_off %" PRIx64 " flags %x\n",
 			__func__, __LINE__, typeid(*t).name(),
 			virt_offset, t->virt_offset(), parent_idx,
 			host_offset, flags);
@@ -548,7 +548,7 @@ void Qcow2ClusterAllocator::alloc_cluster_zeroed(const struct ublksrv_queue *q,
 	auto it = alloc_state.find(cluster_offset);
 
 	if (it == alloc_state.end())
-		syslog(LOG_ERR, "%s: offset %lx\n", __func__, cluster_offset);
+		ublk_err( "%s: offset %lx\n", __func__, cluster_offset);
 	qcow2_assert(it != alloc_state.end());
 
 	it->second->set_state(QCOW2_ALLOC_ZEROED);
@@ -860,7 +860,7 @@ Qcow2L2Table *Qcow2ClusterMapping::create_l2_map(const qcow2_io_ctx_t &ioc,
 		// l2 table isn't allocated yet, so create one and add it here
 		l2 = create_and_add_l2(ioc, offset);
 		if (!l2)
-			syslog(LOG_ERR, "%s: tag %d: allocate l2 failed for %" PRIx64 "\n",
+			ublk_err( "%s: tag %d: allocate l2 failed for %" PRIx64 "\n",
 				__func__, ioc.get_tag(), offset);
 	}
 	return l2;

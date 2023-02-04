@@ -12,18 +12,18 @@
 //#define NBD_DEBUG_CQE 1
 
 #ifdef NBD_DEBUG_IO
-#define NBD_IO_DBG(...) syslog(LOG_ERR, __VA_ARGS__)
+#define NBD_IO_DBG  ublk_err
 #else
 #define NBD_IO_DBG(...)
 #endif
 
 #ifdef NBD_DEBUG_HANDSHAKE
-#define NBD_HS_DBG(...) syslog(LOG_ERR, __VA_ARGS__)
+#define NBD_HS_DBG  ublk_err
 #else
 #define NBD_HS_DBG(...)
 #endif
 
-#define nbd_err(...) syslog(LOG_ERR, __VA_ARGS__)
+#define nbd_err	ublk_err
 
 #define NBD_MAX_NAME	512
 

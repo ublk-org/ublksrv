@@ -70,20 +70,20 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	header = (QCowHeader *)header_buf;
 	fd = open(file, O_RDWR | O_DIRECT);
 	if (fd < 0) {
-		syslog(LOG_ERR, "%s backing file %s can't be opened\n",
+		ublk_err( "%s backing file %s can't be opened\n",
 				__func__, file);
 		return -EINVAL;
 	}
 
 	ret = read(fd, header_buf, HEADER_SIZE);
 	if (ret != HEADER_SIZE) {
-		syslog(LOG_ERR, "%s: return backing file %s %d %d\n",
+		ublk_err( "%s: return backing file %s %d %d\n",
 				__func__, file, HEADER_SIZE, ret);
 		return -EINVAL;
 	}
 
 	if (be64_to_cpu(header->nb_snapshots) != 0) {
-		syslog(LOG_ERR, "%s: not support snapshots\n", __func__);
+		ublk_err( "%s: not support snapshots\n", __func__);
 		return -EINVAL;
 	}
 
@@ -164,21 +164,21 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 
 	ret = ublksrv_json_read_target_str_info(jbuf, PATH_MAX, "backing_file", file);
 	if (ret < 0) {
-		syslog(LOG_ERR, "%s: backing file can't be retrieved from jbuf %d\n",
+		ublk_err( "%s: backing file can't be retrieved from jbuf %d\n",
 				__func__, ret);
 		return ret;
 	}
 
 	ret = ublksrv_json_read_params(&p, jbuf);
 	if (ret) {
-		syslog(LOG_ERR, "%s: read ublk params failed %d\n",
+		ublk_err( "%s: read ublk params failed %d\n",
 				__func__, ret);
 		return ret;
 	}
 
 	fd = open(file, O_RDWR | O_DIRECT);
 	if (fd < 0) {
-		syslog(LOG_ERR, "%s: backing file %s can't be opened\n",
+		ublk_err( "%s: backing file %s can't be opened\n",
 				__func__, file);
 		return fd;
 	}
