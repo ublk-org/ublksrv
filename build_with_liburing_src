@@ -3,11 +3,12 @@
 # build liburing first
 #
 # cd $LIBURING_DIR
-# ./configure && make install
+# ./configure && make && make install
 
 PARAM=$1
 
 set -eo pipefail
+set -x
 
 script_dir="$(dirname ${BASH_SOURCE[0]})"
 
@@ -22,4 +23,4 @@ ${script_dir}/configure \
   CXXFLAGS="-I${LIBURING_DIR}/src/include $OPTS" \
   LDFLAGS="-L${LIBURING_DIR}/src"
 
-make -j$(nproc)
+make -j$(nproc) --no-print-directory
