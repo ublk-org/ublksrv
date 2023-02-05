@@ -56,6 +56,14 @@ void ublk_err(const char *fmt, ...)
 	vsyslog(LOG_ERR, fmt, ap);
 }
 
+void ublk_log(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vsyslog(LOG_INFO, fmt, ap);
+}
+
 #ifdef DEBUG
 static unsigned int ublk_debug_mask;
 void ublk_dbg(int level, const char *fmt, ...)

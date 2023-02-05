@@ -65,6 +65,8 @@ static inline void ublk_set_debug_mask(unsigned mask) {}
 static inline unsigned ublk_get_debug_mask(unsigned mask) { return 0;}
 #endif
 
+extern void ublk_log(const char *fmt, ...)
+	__attribute__ ((format (printf, 1, 2)));
 extern void ublk_err(const char *fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
