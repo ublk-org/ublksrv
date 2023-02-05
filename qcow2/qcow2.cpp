@@ -339,7 +339,7 @@ void slice_cache<T>::add_slice_to_evicted_list(u64 virt_offset, T *t)
 	else {
 #if 1
 		auto m = it->second;
-		qcow2_log("%s: add duplicated cache virt_offset %llx, remove old entry(%p %lx/%lx %x %d)\n",
+		qcow2_log("%s: add duplicated cache virt_offset %" PRIx64 ", remove old entry(%p %lx/%lx %x %d)\n",
 				__func__, virt_offset, m, m->virt_offset(),
 				m->get_offset(), m->get_flags(), m->read_ref());
 		it->second->show(__func__, __LINE__);
@@ -357,7 +357,7 @@ template <class T>
 void slice_cache<T>::dump(Qcow2State &qs) {
 	auto lru_list = slices.get_lru_list_ro();
 
-	syslog(LOG_INFO, "cache size %zu, dirty cache size %zu\n",
+	ublk_log("cache size %zu, dirty cache size %zu\n",
 			slices.size(), evicted_slices.size());
 
 	//todo: use lrucache iterator to cut the loop time
@@ -578,7 +578,7 @@ void Qcow2ClusterAllocator::alloc_cluster_done(const qcow2_io_ctx_t &ioc,
 
 void Qcow2ClusterAllocator::dump_meta() {
 
-	qcow2_log("cluster allocator %s: total allocates %lld clusters, bytes %lld KB, max states %u/%u\n",
+	qcow2_log("cluster allocator %s: total allocates %" PRIu64 " clusters, bytes %" PRIu64 "KB, max states %u/%lu\n",
 			__func__, alloc_cnt, (alloc_cnt <<
 			state.header.cluster_bits) >> 10,
 			max_alloc_states, alloc_state.size());
@@ -1012,7 +1012,7 @@ u64 Qcow2ClusterMapping::map_cluster(const qcow2_io_ctx_t &ioc, u64 offset,
 
 void Qcow2ClusterMapping::dump_meta()
 {
-	qcow2_log("cluster mapping%s: max_alloc_entries %u/%u\n", __func__,
+	qcow2_log("cluster mapping%s: max_alloc_entries %u/%lu\n", __func__,
 			max_alloc_entries, entry_alloc.size());
 	state.l1_table.dump();
 	cache.dump(state);

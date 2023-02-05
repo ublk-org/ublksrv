@@ -172,7 +172,7 @@ public:
 
 	virtual void dump() const
 	{
-		syslog(LOG_INFO,"%s: type %x len %d\n",
+		qcow2_log("%s: type %x len %d\n",
 				typeid(*this).name(), type, len);
 	}
 };
@@ -188,7 +188,7 @@ public:
 
 	virtual void dump() const
 	{
-		syslog(LOG_INFO,"%s: type %x len %d string %s\n",
+		qcow2_log("%s: type %x len %d string %s\n",
 				typeid(*this).name(), type, len, str.c_str());
 	}
 };
@@ -224,7 +224,7 @@ public:
 	}
 	virtual void dump() const
 	{
-		syslog(LOG_INFO,"%s: type %x len %d nr_bitmap %d bitmap_dir(offset %lx sz %lu)\n",
+		qcow2_log("%s: type %x len %d nr_bitmap %d bitmap_dir(offset %lx sz %lu)\n",
 				typeid(*this).name(), type, len,
 				nr_bitmap, bitmap_directory_offset,
 				bitmap_directory_size);
@@ -245,7 +245,7 @@ public:
 	}
 	virtual void dump() const
 	{
-		syslog(LOG_INFO,"%s: type %x len %d enc(offset %" PRIx64 " sz %" PRIu64 ")\n",
+		qcow2_log("%s: type %x len %d enc(offset %" PRIx64 " sz %" PRIu64 ")\n",
 				typeid(*this).name(), type, len,
 				enc_offset, enc_len);
 	}

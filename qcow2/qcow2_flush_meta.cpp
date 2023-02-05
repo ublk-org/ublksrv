@@ -392,7 +392,7 @@ again:
 }
 
 void MetaFlushingState::dump(const char *func, int line) const {
-	qcow2_log("%s %d: mapping %d state %d blk_idx %d entry_idx %d list size(%d %d)"
+	qcow2_log("%s %d: mapping %d state %d blk_idx %d entry_idx %d list size(%ld %ld)"
 			" dirty slices %u, top table dirty blocks %u\n",
 			func, line, mapping, state,
 			parent_blk_idx, parent_entry_idx,

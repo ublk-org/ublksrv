@@ -3,13 +3,7 @@
 #define _GNU_SOURCE
 #include "ublksrv_priv.h"
 
-static inline void aio_log(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vsyslog(LOG_INFO, fmt, ap);
-}
+#define aio_log ublk_log
 
 int ublksrv_aio_submit_worker(struct ublksrv_aio_ctx *ctx,
 		ublksrv_aio_submit_fn *fn, struct aio_list *done)

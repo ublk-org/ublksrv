@@ -210,7 +210,7 @@ static inline int qcow2_queue_tgt_fsync(const struct ublksrv_queue *q,
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 
 	if (!sqe) {
-		qcow2_log("%s: tag %d offset %llx op %d, no sqe\n",
+		ublk_err("%s: tag %d offset %lx op %d, no sqe\n",
 				__func__, tag, offset, io_op);
 		return -ENOMEM;
 	}
@@ -233,7 +233,7 @@ static inline int qcow2_queue_tgt_zero_cluster(const Qcow2State *qs,
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 
 	if (!sqe) {
-		qcow2_log("%s: tag %d offset %llx op %d, no sqe for zeroing\n",
+		ublk_err("%s: tag %d offset %lx op %d, no sqe for zeroing\n",
 			__func__, tag, offset, IORING_OP_FALLOCATE);
 		return -ENOMEM;
 	}
@@ -256,7 +256,7 @@ static inline int qcow2_queue_tgt_rw_fast(const struct ublksrv_queue *q,
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 
 	if (!sqe) {
-		qcow2_log("%s: tag %d offset %llx op %d, no sqe for rw\n",
+		ublk_err("%s: tag %d offset %lx op %d, no sqe for rw\n",
 				__func__, tag, offset, io_op);
 		return -ENOMEM;
 	}
@@ -386,7 +386,7 @@ again:
 			mapped_start);
 
 	if (mapped_start == -1) {
-		qcow2_log("%s: tag %d virt %llx op %d, unsupported format\n",
+		ublk_err("%s: tag %d virt %lx op %d, unsupported format\n",
 				__func__, tag, start, op);
 		ret = -EIO;
 	} else if (!mapped_start) {
@@ -396,7 +396,7 @@ again:
 			ret = iod->nr_sectors << 9;
 			memset((void *)iod->addr, 0, ret);
 		} else {
-			qcow2_log("%s: tag %d virt %llx op %d map failed\n",
+			ublk_err("%s: tag %d virt %lx op %d map failed\n",
 					__func__, tag, start, op);
 			ret = -EIO;
 		}
@@ -458,7 +458,7 @@ queue_io:
 	}
 exit:
 	if (ret < 0)
-		qcow2_log("%s io failed(%d %llx %lu) ret %d\n", __func__,
+		ublk_err("%s io failed(%d %lx %u) ret %d\n", __func__,
 				op, start, iod->nr_sectors, ret);
 	qcow2_io_log("%s tag %d io complete(%d %llx %lu) ret %d\n", __func__,
 				tag, op, start, iod->nr_sectors, ret);

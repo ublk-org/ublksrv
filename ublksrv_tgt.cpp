@@ -284,14 +284,14 @@ static void *ublksrv_io_handler_fn(void *data)
 		return NULL;
 	}
 
-	syslog(LOG_INFO, "tid %d: ublk dev %d queue %d started", ublksrv_gettid(),
+	ublk_log("tid %d: ublk dev %d queue %d started", ublksrv_gettid(),
 			dev_id, q->q_id);
 	do {
 		if (ublksrv_process_io(q) < 0)
 			break;
 	} while (1);
 
-	syslog(LOG_INFO, "ublk dev %d queue %d exited", dev_id, q->q_id);
+	ublk_log("ublk dev %d queue %d exited", dev_id, q->q_id);
 	ublksrv_queue_deinit(q);
 	return NULL;
 }
@@ -299,7 +299,7 @@ static void *ublksrv_io_handler_fn(void *data)
 static void sig_handler(int sig)
 {
 	if (sig == SIGTERM)
-		syslog(LOG_INFO, "got TERM signal");
+		ublk_log("got TERM signal");
 }
 
 static void setup_pthread_sigmask()
@@ -348,7 +348,7 @@ static void ublksrv_io_handler(void *data)
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
 
-	syslog(LOG_INFO, "start ublksrv io daemon");
+	ublk_log("start ublksrv io daemon %s\n", buf);
 
 	pthread_mutex_init(&jbuf_lock, NULL);
 
@@ -380,7 +380,7 @@ static void ublksrv_io_handler(void *data)
 
 	ublksrv_dev_deinit(dev);
 out:
-	syslog(LOG_INFO, "end ublksrv io daemon");
+	ublk_log("end ublksrv io daemon");
 	closelog();
 }
 

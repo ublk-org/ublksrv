@@ -48,13 +48,7 @@ enum QCOW2_PARA {
 	MAX_META_FLUSH_DELAY_MS = 500,
 };
 
-static inline void qcow2_log(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vsyslog(LOG_INFO, fmt, ap);
-}
+#define qcow2_log ublk_log
 
 //be careful
 //#DEBUG_QCOW2_META_OBJ, still required for some meta debug

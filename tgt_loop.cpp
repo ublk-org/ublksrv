@@ -351,7 +351,7 @@ static void loop_tgt_io_done(const struct ublksrv_queue *q,
 
 	ublk_assert(tag == data->tag);
 	if (!io->queued_tgt_io)
-		syslog(LOG_WARNING, "%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
+		ublk_err("%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
 			__func__, cqe->res, q->q_id,
 			user_data_to_tag(cqe->user_data),
 			user_data_to_op(cqe->user_data));

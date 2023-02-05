@@ -131,7 +131,7 @@ void Qcow2HeaderExtFeatureNameTable::dump() const
 	Qcow2HeaderExt::dump();
 
 	for (int i = 0; i < __a.size(); i++)
-		syslog(LOG_INFO,"\t %d: type %x bit_num %u name %s\n",
+		qcow2_log("\t %d: type %x bit_num %u name %s\n",
 			i, __a[i].feature_type, __a[i].bit_num,
 			__a[i].feature_name);
 }
@@ -262,19 +262,19 @@ std::ostream & operator<<(std::ostream &os, const Qcow2Header &h)
 
 	sprintf(buf, "magic: %x", h.magic);
 	std::cout << std::string(buf) << std::endl;
-	syslog(LOG_INFO, "%s", buf);
+	qcow2_log("%s", buf);
 
 	sprintf(buf, "version: %x\n", h.version);
 	std::cout << std::string(buf) << std::endl;
-	syslog(LOG_INFO, "%s", buf);
+	qcow2_log("%s", buf);
 
 	sprintf(buf, "cluster_bits: %x\n", h.cluster_bits);
 	std::cout << std::string(buf) << std::endl;
-	syslog(LOG_INFO, "%s", buf);
+	qcow2_log("%s", buf);
 
 	sprintf(buf, "refcount_order: %x\n", h.refcount_order);
 	std::cout << std::string(buf) << std::endl;
-	syslog(LOG_INFO, "%s", buf);
+	qcow2_log("%s", buf);
 
 	return os;
 }
@@ -492,10 +492,10 @@ int Qcow2L1Table::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc, u32 len, bool 
 
 void Qcow2L1Table::dump()
 {
-	syslog(LOG_INFO, "%s %s: sizeof %zd\n", __func__, typeid(*this).name(),
+	qcow2_log("%s %s: sizeof %zd\n", __func__, typeid(*this).name(),
 			sizeof(*this));
 	for (int i = 0; i < header.get_l1_size(); i++)
-		syslog(LOG_INFO, "%d: %lx\n", i, get_entry(i));
+		qcow2_log("%d: %lx\n", i, get_entry(i));
 }
 
 u64  Qcow2L1Table::get_entry(u32 idx) {
@@ -535,7 +535,7 @@ void Qcow2RefcountTable::set_entry(u32 idx, u64 val) {
 
 void Qcow2RefcountTable::dump()
 {
-	syslog(LOG_INFO, "%s %s: sizeof %zd\n", __func__, typeid(*this).name(),
+	qcow2_log("%s %s: sizeof %zd\n", __func__, typeid(*this).name(),
 			sizeof(*this));
 	for (int i = 0; i < data_len / 8; i++) {
 		u64 entry = get_entry(i);
@@ -610,7 +610,7 @@ int Qcow2SliceMeta::zero_my_cluster(Qcow2State &qs,
 
 	sqe = io_uring_get_sqe(q->ring_ptr);
 	if (!sqe) {
-		qcow2_log("%s: tag %d offset %llx op %d, no sqe for zeroing\n",
+		ublk_err("%s: tag %d offset %" PRIu64 "op %d, no sqe for zeroing\n",
 			__func__, tag, offset, IORING_OP_FALLOCATE);
 		return -ENOMEM;
 	}
@@ -929,11 +929,11 @@ void Qcow2RefcountBlock::dump()
 	if (!cnt)
 		return;
 
-	syslog(LOG_INFO, "%s %s: buf_sz %u offset %" PRIx64 " sizeof %zd entries %u parent_idx %u virt_off %" PRIx64 " flags %x\n",
+	qcow2_log("%s %s: buf_sz %u offset %" PRIx64 " sizeof %zd entries %u parent_idx %u virt_off %" PRIx64 " flags %x\n",
 			__func__, typeid(*this).name(), buf_sz, offset, sizeof(*this),
 			cnt, parent_idx, virt_offset(),
 			flags);
-	qcow2_log("\t [%d] = %llx/%llx [%d] = %llx/%llx\n",
+	qcow2_log("\t [%d] = %" PRIx64 "/%" PRIx64 " [%d] = %" PRIx64 "/%" PRIx64 "\n",
 			f, get_entry(f),
 			virt_offset() + (f << header.cluster_bits),
 			l, get_entry(l),
@@ -1058,11 +1058,11 @@ void Qcow2L2Table::dump()
 	if (!cnt)
 		return;
 
-	syslog(LOG_INFO, "%s %s: buf_sz %u offset %" PRIx64 " sizeof %zd entries %u parent_idx %u virt_off %" PRIx64 " flags %x\n",
+	qcow2_log("%s %s: buf_sz %u offset %" PRIx64 " sizeof %zd entries %u parent_idx %u virt_off %" PRIx64 " flags %x\n",
 			__func__, typeid(*this).name(), buf_sz, offset, sizeof(*this),
 			cnt, parent_idx, virt_offset(), flags);
-	qcow2_log("\t [%d] = %llx [%u] = %llx\n", f, get_entry(f), l,
-				get_entry(l));
+	qcow2_log("\t [%d] = %" PRIx64 "[%u] = %" PRIx64 "\n", f,
+			get_entry(f), l, get_entry(l));
 }
 
 #ifdef DEBUG_QCOW2_META_VALIDATE
