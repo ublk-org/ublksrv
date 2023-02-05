@@ -28,7 +28,7 @@ void IOWaiters::__mapping_meta_wakeup_all(const struct ublksrv_queue *q,
 	std::unordered_set<unsigned> tags(move(io_waiters));
 	std::unordered_set<unsigned>::const_iterator it = tags.cbegin();
 
-	ublk_dbg(LOG_INFO, "%s: %d %p my tag %d enter\n",
+	ublk_dbg(UBLK_DBG_QCOW2_IO_WAITER, "%s: %d %p my tag %d enter\n",
 			__func__, __LINE__, this, my_tag);
 	while (it != tags.cend()) {
 		unsigned t = *it;
@@ -41,7 +41,7 @@ void IOWaiters::__mapping_meta_wakeup_all(const struct ublksrv_queue *q,
 			continue;
 		}
 
-		ublk_dbg(LOG_INFO, "%s: %d my tag %d tag %d idx %x\n",
+		ublk_dbg(UBLK_DBG_QCOW2_IO_WAITER, "%s: %d my tag %d tag %d idx %x\n",
 				__func__, __LINE__, my_tag, tag, idx);
 		if (all || idx == entry_idx) {
 			struct ublk_io_tgt *__io =
@@ -62,11 +62,11 @@ void IOWaiters::__mapping_meta_wakeup_all(const struct ublksrv_queue *q,
 		} else {
 			it++;
 		}
-		ublk_dbg(LOG_INFO, "%s: %d %p my tag %d tag %d idx %x\n",
+		ublk_dbg(UBLK_DBG_QCOW2_IO_WAITER, "%s: %d %p my tag %d tag %d idx %x\n",
 				__func__, __LINE__, this, my_tag, tag, idx);
 	}
 	io_waiters.merge(tags);
-	ublk_dbg(LOG_INFO, "%s: %d %p my tag %d exit\n",
+	ublk_dbg(UBLK_DBG_QCOW2_IO_WAITER, "%s: %d %p my tag %d exit\n",
 			__func__, __LINE__, this, my_tag);
 }
 

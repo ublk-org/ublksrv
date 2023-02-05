@@ -295,9 +295,9 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 	/* bit63 marks us as tgt io */
 	sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 
-	ublk_dbg(LOG_INFO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
+	ublk_dbg(UBLK_DBG_IO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
-	ublk_dbg(LOG_INFO, "%s: queue io op %d(%llu %x %llx)"
+	ublk_dbg(UBLK_DBG_IO, "%s: queue io op %d(%llu %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
 			__func__, ublk_op, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, ublk_op, 1, sqe->user_data);
@@ -316,8 +316,7 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 	ret = loop_queue_tgt_io(q, data, tag);
 	if (ret > 0) {
 		if (io->queued_tgt_io)
-			ublk_dbg(LOG_INFO, "bad queued_tgt_io %d\n",
-					io->queued_tgt_io);
+			ublk_err("bad queued_tgt_io %d\n", io->queued_tgt_io);
 		io->queued_tgt_io += 1;
 
 		co_await__suspend_always(tag);

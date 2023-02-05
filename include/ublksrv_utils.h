@@ -44,6 +44,12 @@ static inline void ublksrv_log(int priority, const char *fmt, ...) { }
 static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
 #endif
 
+/* 32bit debug mask, high 16 bits are for target code, and low 16 bits for lib */
+#define	UBLK_DBG_DEV	(1U << 0)
+#define	UBLK_DBG_QUEUE	(1U << 1)
+#define	UBLK_DBG_IO_CMD	(1U << 2)
+#define	UBLK_DBG_IO	(1U << 3)
+
 #ifdef DEBUG
 extern void ublk_dbg(int level, const char *fmt, ...)
 	__attribute__ ((format (printf, 2, 3)));
