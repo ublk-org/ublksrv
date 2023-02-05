@@ -1,0 +1,72 @@
+name: Build CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master"]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  URING_VER: "2.2"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: "install: prerequisites"
+      shell: bash
+      run: |
+        sudo apt update
+        sudo apt install -y autoconf-archive
+
+    - name: "acquire: ubdsrv"
+      uses: actions/checkout@v3
+      with:
+        path: ubdsrv
+
+    - name: "acquire: liburing"
+      run: |
+        wget https://brick.kernel.dk/snaps/liburing-$URING_VER.tar.gz
+        tar xzvf liburing-$URING_VER.tar.gz
+
+    - name: "build: liburing"
+      working-directory: liburing-${{ env.URING_VER }}
+      shell: bash
+      run: |
+        ./configure
+        make -j$(nproc)
+        sudo make install
+
+    - name: "build: ubdsrv with --enable-debug"
+      working-directory: ubdsrv
+      run: |
+        LIBURING_DIR=${{ github.workspace }}/liburing-$URING_VER ./build_with_liburing_src --enable-debug
+
+    - name: "build: ubdsrv"
+      working-directory: ubdsrv
+      run: |
+        make distclean
+        LIBURING_DIR=${{ github.workspace }}/liburing-$URING_VER ./build_with_liburing_src
+
+    - name: "build: installable artifacts"
+      working-directory: ubdsrv
+      shell: bash
+      run: |
+        mkdir -p ${{ github.workspace }}/files
+        make DESTDIR=${{ github.workspace }}/files install
+
+    - name: "publish: installable artifacts"
+      uses: actions/upload-artifact@v3
+      with:
+        name: ubdsrv
+        if-no-files-found: error
+        path: ${{ github.workspace }}/files/**
+
+    - name: "publish: logs"
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: build-logs
+        if-no-files-found: ignore
+        path: ubdsrv/*.log

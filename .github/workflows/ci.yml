@@ -1,11 +1,11 @@
-name: CI
+name: Build and Test CI
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "master", "next" ]
+    branches: [ "next" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "next" ]
 
 env:
   URING_VER: "2.3"
