@@ -35,7 +35,7 @@ demo_event_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ublksrv.pc
 
-CLEANFILES = *~ test cscope.* include/*~ *.d qcow2/*~ nbd/*~
+CLEANFILES = *~ test cscope.* include/*~ *.d qcow2/*~ nbd/*~ utils/*~
 
 R = 10
 D = tests/tmp/

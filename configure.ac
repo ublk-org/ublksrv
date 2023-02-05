@@ -2,7 +2,10 @@
 # Copyright (C) Ming Lei
 # SPDX-License-Identifier: MIT or GPL-2.0-only
 
-AC_INIT([ublksrv],[1.0])
+AC_INIT([ublksrv],
+		m4_esyscmd(utils/genver.sh | tr -d '\n'),
+		[https://github.com/ming1/ubdsrv],,
+		[https://github.com/ming1/ubdsrv])
 
 AC_CONFIG_MACRO_DIR([m4])
 m4_ifdef([AC_USE_SYSTEM_EXTENSIONS],[],

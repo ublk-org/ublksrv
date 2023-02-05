@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
+#include "config.h"
 #include "ublksrv_tgt.h"
 
 /* per-task variable */
@@ -1028,6 +1029,9 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_user_recover(argc, argv);
 	else if (!strcmp(cmd, "help")) {
 		cmd_usage(prog_name);
+		ret = EXIT_SUCCESS;
+	} else if (!strcmp(cmd, "-v") || !strcmp(cmd, "--version")) {
+		fprintf(stdout, "%s\n", PACKAGE_STRING);
 		ret = EXIT_SUCCESS;
 	} else {
 		fprintf(stderr, "unknown command: %s\n", cmd);
