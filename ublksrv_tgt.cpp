@@ -359,7 +359,9 @@ static void ublksrv_io_handler(void *data)
 	}
 
 	setup_pthread_sigmask();
-	ublksrv_apply_oom_protection();
+
+	if (!(dinfo->flags & UBLK_F_UNPRIVILEGED_DEV))
+		ublksrv_apply_oom_protection();
 
 	info_array = (struct ublksrv_queue_info *)calloc(sizeof(
 				struct ublksrv_queue_info),
@@ -478,10 +480,29 @@ static int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
 
 static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	int cnt = 0, daemon_pid;
+	int cnt = 0, daemon_pid, ret;
+	unsigned int max_time = 1000000, wait = 0;
 
-	if (ublksrv_ctrl_get_affinity(ctrl_dev) < 0)
+	/*
+	 * Wait until ublk device ownership is setup by udev
+	 */
+	while (wait < max_time) {
+		ret = ublksrv_ctrl_get_affinity(ctrl_dev);
+		if (ret == -EACCES || ret == -EPERM) {
+			usleep(10000);
+			wait += 10000;
+			continue;
+		} else if (ret <= 0)
+			break;
+	}
+	if (ret < 0) {
+		const struct ublksrv_ctrl_dev_info *dinfo =
+			ublksrv_ctrl_get_dev_info(ctrl_dev);
+
+		fprintf(stderr, "dev %d get affinity failed %d\n",
+				dinfo->dev_id, ret);
 		return -1;
+	}
 
 	switch (fork()) {
 	case -1:
@@ -567,6 +588,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "user_recovery",	1,	NULL, 'r'},
 		{ "user_recovery_reissue",	1,	NULL, 'i'},
 		{ "debug_mask",	1,	NULL, 0},
+		{ "unprivileged",	0,	NULL, 0},
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -577,6 +599,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	int need_get_data = 0;
 	int user_recovery = 0;
 	int user_recovery_reissue = 0;
+	int unprivileged = 0;
 	const char *dump_buf;
 	int option_index = 0;
 	unsigned int debug_mask = 0;
@@ -621,6 +644,8 @@ static int cmd_dev_add(int argc, char *argv[])
 		case 0:
 			if (!strcmp(longopts[option_index].name, "debug_mask"))
 				debug_mask = strtol(optarg, NULL, 16);
+			if (!strcmp(longopts[option_index].name, "unprivileged"))
+				unprivileged = 1;
 			break;
 		}
 	}
@@ -640,6 +665,9 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.flags |= UBLK_F_USER_RECOVERY;
 	if (user_recovery_reissue)
 		data.flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
+	if (unprivileged)
+		data.flags |= UBLK_F_UNPRIVILEGED_DEV;
+
 	if (data.tgt_type == NULL) {
 		fprintf(stderr, "no dev type specified\n");
 		return -EINVAL;
@@ -738,10 +766,12 @@ static void cmd_dev_add_usage(const char *cmd)
 	ublksrv_for_each_tgt_type(collect_tgt_types, &data);
 	data.pos += snprintf(data.names + data.pos, sizeof(data.names) - data.pos, "}");
 
-	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH "
-			"-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY "
-			"-i USER_RECOVERY_REISSUE --debug_mask=0x{DBG_MASK}\n",
-			cmd, data.names);
+	printf("%s add -t %s\n", cmd, data.names);
+	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
+	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
+	printf("\t-i USER_RECOVERY_REISSUE --debug_mask=0x{DBG_MASK}\n");
+	printf("\t--unprivileged\n\n");
+	printf("\ttarget specific command line:\n");
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
 
