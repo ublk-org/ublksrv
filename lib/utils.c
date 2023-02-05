@@ -57,11 +57,24 @@ void ublk_err(const char *fmt, ...)
 }
 
 #ifdef DEBUG
+static unsigned int ublk_debug_mask;
 void ublk_dbg(int level, const char *fmt, ...)
 {
-	va_list ap;
+	if (level & ublk_debug_mask) {
+		va_list ap;
 
-	va_start(ap, fmt);
-	vsyslog(LOG_ERR, fmt, ap);
+		va_start(ap, fmt);
+		vsyslog(LOG_ERR, fmt, ap);
+	}
+}
+
+void ublk_set_debug_mask(unsigned mask)
+{
+	ublk_debug_mask = mask;
+}
+
+unsigned ublk_get_debug_mask(unsigned mask)
+{
+	return ublk_debug_mask;
 }
 #endif

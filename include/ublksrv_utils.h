@@ -53,8 +53,12 @@ static inline void ublksrv_printf(FILE *stream, const char *fmt, ...) {}
 #ifdef DEBUG
 extern void ublk_dbg(int level, const char *fmt, ...)
 	__attribute__ ((format (printf, 2, 3)));
+extern void ublk_set_debug_mask(unsigned mask);
+extern unsigned ublk_get_debug_mask(unsigned mask);
 #else
 static inline void ublk_dbg(int level, const char *fmt, ...) { }
+static inline void ublk_set_debug_mask(unsigned mask) {}
+static inline unsigned ublk_get_debug_mask(unsigned mask) { return 0;}
 #endif
 
 extern void ublk_err(const char *fmt, ...)
