@@ -1027,7 +1027,7 @@ int main(int argc, char *argv[])
 		ret = cmd_list_dev_info(argc, argv);
 	else if (!strcmp(cmd, "recover"))
 		ret = cmd_dev_user_recover(argc, argv);
-	else if (!strcmp(cmd, "help")) {
+	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
 		cmd_usage(prog_name);
 		ret = EXIT_SUCCESS;
 	} else if (!strcmp(cmd, "-v") || !strcmp(cmd, "--version")) {
