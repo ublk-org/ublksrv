@@ -1039,7 +1039,7 @@ int main(int argc, char *argv[])
 		ret = EXIT_FAILURE;
 	}
 
-	ublksrv_printf(stdout, "cmd %s: result %d\n", cmd, ret);
+	ublk_ctrl_dbg(UBLK_DBG_CTRL_CMD, "cmd %s: result %d\n", cmd, ret);
 
 	return ret;
 }

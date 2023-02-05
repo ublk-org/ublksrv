@@ -68,6 +68,16 @@ void ublk_dbg(int level, const char *fmt, ...)
 	}
 }
 
+void ublk_ctrl_dbg(int level, const char *fmt, ...)
+{
+	if (level & ublk_debug_mask) {
+		va_list ap;
+
+		va_start(ap, fmt);
+		vfprintf(stdout, fmt, ap);
+	}
+}
+
 void ublk_set_debug_mask(unsigned mask)
 {
 	ublk_debug_mask = mask;
