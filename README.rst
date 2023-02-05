@@ -172,7 +172,10 @@ of "journalctl | grep ublksrvd"
 
 ``./configure --enable-debug`` can build a debug version of ublk which
 dumps lots of runtime debug messages, and can't be used in production
-environment, should be for debug purpose only.
+environment, should be for debug purpose only. For debug version of
+ublksrv, 'ublk add --debug_mask=0x{MASK}' can control which kind of
+debug log dumped, see ``UBLK_DBG_*`` defined in include/ublksrv_utils.h
+for each kind of debug log.
 
 License
 =======

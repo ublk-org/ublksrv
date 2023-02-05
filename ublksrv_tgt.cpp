@@ -560,6 +560,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "need_get_data",	1,	NULL, 'g' },
 		{ "user_recovery",	1,	NULL, 'r'},
 		{ "user_recovery_reissue",	1,	NULL, 'i'},
+		{ "debug_mask",	1,	NULL, 0},
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -571,6 +572,8 @@ static int cmd_dev_add(int argc, char *argv[])
 	int user_recovery = 0;
 	int user_recovery_reissue = 0;
 	const char *dump_buf;
+	int option_index = 0;
+	unsigned int debug_mask = 0;
 
 	data.queue_depth = DEF_QD;
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
@@ -580,7 +583,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	mkpath(data.run_dir);
 
 	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:i:z",
-				  longopts, NULL)) != -1) {
+				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
 			data.dev_id = strtol(optarg, NULL, 10);
@@ -609,8 +612,15 @@ static int cmd_dev_add(int argc, char *argv[])
 		case 'i':
 			user_recovery_reissue = strtol(optarg, NULL, 10);
 			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "debug_mask"))
+				debug_mask = strtol(optarg, NULL, 16);
+			break;
 		}
 	}
+
+	ublk_set_debug_mask(debug_mask);
+
 	data.max_io_buf_bytes = DEF_BUF_SIZE;
 	if (data.nr_hw_queues > MAX_NR_HW_QUEUES)
 		data.nr_hw_queues = MAX_NR_HW_QUEUES;
@@ -724,7 +734,7 @@ static void cmd_dev_add_usage(const char *cmd)
 
 	printf("%s add -t %s -n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH "
 			"-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY "
-			"-i USER_RECOVERY_REISSUE\n",
+			"-i USER_RECOVERY_REISSUE --debug_mask=0x{DBG_MASK}\n",
 			cmd, data.names);
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
