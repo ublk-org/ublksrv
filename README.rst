@@ -51,7 +51,7 @@ how to build ublksrv:
 
   autoreconf -i
 
-  ./configure
+  ./configure   #pkg-config and libtool is usually needed
 
   make
 
