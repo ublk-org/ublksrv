@@ -308,8 +308,8 @@ T *slice_cache<T>::alloc_slice(Qcow2State &state, const qcow2_io_ctx_t &ioc,
 			state.add_slice_to_free_list(old);
 		old->put_ref();
 
-#ifdef DEBUG_QCOW2_META_OBJ
-		meta_log("%s: %s evicted from tag %d, obj %p flags %x offset %lx ref %d\n",
+#ifdef QCOW2_DEBUG
+		ublk_dbg(UBLK_DBG_QCOW2_META, "%s: %s evicted from tag %d, obj %p flags %x offset %lx ref %d\n",
 				__func__, old->get_id(), ioc.get_tag(), old,
 				old->get_flags(), old->get_offset(),
 				old->read_ref());

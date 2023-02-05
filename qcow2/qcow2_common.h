@@ -6,11 +6,19 @@
 
 #define qcow2_assert(x)  ublk_assert(x)
 
+#ifdef DEBUG
+#define QCOW2_DEBUG  DEBUG
+#else
+#undef QCOW2_DEBUG
+#endif
+
 #define UBLK_DBG_QCOW2_FLUSH   (1U << 16)
 #define UBLK_DBG_QCOW2_META_L2  (1U << 17)
 #define UBLK_DBG_QCOW2_META_L1  (1U << 18)
 #define UBLK_DBG_QCOW2_META_RB  (1U << 19)
 #define UBLK_DBG_QCOW2_IO_WAITER  (1U << 20)
+
+#define UBLK_DBG_QCOW2_META (UBLK_DBG_QCOW2_META_L2 | UBLK_DBG_QCOW2_META_RB)
 
 enum QCOW2_PARA {
 #ifdef DEBUG_QCOW2_META_STRESS

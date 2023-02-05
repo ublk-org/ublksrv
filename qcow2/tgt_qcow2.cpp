@@ -508,7 +508,8 @@ static void qcow2_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 {
 	Qcow2State *qs = queue_to_qcow2state(q);
 
-	meta_log("%s %d, queued io %d\n", __func__, __LINE__, nr_queued_io);
+	ublk_dbg(UBLK_DBG_QCOW2_FLUSH | UBLK_DBG_QCOW2_META,
+			"%s %d, queued io %d\n", __func__, __LINE__, nr_queued_io);
 	qs->kill_slices(q);
 again:
 	qs->meta_flushing.run_flush(q, nr_queued_io);

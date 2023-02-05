@@ -345,7 +345,7 @@ int Qcow2MappingMeta::__flush(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	io_uring_prep_write(sqe, fd, (void *)((u64)addr + (off - offset)),
 			len, off);
 	sqe->user_data = build_user_data(tag, IORING_OP_WRITE, mio_id + 1, 1);
-	meta_log("%s %s: flushing %p tag %d off %lx sz %d flags %x refcnt %d\n",
+	ublk_dbg(UBLK_DBG_QCOW2_META, "%s %s: flushing %p tag %d off %lx sz %d flags %x refcnt %d\n",
 			__func__, typeid(*this).name(), this, tag, off,
 			len, flags, read_ref());
 	return 1;
@@ -623,7 +623,7 @@ int Qcow2SliceMeta::zero_my_cluster(Qcow2State &qs,
 			(1ULL << qs.header.cluster_bits));
 	sqe->user_data = build_user_data(tag,
 			IORING_OP_FALLOCATE, mio_id + 1, 1);
-	meta_log("%s %s: zeroing %p tag %d off %lx sz %d flags %x ref %d\n",
+	ublk_dbg(UBLK_DBG_QCOW2_META, "%s %s: zeroing %p tag %d off %lx sz %d flags %x ref %d\n",
 			__func__, typeid(*this).name(), this, tag, cluster_off,
 			(1ULL << qs.header.cluster_bits), flags, refcnt);
 	return 1;
@@ -667,11 +667,11 @@ int Qcow2SliceMeta::load(Qcow2State &qs, const qcow2_io_ctx_t &ioc,
 	/* meta io id starts from one and zero is reserved for plain ublk io */
 	sqe->user_data = build_user_data(tag, IORING_OP_READ, mio_id + 1, 1);
 
-	ublk_dbg(UBLK_DBG_QCOW2_META_L2|UBLK_DBG_QCOW2_META_RB, "%s: queue io op %d(%llx %x %llx)"
+	ublk_dbg(UBLK_DBG_QCOW2_META, "%s: queue io op %d(%llx %x %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d tgt_data %d)\n",
 			__func__, sqe->opcode, sqe->off, sqe->len, sqe->addr,
 			q->q_id, tag, sqe->opcode, 1, mio_id + 1);
-	meta_log("%s %s: loading %p tag %d off %lx sz %d flags %x ref %d\n",
+	ublk_dbg(UBLK_DBG_QCOW2_META, "%s %s: loading %p tag %d off %lx sz %d flags %x ref %d\n",
 			__func__, typeid(*this).name(), this, tag,
 			offset, buf_sz, flags, refcnt);
 
@@ -765,7 +765,7 @@ void Qcow2SliceMeta::io_done(Qcow2State &qs, const struct ublksrv_queue *q,
 		ublk_err( "%s: unknown op: tag %d op %d meta_id %d res %d\n",
 			__func__, tag, op, meta_id, cqe->res);
 
-	meta_log("%s: tag %d, tgt_data %d op %d meta (%p %x %lx %d) res %d\n",
+	ublk_dbg(UBLK_DBG_QCOW2_META, "%s: tag %d, tgt_data %d op %d meta (%p %x %lx %d) res %d\n",
 			__func__, tag, meta_id, op, this,
 			get_flags(), get_offset(), refcnt, cqe->res);
 
@@ -816,12 +816,12 @@ void Qcow2SliceMeta::reclaim_me()
 {
 	unsigned queues = header.qs.dev_info->nr_hw_queues;
 
-	meta_log("%s: %p off %llx flags %x\n", __func__,
+	ublk_dbg(UBLK_DBG_QCOW2_META, "%s: %p off %llx flags %x\n", __func__,
 			this, get_offset(), flags);
 
 	header.qs.remove_slice_from_evicted_list(this);
 
-	meta_log("%s: %p off %llx\n", __func__, this, get_offset());
+	ublk_dbg(UBLK_DBG_QCOW2_META, "%s: %p off %llx\n", __func__, this, get_offset());
 
 	//Tell the whole world, I am leaving
 	for (int i = 0; i < queues; i++) {
@@ -838,7 +838,7 @@ Qcow2RefcountBlock::Qcow2RefcountBlock(Qcow2State &qs, u64 off, u32 p_idx, u32 f
 	dirty_start_idx((unsigned)-1)
 {
 	entry_bits_order = qs.header.refcount_order;
-	meta_log("rb meta %p %llx -> %llx \n", this, virt_offset(), off);
+	ublk_dbg(UBLK_DBG_QCOW2_META_RB, "rb meta %p %llx -> %llx \n", this, virt_offset(), off);
 }
 
 
@@ -852,7 +852,7 @@ void Qcow2RefcountBlock::reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f)
 	flags  = tmp.get_flags() & ~QCOW2_META_DONT_ALLOC_BUF;
 	refcnt = tmp.read_ref();
 
-	meta_log("%s: %p refcnt %d flags %x offset %lx \n",
+	ublk_dbg(UBLK_DBG_QCOW2_META_RB, "%s: %p refcnt %d flags %x offset %lx \n",
 			__func__, this, refcnt, flags, offset);
 
 	next_free_idx = tmp.get_next_free_idx();
@@ -948,7 +948,7 @@ Qcow2L2Table::Qcow2L2Table(Qcow2State &qs, u64 off, u32 p_idx, u32 f):
 		entry_bits_order <<= 1;
 	dirty_start = (u64)-1;
 	dirty_end = 0;
-        meta_log("l2 meta %p %llx -> %llx \n", this, virt_offset(), off);
+        ublk_dbg(UBLK_DBG_QCOW2_META_L2, "l2 meta %p %llx -> %llx \n", this, virt_offset(), off);
 }
 
 void Qcow2L2Table::reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f)
@@ -961,7 +961,7 @@ void Qcow2L2Table::reset(Qcow2State &qs, u64 off, u32 p_idx, u32 f)
 	flags = tmp.get_flags() & ~QCOW2_META_DONT_ALLOC_BUF;
 	refcnt = tmp.read_ref();
 
-	meta_log("%s: %p refcnt %d flags %x offset %lx \n",
+	ublk_dbg(UBLK_DBG_QCOW2_META_L2, "%s: %p refcnt %d flags %x offset %lx \n",
 			__func__, this, refcnt, flags, offset);
 
 	next_free_idx = tmp.get_next_free_idx();
