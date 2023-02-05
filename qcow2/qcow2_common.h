@@ -17,6 +17,7 @@
 #define UBLK_DBG_QCOW2_META_L1  (1U << 18)
 #define UBLK_DBG_QCOW2_META_RB  (1U << 19)
 #define UBLK_DBG_QCOW2_IO_WAITER  (1U << 20)
+#define UBLK_DBG_QCOW2_ALLOCATOR  (1U << 21)
 
 #define UBLK_DBG_QCOW2_META (UBLK_DBG_QCOW2_META_L2 | UBLK_DBG_QCOW2_META_RB)
 
@@ -55,27 +56,37 @@ static inline void qcow2_log(const char *fmt, ...)
     vsyslog(LOG_INFO, fmt, ap);
 }
 
-#ifdef DEBUG_QCOW2_META_OBJ
-#define meta_log  qcow2_log
-#else
-#define meta_log(...)  do {}while(0)
-#endif
+//be careful
+//#DEBUG_QCOW2_META_OBJ, still required for some meta debug
 
-#ifdef DEBUG_QCOW2_ALLOCATOR
-#define alloc_log  qcow2_log
+#ifdef QCOW2_DEBUG
+static inline void alloc_log(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    ublk_dbg(UBLK_DBG_QCOW2_ALLOCATOR, fmt, ap);
+}
+
+static inline void flush_log(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    ublk_dbg(UBLK_DBG_QCOW2_FLUSH, fmt, ap);
+}
+
+static inline void qcow2_io_log(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    ublk_dbg(UBLK_DBG_IO, fmt, ap);
+}
+
 #else
 #define alloc_log(...)  do {}while(0)
-#endif
-
-#ifdef DEBUG_QCOW2_META_FLUSH
-#define flush_log  qcow2_log
-#else
 #define flush_log(...)  do {}while(0)
-#endif
-
-#ifdef DEBUG_QCOW2_IO
-#define qcow2_io_log  qcow2_log
-#else
 #define qcow2_io_log(...)  do {}while(0)
 #endif
 
