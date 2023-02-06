@@ -113,7 +113,7 @@ jobs:
     - name: "start: boot fedora in qemu"
       working-directory: ci
       run: |
-        RUNNER_TRACKING_ID="" && sudo $(which mkosi) qemu -serial none -monitor none -display none &
+        RUNNER_TRACKING_ID="" && sudo $(which mkosi) qemu -serial none -monitor none -display none | tee ${{ github.workspace }}/qemu.log &
 
     - name: "connect: check ssh connection"
       shell: bash
@@ -139,4 +139,5 @@ jobs:
       if: always()
       continue-on-error: true
       run: |
+        cat ${{ github.workspace }}/qemu.log
         sudo pkill -f qemu
