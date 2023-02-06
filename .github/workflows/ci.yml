@@ -78,7 +78,7 @@ jobs:
     - name: "install: mkosi + dependencies"
       shell: bash
       run: |
-        sudo apt update
+        sudo apt update -o Acquire::Retries=3
         sudo apt install -y dnf rpm systemd-container qemu-system-x86 ovmf e2fsprogs btrfs-progs
         #python3 -m pip install --user git+https://github.com/systemd/mkosi.git
         python3 -m pip install --user https://github.com/systemd/mkosi/archive/refs/tags/v14.tar.gz
