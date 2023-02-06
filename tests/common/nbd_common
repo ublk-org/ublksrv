@@ -3,6 +3,15 @@
 
 export NBDSRV=127.0.0.1
 export NBD_SIZE=2G
+export _NBDS_PID=${UBLK_TMP_DIR}/nbds_pid
+
+_kill_nbdkit() {
+	if [ -f ${_NBDS_PID} ]; then
+		local nbds_pid=`cat ${_NBDS_PID}`
+		kill -9 ${nbds_pid} > /dev/null 2>&1
+		sleep 2
+	fi
+}
 
 _create_nbd_image() {
 	local type=$1
@@ -12,15 +21,13 @@ _create_nbd_image() {
 	which nbdkit > /dev/null 2>&1
 	[ $? -ne 0 ] && echo "please install nbdkit package" && exit -1
 
-	killall -9 nbdkit > /dev/null 2>&1
-
 	if [ $type == "none" ]; then
-		nbdkit memory $my_size
+		nbdkit -P ${_NBDS_PID} memory $my_size
 	elif [ $type == "nullb" ]; then
 		modprobe -r null_blk
 		modprobe null_blk
 		my_file="/dev/nullb0"
-		nbdkit file $my_file
+		nbdkit -P ${_NBDS_PID} file $my_file
 	else
 		truncate -s ${my_size} ${my_file}
 
@@ -28,7 +35,7 @@ _create_nbd_image() {
 		local my_count=`expr ${my_size} / 1048576`
 		dd if=/dev/zero of=$my_file bs=1M count=${my_count} oflag=direct > /dev/null 2>&1
 
-		nbdkit file $my_file
+		nbdkit -P ${_NBDS_PID} file $my_file
 	fi
 	sleep 1
 	echo $my_file
@@ -37,8 +44,9 @@ _create_nbd_image() {
 _remove_nbd_image() {
 	local file=$1
 
-	sleep 2
-	killall -9 nbdkit > /dev/null 2>&1
+	_kill_nbdkit
+
+	[ -f ${_NBDS_PID} ] && rm -f ${_NBDS_PID}
 
 	if [ "$file" == "/dev/nullb0" ]; then
 		modprobe -r null_blk
