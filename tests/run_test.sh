@@ -25,7 +25,7 @@ run_test() {
 	TMP=`dirname $TS`
 	GRP=`basename $TMP`
 
-	echo "running $GRP/$NAME"
+	echo "running $GRP/$NAME" | tee /dev/kmsg
 	sh -c $TS &
 	local TPID=$!
 	local timeout=250
