@@ -14,12 +14,6 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-    - name: "install: prerequisites"
-      shell: bash
-      run: |
-        sudo apt update
-        sudo apt install -y autoconf-archive
-
     - name: "acquire: ubdsrv"
       uses: actions/checkout@v3
       with:

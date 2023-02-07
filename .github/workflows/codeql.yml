@@ -41,12 +41,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Setup prerequisites
-      shell: bash
-      run: |
-        sudo apt update
-        sudo apt install -y autoconf-archive
-
     - name: Install liburing
       shell: bash
       run: |
