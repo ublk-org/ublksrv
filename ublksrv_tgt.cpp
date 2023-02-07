@@ -1043,6 +1043,9 @@ static void cmd_usage(const char *cmd)
 	cmd_dev_add_usage(cmd);
 	cmd_dev_del_usage(cmd);
 	cmd_dev_list_usage(cmd);
+
+	printf("%s -v [--version]\n", cmd);
+	printf("%s -h [--help]\n", cmd);
 }
 
 int main(int argc, char *argv[])
