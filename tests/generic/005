@@ -4,6 +4,7 @@
 . common/fio_common
 . common/loop_common
 . common/qcow2_common
+. common/nbd_common
 
 echo -e "\trun fio with dev recovery, type 1:"
 echo -e "\t(1)kill all ubq_deamon, (2)recover with new ubq_daemon, (3)delete dev"
@@ -26,6 +27,8 @@ ublk_run_recover_test()
 
 	if [ "$type" == "null" ]; then
 		local backing=""
+    elif [ "$type" == "nbd" ]; then
+		local backing="--host 127.0.0.1"
 	else
 		local backing="-f $file"
 	fi
