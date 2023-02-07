@@ -1002,6 +1002,8 @@ static int nbd_recovery_tgt(struct ublksrv_dev *dev, int type)
 {
 	uint16_t flags = 0;
 
+	dev->tgt.tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
+
 	nbd_setup_tgt(dev, type, true, &flags);
 
 	return 0;
