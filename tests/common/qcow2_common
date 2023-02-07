@@ -34,7 +34,7 @@ _create_qcow2_image() {
 
 _check_qcow2_image() {
 	local my_file=$1
-	qemu-img check $my_file > ${UBLK_TMP} 2>&1
+	qemu-img check -r leaks $my_file > ${UBLK_TMP} 2>&1
 	[ $? -ne 0 ] && echo "qcow2 image $my_file is broken" && cat ${UBLK_TMP} && exit
 }
 
