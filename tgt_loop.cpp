@@ -9,6 +9,35 @@
 static bool user_copy;
 static bool block_device;
 
+static long use_zc;
+
+static inline void io_uring_prep_read_zc(struct io_uring_sqe *lead,
+		struct io_uring_sqe *mem, int dev_fd,
+		const struct ublksrv_io_desc *iod, int tag, int q_id, int fd)
+{
+	unsigned ublk_op = ublksrv_get_op(iod);
+
+	io_uring_prep_grp_lead(lead, dev_fd, tag, q_id, 0);
+
+	io_uring_prep_read(mem, fd, (void *)0, iod->nr_sectors << 9,
+			iod->start_sector << 9);
+	io_uring_sqe_set_flags(mem, IOSQE_FIXED_FILE | IOSQE_SQE_GRP_KBUF);
+	mem->user_data = build_user_data(tag, ublk_op, 0, 1);
+}
+
+static inline void io_uring_prep_write_zc(struct io_uring_sqe *lead,
+		struct io_uring_sqe *mem, int dev_fd,
+		const struct ublksrv_io_desc *iod, int tag, int q_id, int fd)
+{
+	unsigned ublk_op = ublksrv_get_op(iod);
+
+	io_uring_prep_grp_lead(lead, dev_fd, tag, q_id, 0);
+	io_uring_prep_write(mem, fd, (void *)0, iod->nr_sectors << 9,
+			iod->start_sector << 9);
+	io_uring_sqe_set_flags(mem, IOSQE_FIXED_FILE | IOSQE_SQE_GRP_KBUF);
+	mem->user_data = build_user_data(tag, ublk_op, 0, 1);
+}
+
 static bool backing_supports_discard(char *name)
 {
 	int fd;
@@ -87,6 +116,7 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	user_copy = info->flags & UBLK_F_USER_COPY;
 	if (user_copy)
 		tgt->tgt_ring_depth *= 2;
+	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 
 	return 0;
 }
@@ -251,7 +281,19 @@ static void loop_queue_tgt_read(const struct ublksrv_queue *q,
 {
 	unsigned ublk_op = ublksrv_get_op(iod);
 
-	if (user_copy) {
+	if (use_zc) {
+		struct io_uring_sqe *sqe, *sqe2;
+		ublk_get_sqe_pair(q->ring_ptr, &sqe, &sqe2);
+
+		io_uring_prep_read_zc(sqe, sqe2,
+				0, /* fds[0] */
+				iod,
+				tag,
+				q->q_id,
+				1	/*fds[1]*/
+				);
+
+	} else if (user_copy) {
 		struct io_uring_sqe *sqe, *sqe2;
 		__u64 pos = ublk_pos(q->q_id, tag, 0);
 		void *buf = ublksrv_queue_get_io_buf(q, tag);
@@ -288,7 +330,18 @@ static void loop_queue_tgt_write(const struct ublksrv_queue *q,
 {
 	unsigned ublk_op = ublksrv_get_op(iod);
 
-	if (user_copy) {
+	if (use_zc) {
+		struct io_uring_sqe *sqe, *sqe2;
+		ublk_get_sqe_pair(q->ring_ptr, &sqe, &sqe2);
+
+		io_uring_prep_write_zc(sqe, sqe2,
+				0, /* fds[0] */
+				iod,
+				tag,
+				q->q_id,
+				1	/*fds[1]*/
+				);
+	} else if (user_copy) {
 		struct io_uring_sqe *sqe, *sqe2;
 		__u64 pos = ublk_pos(q->q_id, tag, 0);
 		void *buf = ublksrv_queue_get_io_buf(q, tag);
@@ -430,6 +483,7 @@ static void loop_tgt_io_done(const struct ublksrv_queue *q,
 			__func__, cqe->res, q->q_id,
 			user_data_to_tag(cqe->user_data),
 			user_data_to_op(cqe->user_data));
+
 	io->tgt_io_cqe = cqe;
 	io->co.resume();
 }
