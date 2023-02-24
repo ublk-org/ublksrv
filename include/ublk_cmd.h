@@ -44,6 +44,7 @@
 #define	UBLK_IO_FETCH_REQ		0x20
 #define	UBLK_IO_COMMIT_AND_FETCH_REQ	0x21
 #define	UBLK_IO_NEED_GET_DATA	0x22
+#define UBLK_IO_FUSED_SUBMIT_IO	0x23
 
 /* only ABORT means that no re-fetch */
 #define UBLK_IO_RES_OK			0
