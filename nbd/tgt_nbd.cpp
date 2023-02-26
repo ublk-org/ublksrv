@@ -11,6 +11,8 @@
 //#define NBD_DEBUG_IO 1
 //#define NBD_DEBUG_CQE 1
 
+#define NBD_USE_SENDMSG 1
+
 #ifdef NBD_DEBUG_IO
 #define NBD_IO_DBG  ublk_err
 #else
@@ -29,6 +31,7 @@
 
 #define NBD_OP_READ_REQ  0x80
 #define NBD_OP_READ_REPLY  0x81
+#define NBD_OP_WRITE_REQ  0x82
 
 #define NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, name, val) do { \
 	int ret;						\
@@ -178,7 +181,51 @@ static inline void nbd_prep_non_write_sqe(struct io_uring_sqe *sqe, int fd,
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 }
 
-static inline int nbd_prep_write_sqe(struct io_uring_sqe *sqe, int fd,
+#ifndef NBD_USE_SENDMSG
+/* use send() instead of sendmsg() */
+static inline int nbd_prep_write_sqe(const struct ublksrv_queue *q,
+		struct io_uring_sqe *sqe, int fd,
+		const struct msghdr *msg, unsigned msg_flags, bool use_send_zc,
+		struct io_uring_sqe **last_sqe, unsigned ublk_op, unsigned tag,
+		unsigned nr_sects)
+{
+	struct io_uring_sqe *sqe2 = io_uring_get_sqe(q->ring_ptr);
+
+	if (!sqe2) {
+		nbd_err("%s: get sqe failed, op %d\n", __func__, ublk_op);
+		return -ENOMEM;
+	}
+
+	io_uring_prep_send(sqe, fd, msg->msg_iov[0].iov_base,
+			msg->msg_iov[0].iov_len, msg_flags);
+	sqe->user_data = build_user_data(tag, NBD_OP_WRITE_REQ, 0, 1);
+	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
+			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+
+	if (use_send_zc) {
+#ifndef HAVE_LIBURING_SEND_ZC
+		io_uring_prep_send_zc(sqe2, fd, msg->msg_iov[1].iov_base,
+			msg->msg_iov[1].iov_len, msg_flags, 0);
+#else
+		io_uring_prep_send(sqe2, fd, msg->msg_iov[1].iov_base,
+			msg->msg_iov[1].iov_len, msg_flags);
+#endif
+	} else {
+		io_uring_prep_send(sqe2, fd, msg->msg_iov[1].iov_base,
+			msg->msg_iov[1].iov_len, msg_flags);
+	}
+	sqe2->user_data = build_user_data(tag, ublk_op, nr_sects, 1);
+	io_uring_sqe_set_flags(sqe2, /*IOSQE_CQE_SKIP_SUCCESS |*/
+			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+
+	*last_sqe = sqe2;
+	return 2;
+}
+
+#else
+
+static inline int nbd_prep_write_sqe(const struct ublksrv_queue *q,
+		struct io_uring_sqe *sqe, int fd,
 		const struct msghdr *msg, unsigned msg_flags, bool use_send_zc,
 		struct io_uring_sqe **last_sqe, unsigned ublk_op, unsigned tag,
 		unsigned nr_sects)
@@ -199,6 +246,7 @@ static inline int nbd_prep_write_sqe(struct io_uring_sqe *sqe, int fd,
 	*last_sqe = sqe;
 	return 1;
 }
+#endif
 
 static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
@@ -234,10 +282,11 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	if (ublk_op != UBLK_IO_OP_WRITE)
 		nbd_prep_non_write_sqe(sqe, q->q_id + 1, req, msg_flags,
 				ublk_op, data->tag);
-	else
-		queued_sqe = nbd_prep_write_sqe(sqe, q->q_id + 1, msg,
+	else {
+		queued_sqe = nbd_prep_write_sqe(q, sqe, q->q_id + 1, msg,
 				msg_flags, q_data->use_send_zc, &last_sqe,
 				ublk_op, data->tag, data->iod->nr_sectors);
+	}
 	q_data->last_send_sqe = last_sqe;
 	q_data->chained_send_ios += queued_sqe;
 
@@ -601,14 +650,17 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 		nbd_err("%s: tag %d cqe fail %d %llx\n",
 				__func__, tag, cqe->res, cqe->user_data);
 
+	total = sizeof(nbd_request);
 	/*
 	 * We have set MSG_WAITALL, so short send shouldn't be possible,
 	 * but just warn in case of io_uring regression
 	 */
 	if (ublk_op == UBLK_IO_OP_WRITE)
-		total = sizeof(nbd_request) + (nr_sects << 9);
-	else
-		total = sizeof(nbd_request);
+#ifdef NBD_USE_SENDMSG
+		total += (nr_sects << 9);
+#else
+		total = (nr_sects << 9);
+#endif
 	if (cqe->res < total)
 		nbd_err("%s: short send/receive tag %d op %d %llx, len %u written %u cqe flags %x\n",
 				__func__, tag, ublk_op, cqe->user_data,
@@ -890,7 +942,11 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	 * then half of SQ memory consumption can be saved
 	 * especially we use IORING_SETUP_SQE128
 	 */
+#ifdef NBD_USE_SENDMSG
 	tgt->tgt_ring_depth = info->queue_depth + 1;
+#else
+	tgt->tgt_ring_depth = info->queue_depth * 2 + 1;
+#endif
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
 	data->unix_sock = strlen(unix_path) > 0 ? true : false;
