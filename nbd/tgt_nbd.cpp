@@ -167,6 +167,39 @@ static inline void __nbd_build_req(const struct ublksrv_queue *q,
 	memcpy(req->handle, &handle, sizeof(handle));
 }
 
+static inline void nbd_prep_non_write_sqe(struct io_uring_sqe *sqe, int fd,
+		const struct nbd_request *req, unsigned msg_flags,
+		unsigned ublk_op, unsigned tag)
+{
+	io_uring_prep_send(sqe, fd, req, sizeof(*req), msg_flags);
+
+	sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
+	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
+			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+}
+
+static inline int nbd_prep_write_sqe(struct io_uring_sqe *sqe, int fd,
+		const struct msghdr *msg, unsigned msg_flags, bool use_send_zc,
+		struct io_uring_sqe **last_sqe, unsigned ublk_op, unsigned tag,
+		unsigned nr_sects)
+{
+	if (use_send_zc)
+		io_uring_prep_sendmsg_zc(sqe, fd, msg, msg_flags);
+	else
+		io_uring_prep_sendmsg(sqe, fd, msg, msg_flags);
+	/*
+	 * The encoded nr_sectors should only be used for validating write req
+	 * when its cqe is completed, since iod data isn't available at that time
+	 * because request can be reused.
+	 */
+	sqe->user_data = build_user_data(tag, ublk_op, nr_sects, 1);
+	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
+			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+
+	*last_sqe = sqe;
+	return 1;
+}
+
 static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct nbd_request *req, const struct msghdr *msg)
@@ -176,6 +209,8 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
 	unsigned msg_flags = MSG_NOSIGNAL;
+	struct io_uring_sqe *last_sqe = sqe;
+	int queued_sqe = 1;
 
 	if (!sqe) {
 		nbd_err("%s: get sqe failed, tag %d op %d\n",
@@ -193,32 +228,18 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	 */
 	msg_flags |= MSG_WAITALL;
 
-	if (ublk_op != UBLK_IO_OP_WRITE) {
-		io_uring_prep_send(sqe, q->q_id + 1, req,
-				sizeof(*req), msg_flags);
-	} else {
-		if (q_data->use_send_zc)
-			io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
-				msg_flags);
-		else
-			io_uring_prep_sendmsg(sqe, q->q_id + 1, msg,
-				msg_flags);
-	}
-
 	if (ublk_op == UBLK_IO_OP_READ)
 		ublk_op = NBD_OP_READ_REQ;
 
-	/*
-	 * The encoded nr_sectors should only be used for validating write req
-	 * when its cqe is completed, since iod data isn't available at that time
-	 * because request can be reused.
-	 */
-	sqe->user_data = build_user_data(data->tag, ublk_op, ublk_op ==
-			UBLK_IO_OP_WRITE ? data->iod->nr_sectors : 0, 1);
-	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
-			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
-	q_data->last_send_sqe = sqe;
-	q_data->chained_send_ios += 1;
+	if (ublk_op != UBLK_IO_OP_WRITE)
+		nbd_prep_non_write_sqe(sqe, q->q_id + 1, req, msg_flags,
+				ublk_op, data->tag);
+	else
+		queued_sqe = nbd_prep_write_sqe(sqe, q->q_id + 1, msg,
+				msg_flags, q_data->use_send_zc, &last_sqe,
+				ublk_op, data->tag, data->iod->nr_sectors);
+	q_data->last_send_sqe = last_sqe;
+	q_data->chained_send_ios += queued_sqe;
 
 	NBD_IO_DBG("%s: queue io op %d(%llu %x %llx) ios(%u %u)"
 			" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
