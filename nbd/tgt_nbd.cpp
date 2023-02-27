@@ -11,8 +11,6 @@
 //#define NBD_DEBUG_IO 1
 //#define NBD_DEBUG_CQE 1
 
-#define NBD_USE_SENDMSG 1
-
 #ifdef NBD_DEBUG_IO
 #define NBD_IO_DBG  ublk_err
 #else
@@ -93,6 +91,33 @@ struct nbd_io_data {
 	unsigned int cmd_cookie;
 	unsigned int done;	//for handling partial recv
 };
+
+static int use_zc = 0;
+
+static inline void io_uring_prep_send_ublk_zc(struct io_uring_sqe *sqe, int dev_fd,
+		int tag, int q_id, int fd, void *buf, unsigned offset,
+		unsigned len, unsigned msg_flags)
+{
+	struct io_uring_sqe *secondary = sqe + 1;
+
+	io_uring_prep_fused_primary(sqe, dev_fd, tag, q_id, 0);
+
+	io_uring_prep_send(secondary, fd, (void *)(u64)offset, len, msg_flags);
+	io_uring_sqe_set_flags(secondary, IOSQE_FIXED_FILE |
+			IOSQE_CQE_SKIP_SUCCESS | IOSQE_IO_LINK);
+}
+
+static inline void io_uring_prep_recv_ublk_zc(struct io_uring_sqe *sqe, int dev_fd,
+		int tag, int q_id, int fd, void *buf, unsigned offset, unsigned len)
+{
+	struct io_uring_sqe *secondary = sqe + 1;
+
+	io_uring_prep_fused_primary(sqe, dev_fd, tag, q_id, 0);
+
+	io_uring_prep_recv(secondary, fd, (void *)(u64)offset, len, MSG_WAITALL);
+	io_uring_sqe_set_flags(secondary, IOSQE_FIXED_FILE |
+			IOSQE_CQE_SKIP_SUCCESS);
+}
 
 static inline struct nbd_queue_data *
 nbd_get_queue_data(const struct ublksrv_queue *q)
@@ -181,24 +206,25 @@ static inline void nbd_prep_non_write_sqe(struct io_uring_sqe *sqe, int fd,
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 }
 
-#ifndef NBD_USE_SENDMSG
 /* use send() instead of sendmsg() */
-static inline int nbd_prep_write_sqe(const struct ublksrv_queue *q,
+static inline int nbd_prep_write_sqe_zc(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
 		struct io_uring_sqe *sqe, int fd,
 		const struct msghdr *msg, unsigned msg_flags, bool use_send_zc,
-		struct io_uring_sqe **last_sqe, unsigned ublk_op, unsigned tag,
-		unsigned nr_sects)
+		struct io_uring_sqe **last_sqe)
 {
+	unsigned nr_sects = msg->msg_iov[1].iov_len >> 9;
 	struct io_uring_sqe *sqe2 = io_uring_get_sqe(q->ring_ptr);
 
 	if (!sqe2) {
-		nbd_err("%s: get sqe failed, op %d\n", __func__, ublk_op);
+		nbd_err("%s: get sqe failed, op %d\n", __func__,
+				UBLK_IO_OP_WRITE);
 		return -ENOMEM;
 	}
 
 	io_uring_prep_send(sqe, fd, msg->msg_iov[0].iov_base,
 			msg->msg_iov[0].iov_len, msg_flags);
-	sqe->user_data = build_user_data(tag, NBD_OP_WRITE_REQ, 0, 1);
+	sqe->user_data = build_user_data(data->tag, NBD_OP_WRITE_REQ, 0, 1);
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 
@@ -211,25 +237,27 @@ static inline int nbd_prep_write_sqe(const struct ublksrv_queue *q,
 			msg->msg_iov[1].iov_len, msg_flags);
 #endif
 	} else {
-		io_uring_prep_send(sqe2, fd, msg->msg_iov[1].iov_base,
-			msg->msg_iov[1].iov_len, msg_flags);
+		//io_uring_prep_send(sqe2, fd, msg->msg_iov[1].iov_base,
+		//	msg->msg_iov[1].iov_len, msg_flags);
+		io_uring_prep_send_ublk_zc(sqe2, 0, data->tag, q->q_id, fd,
+				msg->msg_iov[1].iov_base, 0,
+				msg->msg_iov[1].iov_len, msg_flags);
 	}
-	sqe2->user_data = build_user_data(tag, ublk_op, nr_sects, 1);
-	io_uring_sqe_set_flags(sqe2, /*IOSQE_CQE_SKIP_SUCCESS |*/
-			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+	sqe2->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, nr_sects, 1);
+	io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 
 	*last_sqe = sqe2;
 	return 2;
 }
 
-#else
-
 static inline int nbd_prep_write_sqe(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
 		struct io_uring_sqe *sqe, int fd,
 		const struct msghdr *msg, unsigned msg_flags, bool use_send_zc,
-		struct io_uring_sqe **last_sqe, unsigned ublk_op, unsigned tag,
-		unsigned nr_sects)
+		struct io_uring_sqe **last_sqe)
 {
+	unsigned nr_sects = msg->msg_iov[1].iov_len >> 9;
+
 	if (use_send_zc)
 		io_uring_prep_sendmsg_zc(sqe, fd, msg, msg_flags);
 	else
@@ -239,14 +267,13 @@ static inline int nbd_prep_write_sqe(const struct ublksrv_queue *q,
 	 * when its cqe is completed, since iod data isn't available at that time
 	 * because request can be reused.
 	 */
-	sqe->user_data = build_user_data(tag, ublk_op, nr_sects, 1);
+	sqe->user_data = build_user_data(data->tag, UBLK_IO_OP_WRITE, nr_sects, 1);
 	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 
 	*last_sqe = sqe;
 	return 1;
 }
-#endif
 
 static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
@@ -283,9 +310,12 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		nbd_prep_non_write_sqe(sqe, q->q_id + 1, req, msg_flags,
 				ublk_op, data->tag);
 	else {
-		queued_sqe = nbd_prep_write_sqe(q, sqe, q->q_id + 1, msg,
-				msg_flags, q_data->use_send_zc, &last_sqe,
-				ublk_op, data->tag, data->iod->nr_sectors);
+		if (use_zc)
+		queued_sqe = nbd_prep_write_sqe_zc(q, data, sqe, q->q_id + 1, msg,
+				msg_flags, q_data->use_send_zc, &last_sqe);
+		else
+		queued_sqe = nbd_prep_write_sqe(q, data, sqe, q->q_id + 1, msg,
+				msg_flags, q_data->use_send_zc, &last_sqe);
 	}
 	q_data->last_send_sqe = last_sqe;
 	q_data->chained_send_ios += queued_sqe;
@@ -463,11 +493,12 @@ static void __nbd_resume_read_req(const struct ublk_io_data *data,
 /* recv completion drives the whole IO flow */
 static inline int nbd_start_recv(const struct ublksrv_queue *q,
 		struct nbd_io_data *nbd_data, void *buf, int len,
-		bool reply, unsigned done)
+		unsigned done, const struct ublk_io_data *data)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
-	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
+	bool reply = (data == NULL);
+	unsigned int op =  reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
 	unsigned int tag = q->q_depth;	//recv always use this extra tag
 
 	if (!sqe) {
@@ -477,7 +508,13 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
 	}
 
 	nbd_data->done = done;
-	io_uring_prep_recv(sqe, q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
+
+	if (!use_zc || reply)
+		io_uring_prep_recv(sqe, q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
+	else
+		io_uring_prep_recv_ublk_zc(sqe, 0, data->tag, q->q_id, q->q_id + 1,
+			buf, done, len - done);
+
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 
 	/* bit63 marks us as tgt io */
@@ -503,12 +540,15 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
  */
 static int nbd_do_recv(const struct ublksrv_queue *q,
 		struct nbd_io_data *nbd_data, int fd,
-		void *buf, unsigned len)
+		void *buf, unsigned len, const struct ublk_io_data *data)
 {
 	unsigned msg_flags = MSG_DONTWAIT | MSG_WAITALL;
 	int i = 0, done = 0;
-	const int loops = len < 512 ? 16 : 32;
+	int loops = len < 512 ? 16 : 32;
 	int ret;
+
+	if (use_zc && data)
+		loops = 0;
 
 	while (i++ < loops && done < len) {
 		ret = recv(fd, (char *)buf + done, len - done, msg_flags);
@@ -523,7 +563,7 @@ static int nbd_do_recv(const struct ublksrv_queue *q,
 
 	NBD_IO_DBG("%s: sync(non-blocking) recv %d(%s)/%d/%u\n",
 			__func__, ret, strerror(errno), done, len);
-	ret = nbd_start_recv(q, nbd_data, buf, len, len < 512, done);
+	ret = nbd_start_recv(q, nbd_data, buf, len, done, data);
 
 	return ret;
 }
@@ -552,7 +592,7 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 		int ret;
 read_reply:
 		ret = nbd_do_recv(q, nbd_data, fd, &q_data->reply,
-				sizeof(q_data->reply));
+				sizeof(q_data->reply), NULL);
 		if (ret == sizeof(q_data->reply)) {
 			nbd_data->done = ret;
 			fake_cqe->res = 0;
@@ -575,7 +615,8 @@ read_io:
 		ublk_assert(io_data != NULL);
 
 		len = io_data->iod->nr_sectors << 9;
-		ret = nbd_do_recv(q, nbd_data, fd, (void *)io_data->iod->addr, len);
+		ret = nbd_do_recv(q, nbd_data, fd, (void *)io_data->iod->addr, len,
+				io_data);
 		if (ret == len) {
 			nbd_data->done = ret;
 			fake_cqe->res = 0;
@@ -655,12 +696,12 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 	 * We have set MSG_WAITALL, so short send shouldn't be possible,
 	 * but just warn in case of io_uring regression
 	 */
-	if (ublk_op == UBLK_IO_OP_WRITE)
-#ifdef NBD_USE_SENDMSG
-		total += (nr_sects << 9);
-#else
-		total = (nr_sects << 9);
-#endif
+	if (ublk_op == UBLK_IO_OP_WRITE) {
+		if (!use_zc)
+			total += (nr_sects << 9);
+		else
+			total = (nr_sects << 9);
+	}
 	if (cqe->res < total)
 		nbd_err("%s: short send/receive tag %d op %d %llx, len %u written %u cqe flags %x\n",
 				__func__, tag, ublk_op, cqe->user_data,
@@ -723,7 +764,16 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 			q_data->send_sqe_chain_busy = 1;
 	}
 	if (q_data->last_send_sqe) {
-		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
+		struct io_uring_sqe *sqe = q_data->last_send_sqe;
+
+		sqe->flags &= ~IOSQE_IO_LINK;
+		/* Keep secondary request's link in mind */
+		if (sqe->opcode == IORING_OP_FUSED_CMD) {
+			struct io_uring_sqe *secondary = sqe + 1;
+
+			secondary->flags &= ~IOSQE_IO_LINK;
+		}
+
 		q_data->last_send_sqe = NULL;
 	}
 }
@@ -936,17 +986,17 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 
 	tgt->dev_size = size64;
 
+	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 	/*
 	 * one extra slot for receiving reply & read io, so
 	 * the preferred queue depth should be 127 or 255,
 	 * then half of SQ memory consumption can be saved
 	 * especially we use IORING_SETUP_SQE128
 	 */
-#ifdef NBD_USE_SENDMSG
-	tgt->tgt_ring_depth = info->queue_depth + 1;
-#else
-	tgt->tgt_ring_depth = info->queue_depth * 2 + 1;
-#endif
+	if (!use_zc)
+		tgt->tgt_ring_depth = info->queue_depth + 1;
+	else
+		tgt->tgt_ring_depth = info->queue_depth * 2 + 1;
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
 	data->unix_sock = strlen(unix_path) > 0 ? true : false;
