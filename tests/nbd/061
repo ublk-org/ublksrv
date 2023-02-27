@@ -1,0 +1,15 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+
+. common/fio_common
+. common/nbd_common
+
+echo "run perf test via ublk-nbd(nbd server: $NBDSRV:nbdkit memory $NBD_SIZE)"
+
+file=`_create_image "nbd" "none" $NBD_SIZE`
+
+export T_TYPE_PARAMS="-t nbd -q 1 -d 127 -z --host $NBDSRV"
+__run_dev_perf 1
+
+_remove_image "nbd" $file
+
