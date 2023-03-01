@@ -303,7 +303,7 @@ __run_dev_perf()
 
 	DEV=`__create_ublk_dev`
 
-	echo -e "\tublk ${T_TYPE_PARAMS}, fio: ($DEV libaio dio io jobs($JOBS))..."
+	echo -e "\tublk add ${T_TYPE_PARAMS}, fio: ($DEV libaio dio io jobs($JOBS))..."
 	__run_dev_perf_no_create "ublk" $JOBS $DEV
 
 	__remove_ublk_dev $DEV

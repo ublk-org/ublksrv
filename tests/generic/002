@@ -19,7 +19,7 @@ ublk_run_abort_test()
 	for CNT in `seq $LOOPS`; do
 		export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA"
 		DEV=`__create_ublk_dev`
-		echo -e "\trun fio with killing $DEV(ublk $T_TYPE_PARAMS) queue daemon $CNT"
+		echo -e "\trun fio with killing $DEV(ublk add $T_TYPE_PARAMS) queue daemon $CNT"
 		__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 		sleep 2
 		queue_tid=`__ublk_get_queue_tid $DEV 0`
