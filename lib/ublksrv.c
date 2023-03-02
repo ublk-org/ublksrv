@@ -520,6 +520,12 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 	int io_data_size = round_up(dev->tgt.io_data_size,
 			sizeof(unsigned long));
 	int ring_depth, cq_depth, nr_ios;
+	bool use_zc = ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY;
+	unsigned ring_flags = IORING_SETUP_COOP_TASKRUN;
+
+	/* sqe128 isn't needed before supporting zc */
+	if (!use_zc)
+		ring_flags |= IORING_SETUP_SQE128;
 
 	ublksrv_calculate_depths(dev, &ring_depth, &cq_depth, &nr_ios);
 
@@ -564,7 +570,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 		q->ios[i].buf_addr = NULL;
 
 		/* extra ios needn't to allocate io buffer */
-		if (i >= q->q_depth)
+		if (i >= q->q_depth || use_zc)
 			goto skip_alloc_buf;
 
 		if (dev->tgt.ops->alloc_io_buf)
@@ -596,12 +602,17 @@ skip_alloc_buf:
 		//ublk_assert(io_data_size ^ (unsigned long)q->ios[i].data.private_data);
 	}
 
-	ublksrv_setup_ring_params(&p, cq_depth,
-			IORING_SETUP_SQE128 | IORING_SETUP_COOP_TASKRUN);
+	ublksrv_setup_ring_params(&p, cq_depth, ring_flags);
 	ret = io_uring_queue_init_params(ring_depth, &q->ring, &p);
 	if (ret < 0) {
 		ublk_err("ublk dev %d queue %d setup io_uring failed %d",
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
+		goto fail;
+	}
+
+	if (!(p.features & IORING_FEAT_SQE_GROUP)) {
+		ublk_err("ublk dev %d queue %d io_uring doesn't support SQE_GROUP %d",
+				q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 		goto fail;
 	}
 
