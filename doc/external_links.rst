@@ -37,5 +37,11 @@ Uses
 
 News
 ====
+
+2023
+----
+
+`miniublk merged to blktests <https://github.com/osandov/blktests/commit/d42fe976e4f599011229085835d32f70185b9829>`
+
 `OpenAnolis: ANCK 5.10 will support ublk[Chinese] <https://openanolis.cn/blog/detail/736556082902305670>`
 
