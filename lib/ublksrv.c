@@ -513,6 +513,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 	int io_data_size = round_up(dev->tgt.io_data_size,
 			sizeof(unsigned long));
 	int ring_depth, cq_depth, nr_ios;
+	bool use_zc = ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY;
 
 	ublksrv_calculate_depths(dev, &ring_depth, &cq_depth, &nr_ios);
 
@@ -552,7 +553,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 		q->ios[i].buf_addr = NULL;
 
 		/* extra ios needn't to allocate io buffer */
-		if (i >= q->q_depth)
+		if (i >= q->q_depth || use_zc)
 			goto skip_alloc_buf;
 
 		if (dev->tgt.ops->alloc_io_buf)
