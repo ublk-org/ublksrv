@@ -372,6 +372,32 @@ static inline __u64 ublk_pos(__u16 q_id, __u16 tag, __u32 offset)
 		(((__u64)tag) << UBLK_TAG_OFF) | (__u64)offset);
 }
 
+#ifndef IORING_FEAT_SQE_GROUP
+#define IORING_FEAT_SQE_GROUP           (1U << 16)
+#endif
+
+#ifndef IOSQE_SQE_GROUP
+#define IOSQE_SQE_GROUP  (1 << 7)
+#endif
+
+#define IOSQE_SQE_GRP_KBUF	IOSQE_IO_DRAIN
+
+static inline void io_uring_prep_grp_lead(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id, __u64 __addr)
+{
+	struct ublksrv_io_cmd *cmd = (struct ublksrv_io_cmd *)sqe->cmd;
+
+	io_uring_prep_read(sqe, dev_fd, 0, 0, 0);
+	sqe->opcode		= IORING_OP_URING_CMD;
+	sqe->flags		|= IOSQE_CQE_SKIP_SUCCESS | IOSQE_SQE_GROUP |
+		IOSQE_FIXED_FILE;
+	sqe->cmd_op		= UBLK_U_IO_PROVIDE_IO_BUF;
+
+	cmd->tag	= tag;
+	cmd->addr	= __addr;
+	cmd->q_id	= q_id;
+}
+
 /**
  * \defgroup ctrl_dev control device API
  *
