@@ -372,6 +372,45 @@ static inline __u64 ublk_pos(__u16 q_id, __u16 tag, __u32 offset)
 		(((__u64)tag) << UBLK_TAG_OFF) | (__u64)offset);
 }
 
+//supposed to be from kernel header
+#ifndef IORING_PROVIDE_GROUP_KBUF
+#define IORING_PROVIDE_GROUP_KBUF  (1U << 1)
+#endif
+
+#ifndef IOSQE_HAS_EXT_FLAGS
+#define IOSQE_HAS_EXT_FLAGS  (1 << 7)
+#endif
+
+#ifndef IOSQE_EXT_SQE_GROUP
+#define IOSQE_EXT_SQE_GROUP  (1 << 0)
+#endif
+
+static inline void set_sqe_group(struct io_uring_sqe *sqe)
+{
+        unsigned char *raw = (unsigned char *)sqe;
+
+        sqe->flags |= IOSQE_HAS_EXT_FLAGS;
+        raw[63] = IOSQE_EXT_SQE_GROUP;
+}
+
+static inline void io_uring_prep_grp_lead(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id, __u64 __addr)
+{
+	struct ublksrv_io_cmd *cmd = (struct ublksrv_io_cmd *)sqe->cmd;
+
+	io_uring_prep_read(sqe, dev_fd, 0, 0, 0);
+	sqe->opcode		= IORING_OP_URING_CMD;
+	sqe->flags		|= IOSQE_CQE_SKIP_SUCCESS | IOSQE_HAS_EXT_FLAGS
+		| IOSQE_FIXED_FILE;
+	sqe->uring_cmd_flags	= IORING_PROVIDE_GROUP_KBUF |
+		(IOSQE_EXT_SQE_GROUP << 16);
+	sqe->cmd_op		= UBLK_U_IO_PROVIDE_IO_BUF;
+
+	cmd->tag	= tag;
+	cmd->addr	= __addr;
+	cmd->q_id	= q_id;
+}
+
 /**
  * \defgroup ctrl_dev control device API
  *
