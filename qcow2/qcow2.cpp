@@ -2,10 +2,11 @@
 #include "qcow2.h"
 
 Qcow2Image:: Qcow2Image(const char *path): fpath(path) {
-	fd = open(path, O_RDWR | O_DIRECT);
+	fd = open(path, O_RDWR);
 	if (fd < 0)
 		ublk_err( "%s: backing file %s can't be opened %d\n",
 				__func__, path, fd);
+	fcntl(fd, F_SETFL, O_DIRECT);
 }
 
 Qcow2Image:: ~Qcow2Image() {

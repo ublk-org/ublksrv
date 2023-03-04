@@ -68,12 +68,16 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		return -EINVAL;
 
 	header = (QCowHeader *)header_buf;
-	fd = open(file, O_RDWR | O_DIRECT);
+	fd = open(file, O_RDWR);
 	if (fd < 0) {
 		ublk_err( "%s backing file %s can't be opened\n",
 				__func__, file);
 		return -EINVAL;
 	}
+
+	if (fcntl(fd, F_SETFL, O_DIRECT))
+		ublk_err( "%s direct io on file %s isn't supported\n",
+				__func__, file);
 
 	ret = read(fd, header_buf, HEADER_SIZE);
 	if (ret != HEADER_SIZE) {
@@ -176,12 +180,15 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 		return ret;
 	}
 
-	fd = open(file, O_RDWR | O_DIRECT);
+	fd = open(file, O_RDWR);
 	if (fd < 0) {
 		ublk_err( "%s: backing file %s can't be opened\n",
 				__func__, file);
 		return fd;
 	}
+	if (fcntl(fd, F_SETFL, O_DIRECT))
+		ublk_err( "%s direct io on file %s isn't supported\n",
+				__func__, file);
 
 	tgt_depth = QCOW2_PARA::META_MAX_TAGS > info->queue_depth * 2 ?
 			QCOW2_PARA::META_MAX_TAGS : info->queue_depth * 2;
