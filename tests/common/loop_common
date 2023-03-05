@@ -31,16 +31,24 @@ __remove_kernel_loop_dev() {
 
 __create_kernel_loop_dev() {
 	local my_file=`echo $T_TYPE_PARAMS | awk '{print $(NF)}'`
-	eval $T_TYPE $T_TYPE_PARAMS > /dev/null 2>&1
-	local my_dev=`losetup -l | grep "${my_file}" | awk '{print $1}'`
-	echo $my_dev
-	udevadm settle
+	if eval $T_TYPE $T_TYPE_PARAMS > /dev/null 2>&1; then
+		local my_dev=`losetup -l | grep "${my_file}" | awk '{print $1}'`
+		udevadm settle
+		echo $my_dev
+	else
+		echo ""
+	fi
 }
 
 __run_loop_dev_perf()
 {
 	local JOBS=$1
 	local DEV=`__create_kernel_loop_dev`
+
+	if [ "$DEV" == "" ]; then
+		export T_TYPE_PARAMS=${T_TYPE_PARAMS//--direct-io=on/" "}
+		DEV=`__create_kernel_loop_dev`
+	fi
 
 	echo -e "\t$T_TYPE $T_TYPE_PARAMS, fio: ($DEV libaio, dio, io jobs $JOBS)..."
 	__run_dev_perf_no_create "loop" $JOBS $DEV
