@@ -9,7 +9,13 @@ _kill_nbdkit() {
 	if [ -f ${_NBDS_PID} ]; then
 		local nbds_pid=`cat ${_NBDS_PID}`
 		kill -9 ${nbds_pid} > /dev/null 2>&1
-		sleep 2
+		local count=0
+		while [ $count -lt 32 ]; do
+			kill -0 ${nbds_pid} > /dev/null 2>&1
+			[ $? -ne 0 ] && break
+			let count++
+			sleep 1
+		done
 	fi
 }
 
