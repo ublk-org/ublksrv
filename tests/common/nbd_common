@@ -23,11 +23,6 @@ _create_nbd_image() {
 
 	if [ $type == "none" ]; then
 		nbdkit -P ${_NBDS_PID} memory $my_size
-	elif [ $type == "nullb" ]; then
-		modprobe -r null_blk
-		modprobe null_blk
-		my_file="/dev/nullb0"
-		nbdkit -P ${_NBDS_PID} file $my_file
 	else
 		truncate -s ${my_size} ${my_file}
 
@@ -48,9 +43,5 @@ _remove_nbd_image() {
 
 	[ -f ${_NBDS_PID} ] && rm -f ${_NBDS_PID}
 
-	if [ "$file" == "/dev/nullb0" ]; then
-		modprobe -r null_blk
-	else
-		[ -f "$file" ] && rm -f $file
-	fi
+	[ -f "$file" ] && rm -f $file
 }
