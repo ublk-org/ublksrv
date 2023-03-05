@@ -52,6 +52,7 @@ __remove_nbd_dev() {
 	local DEV=$1
 	sync $DEV
 	qemu-nbd -d $DEV  > /dev/null 2>&1
+	udevadm settle
 }
 
 __create_nbd_dev() {
@@ -61,6 +62,7 @@ __create_nbd_dev() {
 	qemu-nbd -d $DEV > /dev/null 2>&1
 	eval qemu-nbd ${nbd_params} > /dev/null 2>&1
 	echo "$DEV"
+	udevadm settle
 }
 
 __run_nbd_dev_perf()
