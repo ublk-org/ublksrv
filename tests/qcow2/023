@@ -1,0 +1,14 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+
+. common/fio_common
+. common/qcow2_common
+
+echo "run perf test on empty qcow2 image via ublk/zc"
+
+file=`_create_qcow2_image "null" $QCOW2_IMG_SZ`
+export T_TYPE_PARAMS="-z -t qcow2 -q 1 -f $file"
+
+__run_dev_perf 1
+
+_remove_qcow2_image $file
