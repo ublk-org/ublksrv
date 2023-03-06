@@ -24,6 +24,7 @@ Tech
 
 `Hacker News: An io_uring-based user-space block driver (lwn.net) <https://news.ycombinator.com/item?id=32508659>`
 
+`io_uring in Android OTA <https://lpc.events/event/16/contributions/1331/>`
 
 Uses
 ====
