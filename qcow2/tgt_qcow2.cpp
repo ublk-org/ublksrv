@@ -6,6 +6,26 @@
 #define HEADER_SIZE  512
 #define QCOW2_UNMAPPED   (u64)(-1)
 
+static int use_zc = 0;
+
+static int qcow2_memset_for_zc(int fd, const struct ublksrv_io_desc *iod,
+		unsigned short tag, unsigned short qid, unsigned int off)
+{
+	__u64 pos = ublk_pos(qid, tag, off);
+	unsigned int cnt = iod->nr_sectors << 9;
+	void *buf;
+	int res;
+
+	buf = calloc(cnt, 1);
+	res = pwrite(fd, buf, cnt, pos);
+	free(buf);
+
+	if (res != cnt)
+		ublk_err( "%s: zero buf failure res %u, expected %u, pos %llx\n",
+				__func__, res, cnt, pos);
+	return res;
+}
+
 static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
@@ -101,6 +121,7 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	tgt->fds[1] = fd;
 	tgt->tgt_data = qs = make_qcow2state(file, dev);
 	ublksrv_tgt_set_io_data_size(tgt);
+	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 
 	jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
 	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
@@ -200,6 +221,7 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 	tgt->fds[1] = fd;
 	tgt->tgt_data = make_qcow2state(file, dev);
 	ublksrv_tgt_set_io_data_size(tgt);
+	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 
 	return 0;
 }
@@ -256,6 +278,21 @@ static inline int qcow2_queue_tgt_zero_cluster(const Qcow2State *qs,
 	return 1;
 }
 
+static inline void io_uring_prep_rw_zc(struct io_uring_sqe *sqe, int op, int dev_fd,
+		const struct ublksrv_io_desc *iod, int tag, int q_id, __u8 fd,
+		u64 offset)
+{
+	struct io_uring_sqe *secondary = sqe + 1;
+
+	io_uring_prep_fused_primary(sqe, dev_fd, tag, q_id, 0);
+
+	io_uring_prep_rw(op, secondary, fd, (void *)0, iod->nr_sectors << 9,
+			offset);
+	io_uring_sqe_set_flags(secondary, IOSQE_FIXED_FILE |
+			IOSQE_CQE_SKIP_SUCCESS);
+	secondary->user_data = build_user_data(tag, op, 1, 1);
+}
+
 static inline int qcow2_queue_tgt_rw_fast(const struct ublksrv_queue *q,
 		unsigned io_op, int tag, u64 offset,
 		const struct ublksrv_io_desc *iod)
@@ -268,9 +305,14 @@ static inline int qcow2_queue_tgt_rw_fast(const struct ublksrv_queue *q,
 		return -ENOMEM;
 	}
 
-	io_uring_prep_rw(io_op, sqe, 1, (void *)iod->addr,
-			iod->nr_sectors << 9, offset);
-	sqe->flags = IOSQE_FIXED_FILE;
+	if (use_zc)
+		io_uring_prep_rw_zc(sqe, io_op, 0, iod, tag, q->q_id, 1,
+				offset);
+	else {
+		io_uring_prep_rw(io_op, sqe, 1, (void *)iod->addr,
+				iod->nr_sectors << 9, offset);
+		sqe->flags = IOSQE_FIXED_FILE;
+	}
 	sqe->user_data = build_user_data(tag, io_op, 0, 1);
 	qcow2_io_log("%s: queue io op %d(%llu %llx %llx)"
 				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
@@ -312,8 +354,12 @@ static inline int qcow2_queue_tgt_rw(const struct ublksrv_queue *q, unsigned io_
 		}
 		return 0;
 	} else {
-		memset((void *)iod->addr, 0,
+		if (!use_zc)
+			memset((void *)iod->addr, 0,
 				iod->nr_sectors << 9);
+		else
+			qcow2_memset_for_zc(q->dev->tgt.fds[0], iod, tag,
+					q->q_id, 0);
 		return 0;
 	}
 }
@@ -401,7 +447,11 @@ again:
 		if ((op == UBLK_IO_OP_READ) &&
 			l2_entry_read_as_zero(mapped_start)) {
 			ret = iod->nr_sectors << 9;
-			memset((void *)iod->addr, 0, ret);
+			if (!use_zc)
+				memset((void *)iod->addr, 0, ret);
+			else
+				qcow2_memset_for_zc(q->dev->tgt.fds[0], iod,
+						tag, q->q_id, 0);
 		} else {
 			ublk_err("%s: tag %d virt %lx op %d map failed\n",
 					__func__, tag, start, op);
