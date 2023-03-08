@@ -45,3 +45,5 @@ News
 
 `OpenAnolis: ANCK 5.10 will support ublk[Chinese] <https://openanolis.cn/blog/detail/736556082902305670>`
 
+`OpenAnolis: ANCK 5.10 has supported ublk[Chinese] <https://openanolis.cn/blog/detail/777113261385399161>`
+
