@@ -42,6 +42,8 @@ News
 2023
 ----
 
+`OpenAnolis: ANCK 5.10 has supported ublk[Chinese] <https://openanolis.cn/blog/detail/777113261385399161>`
+
 `miniublk merged to blktests <https://github.com/osandov/blktests/commit/d42fe976e4f599011229085835d32f70185b9829>`
 
 `OpenAnolis: ANCK 5.10 will support ublk[Chinese] <https://openanolis.cn/blog/detail/736556082902305670>`
