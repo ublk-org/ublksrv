@@ -1,4 +1,25 @@
 // SPDX-License-Identifier: GPL-2.0
+
+/*
+ * Open connection for network block device
+ *
+ * Copyright 1997,1998 Pavel Machek, distribute under GPL
+ *  <pavel@atrey.karlin.mff.cuni.cz>
+ * Copyright (c) 2002 - 2011 Wouter Verhelst <w@uter.be>
+ *
+ * Version 1.0 - 64bit issues should be fixed, now
+ * Version 1.1 - added bs (blocksize) option (Alexey Guzeev, aga@permonline.ru)
+ * Version 1.2 - I added new option '-d' to send the disconnect request
+ * Version 2.0 - Version synchronised with server
+ * Version 2.1 - Check for disconnection before INIT_PASSWD is received
+ * 	to make errormsg a bit more helpful in case the server can't
+ * 	open the exported file.
+ * 16/03/2010 - Add IPv6 support.
+ * 	Kitt Tientanopajai <kitt@kitty.in.th>
+ *	Neutron Soutmun <neo.neutron@gmail.com>
+ *	Suriya Soutmun <darksolar@gmail.com>
+ */
+
 #include <config.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
