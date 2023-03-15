@@ -211,6 +211,12 @@ ublksrv, 'ublk add --debug_mask=0x{MASK}' can control which kind of
 debug log dumped, see ``UBLK_DBG_*`` defined in include/ublksrv_utils.h
 for each kind of debug log.
 
+libublksrv API doc
+==================
+
+API is documented in include/ublksrv.h, and doxygen doc can be generated
+by running 'make doxygen_doc', the generated html docs are in doc/html.
+
 License
 =======
 

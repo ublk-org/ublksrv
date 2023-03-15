@@ -144,6 +144,12 @@ else
   AC_MSG_RESULT([no])
 fi
 
+AC_CHECK_PROGS([DOXYGEN], [doxygen])
+if test -z "$DOXYGEN"; then
+   AC_MSG_WARN([Doxygen not found - continue without Doxygen support])
+fi
+AM_CONDITIONAL([HAVE_DOXYGEN], [test -n "$DOXYGEN"])
+
 dnl Produce output files.
 AC_CONFIG_HEADERS([config.h])
 

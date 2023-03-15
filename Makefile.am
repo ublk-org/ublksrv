@@ -41,7 +41,7 @@ ublk_user_id_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ublksrv.pc
 
-CLEANFILES = *~ test cscope.* include/*~ *.d qcow2/*~ nbd/*~ utils/*~
+CLEANFILES = *~ test cscope.* include/*~ *.d qcow2/*~ nbd/*~ utils/*~ doc/html/*
 
 R = 10
 D = tests/tmp/
@@ -50,6 +50,11 @@ test: $(sbin_PROGRAMS) $(noinst_PROGRAMS)
 
 cscope:
 	@cscope -b -R
+
+if HAVE_DOXYGEN
+doxygen_doc:
+	doxygen doc/Doxyfile
+endif
 
 # Check no files are missing from EXTRA_DIST rules, and that all
 # generated files have been included in the tarball.  (Note you must
