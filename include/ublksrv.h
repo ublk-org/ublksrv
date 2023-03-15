@@ -597,38 +597,164 @@ struct ublksrv_tgt_base_json {
 	unsigned long reserved[8];
 };
 
-/* APIs for serializing/deserializing device data to/from json string */
+/**
+ * \defgroup ublksrv_json ublksrv json string API
+ *
+ * ublksrv json string APIs
+ *
+ * APIs for serializing/deserializing device data to/from json string
+ *
+ *  @{
+ */
+
+/**
+ * Serialize json buffer from device's ublksrv_ctrl_dev_info data
+ *
+ * @param dev the ublksrv control device instance
+ * @param buf json buffer
+ * @param len length of json buffer
+ */
 extern int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *dev,
 		char *buf, int len);
+
+/**
+ * Deserialize json buffer to ublksrv_ctrl_dev_info instance
+ *
+ * @param json_buf json buffer
+ * @param info device info for storing the parsed ublksrv_ctrl_dev_info
+ */
 extern int ublksrv_json_read_dev_info(const char *json_buf,
 		struct ublksrv_ctrl_dev_info *info);
+
+/**
+ * Serialize json buffer from ublksrv queue
+ *
+ * @param dev the ublksrv control device instance
+ * @param jbuf json buffer
+ * @param len length of json buffer
+ * @param qid queue id
+ * @param ubq_daemon_tid queue pthread tid
+ */
 extern int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
 		char *jbuf, int len, int qid, int ubq_daemon_tid);
+
+/**
+ * Deserialize json buffer to ublksrv queue
+ *
+ * @param jbuf json buffer
+ * @param qid queue id
+ * @param tid queue pthread tid
+ * @param affinity_buf queue affinity buffer
+ * @param len length of json buffer
+ */
 extern int ublksrv_json_read_queue_info(const char *jbuf, int qid,
 		unsigned *tid, char *affinity_buf, int len);
+
+/**
+ * Deserialize json buffer to target data
+ *
+ * @param jbuf json buffer
+ * @param tgt_buf target buffer
+ * @param len length of json buffer
+ */
 extern int ublksrv_json_read_target_info(const char *jbuf, char *tgt_buf,
 		int len);
+
+/**
+ * Deserialize json buffer to target string field
+ *
+ * @param jbuf json buffer
+ * @param len length of json buffer
+ * @param name string name
+ * @param val string value
+ */
 extern int ublksrv_json_read_target_str_info(const char *jbuf, int len,
 		const char *name, char *val);
+
+/**
+ * Deserialize json buffer to target ulong field
+ *
+ * @param jbuf json buffer
+ * @param name field name with ulong type
+ * @param val field value with ulong type
+ */
 extern int ublksrv_json_read_target_ulong_info(const char *jbuf,
 		const char *name, long *val);
+
+/**
+ * Serialize json buffer from target field with string type
+ *
+ * @param jbuf json buffer
+ * @param len length of json buffer
+ * @param name field name with string type
+ * @param val field value with string type
+ */
 extern int ublksrv_json_write_target_str_info(char *jbuf, int len,
 		const char *name, const char *val);
+
 extern int ublksrv_json_write_target_long_info(char *jbuf, int len,
 		const char *name, long val);
+
+/**
+ * Serialize json buffer from target field with ulong type
+ *
+ * @param jbuf json buffer
+ * @param len length of json buffer
+ * @param name field name with ulong type
+ * @param val field value with ulong type
+ */
 extern int ublksrv_json_write_target_ulong_info(char *jbuf, int len,
 		const char *name, unsigned long val);
+
 extern void ublksrv_json_dump(const char *jbuf);
+
+/**
+ * Deserialize json buffer to ublksrv_tgt_base_json instance
+ *
+ * @param jbuf json buffer
+ * @param tgt ublksrv_tgt_base_json instance
+ */
 extern int ublksrv_json_read_target_base_info(const char *jbuf,
 		struct ublksrv_tgt_base_json *tgt);
+
+/**
+ * Serialize json buffer from ublksrv_tgt_base_json
+ *
+ * @param jbuf json buffer
+ * @param len length of json buffer
+ * @param tgt ublksrv_tgt_base_json instance
+ */
 extern int ublksrv_json_write_target_base_info(char *jbuf, int len,
 		const struct ublksrv_tgt_base_json *tgt);
+
+/**
+ * Deserialize json buffer to ublk_params instance
+ *
+ * @param p ublk_params instance
+ * @param jbuf json buffer
+ */
 extern int ublksrv_json_read_params(struct ublk_params *p,
 		const char *jbuf);
+
+/**
+ * Serialize json buffer from ublk_params instance
+ *
+ * @param p ublk_params instance
+ * @param jbuf json buffer
+ * @param len length of json buffer
+ */
 extern int ublksrv_json_write_params(const struct ublk_params *p,
 		char *jbuf, int len);
 extern int ublksrv_json_dump_params(const char *jbuf);
+
+/**
+ * Return actual length of the json buffer
+ *
+ * @param jbuf json buffer
+ */
 extern int ublksrv_json_get_length(const char *jbuf);
+
+/** @} */ // end of ublksrv_json group
 
 /**
  * \defgroup ublksrv_queue ublksrv queue API
