@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: MIT or LGPL-2.1-only
 
+/**
+ * @file ublksrv.h
+ *
+ * libublksrv APIs
+ *
+ * This header define the interfaces of libublksrv
+ */
+
 #ifndef UBLKSRV_INC_H
 #define UBLKSRV_INC_H
 
@@ -316,6 +324,20 @@ struct ublksrv_tgt_type {
 	unsigned long reserved[5];
 };
 
+/**
+ * Build sqe->user_data.
+ *
+ * io_uring relies on ->user_data to map cqe to the submitted io represented by
+ * sqe, encodes ublk interested info into ->user_data for handling IO
+ * completion efficiently.
+ *
+ * @param tag ublk io tag
+ * @param op operation code of submitted io
+ * @param tgt_data target data for this io
+ * @param is_taget_io is this one target io, and it should be true for target,
+ * 	and false for ublksrv built uring command, which is for communicating
+ * 	with ublk_drv
+ */
 static inline __u64 build_user_data(unsigned tag, unsigned op,
 		unsigned tgt_data, unsigned is_target_io)
 {
@@ -339,34 +361,167 @@ static inline unsigned int user_data_to_tgt_data(__u64 user_data)
 	return (user_data >> 24) & 0xffff;
 }
 
-/*
- * ublksrv control device APIs, for sending control commands
- * to /dev/ublk-control
+/**
+ * \defgroup ctrl_dev control device API
+ *
+ *  Most of APIs are for sending command to ublk control device(/dev/ublk-control),
+ *  and some of them are just for device management purpose, such as, retrieving
+ *  device json buffer, run_dir, prepare for recovering, get cached device info ...
+ *
+ *  Almost all these APIs can be called in random context by random io uring
+ *  context
+ *
+ *  @{
+ */
+
+/**
+ * Deinit one control device
+ *
+ * @param dev the ublksrv control device instance
+ *
  */
 extern void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Allocate and init one control device
+ *
+ * @param data data for allocating & initializing this control device
+ *
+ */
 extern struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data);
+
+/**
+ * Retrieve and store each queue's cpu affinity info into private data of the
+ * control device by sending commands to ublk control device
+ *
+ * @param ctrl_dev the ublksrv control device instance
+ *
+ */
 extern int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev);
+
+/**
+ * Add one ublk device by sending command to ublk driver
+ *
+ * @param dev the ublksrv control device instance
+ */
 extern int ublksrv_ctrl_add_dev(struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Delete this ublk device by sending command to ublk driver
+ *
+ * @param dev the ublksrv control device instance
+ */
 extern int ublksrv_ctrl_del_dev(struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Retrieve ublk device info by sending command to ublk control device
+ *
+ * @param dev the ublksrv control device instance
+ */
 extern int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Stop the specified ublk device by sending command to ublk control device
+ *
+ * @param dev the ublksrv control device instance
+ */
 extern int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Dump this ublk device
+ *
+ * @param dev the ublksrv control device instance
+ * @param buf ublk device json buffer, optional
+ */
 extern void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *buf);
+
+/**
+ * Start this ublk device by sending command to ublk control device
+ *
+ * @param ctrl_dev the ublksrv control device instance
+ * @param daemon_pid pid of the ublksrv process
+ */
 extern int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev,
 		int daemon_pid);
+
+/**
+ * Set specified device parameter by sending command to ublk control device
+ *
+ * @param dev the ublksrv control device instance
+ * @param params the specified parameter for setting device
+ */
 extern int ublksrv_ctrl_set_params(struct ublksrv_ctrl_dev *dev,
 		struct ublk_params *params);
+
+/**
+ * Get specified device parameter by sending command to ublk control device
+ *
+ * @param dev the ublksrv control device instance
+ * @param params the parameter buffer for storing the device parameter
+ */
 extern int ublksrv_ctrl_get_params(struct ublksrv_ctrl_dev *dev,
 		struct ublk_params *params);
+
+/**
+ * Start to recovery device by sending command to ublk control device
+ *
+ * @param dev the ublksrv control device instance
+ */
 extern int ublksrv_ctrl_start_recovery(struct ublksrv_ctrl_dev *dev);
+
+/**
+ * End recovery device by sending command to ublk control device
+ *
+ * Once this command is successful, the device is recovered to normal state
+ *
+ * @param dev the ublksrv control device instance
+ * @param daemon_pid pid of the new ublksrv process
+ */
 extern int ublksrv_ctrl_end_recovery(struct ublksrv_ctrl_dev *dev,
 		int daemon_pid);
+
+/**
+ * Return cached device info for this device
+ *
+ * @param dev the ublksrv control device instance
+ */
 extern const struct ublksrv_ctrl_dev_info *ublksrv_ctrl_get_dev_info(
 		const struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Return run dir of ublk device
+ *
+ * Device pid file and json string stored under this dir
+ *
+ * @param dev the ublksrv control device instance
+ */
 extern const char *ublksrv_ctrl_get_run_dir(const struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Prepare for starting to recovery device
+ *
+ * Setup target type, run_dir and json buffer before starting to recovery device.
+ *
+ * @param dev the ublksrv control device instance
+ * @param tgt_type target type name of this device
+ * @param tgt_ops target type of this devie
+ * @param recovery_jbuf points to device json buffer
+ */
 extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 		const char *tgt_type, const struct ublksrv_tgt_type *tgt_ops,
 		const char *recovery_jbuf);
+
+/**
+ * Return device's json buffer
+ *
+ * Setup target type, run_dir and json buffer before starting to recovery device.
+ *
+ * @param dev the ublksrv control device instance
+ */
 extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev);
+
+/** @} */ // end of ctrl_dev group
+
 
 /* ublksrv device ("/dev/ublkcN") level APIs */
 extern const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
