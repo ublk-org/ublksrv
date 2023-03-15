@@ -523,15 +523,69 @@ extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev 
 /** @} */ // end of ctrl_dev group
 
 
-/* ublksrv device ("/dev/ublkcN") level APIs */
+/**
+ * \defgroup ublksrv_dev ublksrv device API
+ *
+ * ublksrv device ("/dev/ublkcN") level APIs, and ublksrv device focuses on
+ * IO handling related function
+ *
+ * All APIs in this group should be called in ublksrv daemon process context
+ *
+ *  @{
+ */
+
+/**
+ * Allocate and initialize ublksrv device
+ *
+ * @param ctrl_dev the ublksrv control device instance
+ */
 extern const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *
 		ctrl_dev);
+
+/**
+ * Deinitialize and free ublksrv device
+ *
+ * @param dev the ublksrv device instance
+ */
 extern void ublksrv_dev_deinit(const struct ublksrv_dev *dev);
+
+/**
+ * Return the associated ublksrv control device instance
+ *
+ * @param dev the ublksrv device instance
+ */
 extern const struct ublksrv_ctrl_dev *ublksrv_get_ctrl_dev(
 		const struct ublksrv_dev *dev);
+
+/**
+ * Return pid file FD of this ublksrv device
+ *
+ * @param dev the ublksrv device instance
+ */
 extern int ublksrv_get_pidfile_fd(const struct ublksrv_dev *dev);
-extern void ublksrv_dev_set_cq_depth(struct ublksrv_dev *tdev, int cq_depth);
-extern int ublksrv_dev_get_cq_depth(struct ublksrv_dev *tdev);
+
+/**
+ * Set completion queue depth of this ublksrv device
+ *
+ * @param dev the ublksrv device instance
+ * @param cq_depth depth of the completion queue of io_uring
+ */
+extern void ublksrv_dev_set_cq_depth(struct ublksrv_dev *dev, int cq_depth);
+
+/**
+ * Get completion queue depth of this ublksrv device
+ *
+ * @param dev the ublksrv device instance
+ */
+extern int ublksrv_dev_get_cq_depth(struct ublksrv_dev *dev);
+
+/**
+ *
+ * Apply OOM porotection
+ */
+extern void ublksrv_apply_oom_protection(void);
+
+/** @} */ // end of ublksrv_dev group
 
 /* target json has to include the following key/value */
 #define UBLKSRV_TGT_NAME_MAX_LEN 32
@@ -576,21 +630,110 @@ extern int ublksrv_json_write_params(const struct ublk_params *p,
 extern int ublksrv_json_dump_params(const char *jbuf);
 extern int ublksrv_json_get_length(const char *jbuf);
 
-/* ublksrv queue level APIs */
+/**
+ * \defgroup ublksrv_queue ublksrv queue API
+ *
+ * ublksrv queue level APIs
+ *
+ * All APIs in this group is supposed to be called in the queue context
+ *
+ *  @{
+ */
+
+/**
+ * Return the specified io private data
+ *
+ * Each IO has unique tag, so we use tag to represent specified io.
+ *
+ * Inside ->init_tgt() callback, target code sets io private data
+ * size via dev->tgt.io_data_size, then io private data will be allocated
+ * in ublksrv_queue_init(). The allocated io private data is very useful
+ * to store target specific io data, then runtime memory allocation in io
+ * handling code path can be avoided.
+ *
+ * @param q the ublksrv queue instance
+ * @param tag tag for this io
+ */
 extern void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag);
+
+/**
+ * Return the specified io generic io data
+ *
+ * Each IO has unique tag, so we use tag to represent specified io.
+ *
+ * @param q the ublksrv queue instance
+ * @param tag tag for this io
+ * @return 'struct ublk_io_data' instance, which is for storing io descriptor,
+ * 	tag, and private data
+ */
 extern const struct ublk_io_data *ublksrv_queue_get_io_data(
-		const struct ublksrv_queue *tq, int tag);
+		const struct ublksrv_queue *q, int tag);
+
+/**
+ * Return current queue state
+ *
+ * queue state is usually for debug purpose
+ *
+ * @param q the ublksrv queue instance
+ * @return queue current state
+ */
 extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
+
+/**
+ * Allocate and initialize ublksrv queue instance
+ *
+ * @param dev the ublksrv device instance
+ * @param q_id queue id
+ * @param queue_data queue private data
+ */
 extern const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *dev,
 		unsigned short q_id, void *queue_data);
+
+/**
+ * Deinit & free ublksrv queue instance
+ *
+ * @param q the ublksrv queue instance
+ */
 extern void ublksrv_queue_deinit(const struct ublksrv_queue *q);
+
 extern int ublksrv_queue_handled_event(const struct ublksrv_queue *q);
 extern int ublksrv_queue_send_event(const struct ublksrv_queue *q);
+
+/**
+ * Return the specified queue instance by ublksrv device and qid
+ *
+ * Retrieve queue instance by ublksrv device and queue id
+ *
+ * @param dev the ublksrv device instance
+ * @param q_id queue id
+ */
 extern const struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id);
+
+/**
+ * Process target IO & IO command from this queue's io_uring
+ *
+ * Handle incoming io command by calling target ->handle_io_async(), or
+ * call ->tgt_io_done() if target IO is completed.
+ *
+ * It is the engine of libulksrv, almost everything is driven by this
+ * API.
+ *
+ * @param q the ublksrv queue instance
+ */
 extern int ublksrv_process_io(const struct ublksrv_queue *q);
+
+/**
+ * Complete specified io with result of 'res'
+ *
+ * This API will tell ublk driver via /dev/ublkcN that this IO is completed.
+ *
+ * @param q the ublksrv queue instance
+ * @param tag the io to be completed
+ * @param res io result
+ */
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
-extern void ublksrv_apply_oom_protection(void);
+/** @} */ // end of ublksrv_queue group
 
 #ifdef __cplusplus
 }
