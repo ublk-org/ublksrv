@@ -1,0 +1,30 @@
+/*!
+\mainpage libublksrv API documentation
+
+UBLK (block in Userspace) is an interface for building block device by
+userspace programs. The UBLK project consists
+of two components: the *ublk_drv* kernel module (maintained in the regular
+kernel repositories) and the *libublksrv* userspace library. libublksrv
+provides the reference implementation for communicating with the ublk_drv
+kernel module.
+
+A UBLK block device is typically implemented as a standalone application that
+links with libublksrv. libublksrv provides APIs for the application to
+handle IO logic by its business logic, also add/delete/recovery device.
+
+ublksrv_tgt is built on libublksrv for supporting generic & multiple ublk
+targets, and it isn't covered in this document. In the future, the two
+will be separated from each other, and become standalone project.
+
+## Getting started ##
+
+The API that is primarily specified in ublksrv.h.
+
+ublksrv_aio.h provides APIs for offloading IO handling to another context,
+and it is optional.
+
+## Examples ##
+
+A good starting point is demo_null.c and demo_event.c.
+
+*/
