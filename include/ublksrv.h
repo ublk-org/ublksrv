@@ -34,7 +34,7 @@ struct io_uring_cqe;
 struct ublksrv_aio_ctx;
 struct ublksrv_ctrl_dev;
 
-/*
+/**
  * Generic data for creating one ublk control device, which is used for
  * sending control commands to /dev/ublk-control.
  *
@@ -55,19 +55,19 @@ struct ublksrv_dev_data {
 	unsigned long   reserved[7];
 };
 
-/*
+/**
  * IO data passed to target io handling callbacks, such as
  * ->handle_io_async() and ->tgt_io_done().
  */
 struct ublk_io_data {
-	/* tag of this io data, unique in queue wide */
+	/** tag of this io data, unique in queue wide */
 	int tag;
 	unsigned int pad;
 
-	/* io description from ublk driver */
+	/** io description from ublk driver */
 	const struct ublksrv_io_desc *iod;
 
-	/*
+	/**
 	 * IO private data, created in ublksrv_queue_init(),
 	 * data size is specified in ublksrv_tgt_info.io_data_size
 	 */
@@ -77,53 +77,75 @@ struct ublk_io_data {
 /* queue state is only retrieved via ublksrv_queue_state() API */
 #define UBLKSRV_QUEUE_STOPPING	(1U << 0)
 #define UBLKSRV_QUEUE_IDLE	(1U << 1)
-/*
+
+/**
  * ublksrv_queue is 1:1 mapping with ublk driver's blk-mq queue, and
  * has same queue depth with ublk driver's blk-mq queue.
  */
 struct ublksrv_queue {
-	int q_id;	/* queue id */
+	/** queue id */
+	int q_id;
 
-	/* So far, all queues in same device has same depth */
+	/** So far, all queues in same device has same depth */
 	int q_depth;
 
-	/* io uring for handling io commands() from ublk driver */
+	/** io uring for handling io commands() from ublk driver */
 	struct io_uring *ring_ptr;
 
-	/* which device this queue belongs to */
+	/** which device this queue belongs to */
 	const struct ublksrv_dev *dev;
 
-	/* queue's private data, passed from ublksrv_queue_init() */
+	/** queue's private data, passed from ublksrv_queue_init() */
 	void *private_data;
 };
 
 struct ublksrv_tgt_type;
 
 #define  UBLKSRV_TGT_MAX_FDS	32
+
+/**
+ *
+ * ublksrv_tgt_info: target data
+ *
+ */
 struct ublksrv_tgt_info {
+	/** device size */
 	unsigned long long dev_size;
-	unsigned int tgt_ring_depth;	/* at most in-flight ios */
+
+	/**
+	 * target ring depth, for handling target IOs
+	 */
+	unsigned int tgt_ring_depth;
+
+	/** how many FDs regisgered */
 	unsigned int nr_fds;
+
+	/** file descriptor table */
 	int fds[UBLKSRV_TGT_MAX_FDS];
+
+	/** target private data */
 	void *tgt_data;
 
-	/*
+	/**
 	 * Extra IO slots for each queue, target code can reserve some
 	 * slots for handling internal IO, such as meta data IO, then
 	 * ublk_io instances can be assigned for these extra IOs.
+	 *
+	 * IO slot is useful for storing coroutine data which is for
+	 * handling this (meta) IO.
 	 */
 	unsigned int extra_ios;
 
-	/* size of io private data */
+	/** size of io private data */
 	unsigned int io_data_size;
 
-	/*
+	/**
 	 * target io handling type, target main job is to implement
 	 * callbacks defined in this type
 	 */
 	const struct ublksrv_tgt_type *ops;
 
-	/*
+	/**
 	 * If target needs to override default max workers for io_uring,
 	 * initialize io_wq_max_workers with proper value, otherwise
 	 * keep them as zero
@@ -133,12 +155,21 @@ struct ublksrv_tgt_info {
 	unsigned long reserved[4];
 };
 
+/**
+ * ublksrv device
+ */
 struct ublksrv_dev {
+	/** device data */
 	struct ublksrv_tgt_info tgt;
 };
 
+/**
+ *
+ * ublksrv_tgt_type: target type
+ *
+ */
 struct ublksrv_tgt_type {
-	/*
+	/**
 	 * One IO request comes from /dev/ublkbN, so notify target code
 	 * for handling the IO. Inside target code, the IO can be handled
 	 * with our io_uring too, if this is true, ->tgt_io_done callback
@@ -150,7 +181,7 @@ struct ublksrv_tgt_type {
 	int (*handle_io_async)(const struct ublksrv_queue *,
 			const struct ublk_io_data *io);
 
-	/*
+	/**
 	 * target io is handled by our io_uring, and once the target io
 	 * is completed, this callback is called.
 	 *
@@ -161,7 +192,7 @@ struct ublksrv_tgt_type {
 			const struct ublk_io_data *io,
 			const struct io_uring_cqe *);
 
-	/*
+	/**
 	 * Someone has written to our eventfd, so let target handle the
 	 * event, most of times, it is for handling io completion by
 	 * calling ublksrv_complete_io() which has to be run in ubq_daemon
@@ -189,14 +220,14 @@ struct ublksrv_tgt_type {
 	 */
 	void (*handle_event)(const struct ublksrv_queue *);
 
-	/*
+	/**
 	 * One typical use case is to flush meta data, which is usually done
 	 * in background. So there isn't any tag from libublksrv for this kind
 	 * of IOs, and the target code has to request for allocating extra ios
 	 * by passing tgt_type->extra_ios and let this callback consume & handle
 	 * these extra IOs.
 	 *
-	 * @nr_queued_io: count of queued IOs in ublksrv_reap_events_uring of
+	 * nr_queued_io: count of queued IOs in ublksrv_reap_events_uring of
 	 * this time
 	 *
 	 * Optional.
@@ -204,7 +235,7 @@ struct ublksrv_tgt_type {
 	void (*handle_io_background)(const struct ublksrv_queue *, int
 			nr_queued_io);
 
-	/*
+	/**
 	 * show target specific command line for adding new device
 	 *
 	 * Be careful: this callback is the only one which is not run from
@@ -212,7 +243,7 @@ struct ublksrv_tgt_type {
 	 */
 	void (*usage_for_add)(void);
 
-	/*
+	/**
 	 * initialize this new target, argc/argv includes target specific
 	 * command line parameters
 	 *
@@ -221,37 +252,54 @@ struct ublksrv_tgt_type {
 	int (*init_tgt)(struct ublksrv_dev *, int type, int argc,
 			char *argv[]);
 
-	/*
+	/**
 	 * Deinitialize this target
 	 *
 	 * Optional.
 	 */
 	void (*deinit_tgt)(const struct ublksrv_dev *);
 
-	/*
-	 * The two are optional, just needed if the target code wants to
-	 * manage io buffer.
+	/**
+	 * callback for allocating io buffer
+	 *
+	 * Optional.
 	 */
 	void *(*alloc_io_buf)(const struct ublksrv_queue *q, int tag, int size);
+	/**
+	 * callback for freeing io buffer
+	 *
+	 * Optional.
+	 */
 	void (*free_io_buf)(const struct ublksrv_queue *q, void *buf, int tag);
 
-	/*
+	/**
 	 * Called when the ublksrv io_uring is idle.
 	 *
 	 * Optional.
 	 */
 	void (*idle_fn)(const struct ublksrv_queue *q, bool enter);
 
+	/** target type */
 	int  type;
-	unsigned ublk_flags;	//flags required for ublk driver
-	unsigned ublksrv_flags;	//flags required for ublksrv
+
+	/** flags required for ublk driver */
+	unsigned ublk_flags;
+
+	/** flags required for ublksrv */
+	unsigned ublksrv_flags;
 	unsigned pad;
+
+	/** target name */
 	const char *name;
 
-	/* recovery this target */
+	/**
+	 * recovery callback for this target
+	 *
+	 * Required.
+	 */
 	int (*recovery_tgt)(struct ublksrv_dev *, int type);
 
-	/*
+	/**
 	 * queue_data_ptr points to address of q->priviate_data, so that
 	 * we still can pass 'const struct ublksrv_queue *', meantime
 	 * queue data can be stored to q->private_data via queue_data_ptr.
@@ -261,6 +309,8 @@ struct ublksrv_tgt_type {
 	 * q->private_data before calling ->init_queue()
 	 */
 	int (*init_queue)(const struct ublksrv_queue *, void **queue_data_ptr);
+
+	/** deinit queue data, counter pair of ->init_queue */
 	void (*deinit_queue)(const struct ublksrv_queue *);
 
 	unsigned long reserved[5];
