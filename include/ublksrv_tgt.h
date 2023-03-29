@@ -176,4 +176,16 @@ int ublk_json_write_params(struct ublksrv_dev *dev, char **jbuf, int *len,
 int ublk_json_write_target_base(struct ublksrv_dev *dev, char **jbuf, int *len,
 		const struct ublksrv_tgt_base_json *tgt);
 
+static inline void ublk_get_sqe_pair(struct io_uring *r,
+		struct io_uring_sqe **sqe, struct io_uring_sqe **sqe2)
+{
+	unsigned left = io_uring_sq_space_left(r);
+
+	if (left < 2)
+		io_uring_submit(r);
+	*sqe = io_uring_get_sqe(r);
+	if (sqe2)
+		*sqe2 = io_uring_get_sqe(r);
+}
+
 #endif
