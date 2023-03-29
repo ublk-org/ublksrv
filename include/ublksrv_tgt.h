@@ -155,4 +155,19 @@ static inline unsigned short ublk_unique_tag_to_tag(unsigned int unique_tag)
         return unique_tag & UBLK_UNIQUE_TAG_MASK;
 }
 
+static inline void ublk_get_sqe_pair(struct io_uring *r,
+		struct io_uring_sqe **sqe, struct io_uring_sqe **sqe2)
+{
+        unsigned left = io_uring_sq_space_left(r);
+
+        if (left < 2)
+                io_uring_submit(r);
+	*sqe = io_uring_get_sqe(r);
+	assert(*sqe != NULL);
+	if (sqe2) {
+		*sqe2 = io_uring_get_sqe(r);
+		assert(*sqe2 != NULL);
+	}
+}
+
 #endif
