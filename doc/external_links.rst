@@ -9,6 +9,8 @@ Tech
 2023
 ----
 
+`Zero-copy I/O for ublk, three different ways <https://lwn.net/Articles/926118/>`
+
 `qemu-storage-daemon ublk export - <https://gitlab.com/amarjargal.gundjalam/qemu/-/blob/ublk_test1/block/export/ublk.c>`
 
 `ublk Target - SPDK <https://spdk.io/doc/ublk.html>`
