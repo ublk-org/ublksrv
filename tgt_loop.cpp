@@ -8,26 +8,42 @@
 
 static long use_zc;
 
-static inline void io_uring_prep_read_zc(struct io_uring_sqe *sqe,
-		struct io_uring_sqe *secondary, int dev_fd,
-		const struct ublksrv_io_desc *iod, int tag, int q_id, __u8 fd)
+static inline void io_uring_prep_rw_zc(struct io_uring_sqe *add,
+		struct io_uring_sqe *io, struct io_uring_sqe *del, unsigned op,
+		int dev_fd, const struct ublksrv_io_desc *iod, int tag,
+		int q_id, __u8 fd)
 {
-	io_uring_prep_fused_primary(sqe, dev_fd, tag, q_id, 0);
+	io_uring_prep_add_xbuf(add, dev_fd, tag, q_id, 0);
+	add->user_data = build_user_data(tag, add->opcode, 1, 1);
 
-	io_uring_prep_read(secondary, fd, (void *)0, iod->nr_sectors << 9,
-			iod->start_sector << 9);
-	io_uring_sqe_set_flags(secondary, IOSQE_FIXED_FILE);
+	io_uring_prep_rw(op, io, fd, (void *)ublk_xbuf_addr(q_id, tag, 0),
+			iod->nr_sectors << 9, iod->start_sector << 9);
+	io_uring_sqe_set_flags(io, IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+
+	io->buf_index = dev_fd;	/* xpipe_id */
+	ublk_set_ext_flag(io);
+
+	if (del) {
+		io_uring_prep_del_xbuf(del, dev_fd, tag, q_id);
+		del->user_data = build_user_data(tag, del->opcode, 1, 1);
+	}
 }
 
-static inline void io_uring_prep_write_zc(struct io_uring_sqe *sqe,
-		struct io_uring_sqe *secondary, int dev_fd,
-		const struct ublksrv_io_desc *iod, int tag, int q_id, __u8 fd)
+static inline void io_uring_prep_read_zc(struct io_uring_sqe *add,
+		struct io_uring_sqe *io, struct io_uring_sqe *del,
+		int dev_fd, const struct ublksrv_io_desc *iod, int tag, int q_id, __u8 fd)
 {
-	io_uring_prep_fused_primary(sqe, dev_fd, tag, q_id, 0);
+	io_uring_prep_rw_zc(add, io, del, IORING_OP_READ,
+			dev_fd, iod, tag, q_id, fd);
+}
 
-	io_uring_prep_write(secondary, fd, (void *)0, iod->nr_sectors << 9,
-			iod->start_sector << 9);
-	io_uring_sqe_set_flags(secondary, IOSQE_FIXED_FILE);
+static inline void io_uring_prep_write_zc(struct io_uring_sqe *add,
+		struct io_uring_sqe *io, struct io_uring_sqe *del,
+		int dev_fd, const struct ublksrv_io_desc *iod, int tag, int q_id, __u8 fd)
+{
+
+	io_uring_prep_rw_zc(add, io, del, IORING_OP_WRITE,
+			dev_fd, iod, tag, q_id, fd);
 }
 
 static bool backing_supports_discard(char *name)
@@ -109,7 +125,7 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 	tgt->dev_size = p.basic.dev_sectors << 9;
 
 	if (use_zc)
-		tgt->tgt_ring_depth = 2 * info->queue_depth;
+		tgt->tgt_ring_depth = 3 * info->queue_depth;
 	else
 		tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 1;
@@ -216,7 +232,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 	if (use_zc)
-		tgt->tgt_ring_depth = 2 * info->queue_depth;
+		tgt->tgt_ring_depth = 3 * info->queue_depth;
 	else
 		tgt->tgt_ring_depth = info->queue_depth;
 
@@ -287,7 +303,7 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	const struct ublksrv_io_desc *iod = data->iod;
-	struct io_uring_sqe *sqe, *sqe2;
+	struct io_uring_sqe *sqe, *sqe2, *sqe3;
 	unsigned ublk_op = ublksrv_get_op(iod);
 
 	switch (ublk_op) {
@@ -317,8 +333,8 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 					iod->start_sector << 9);
 			io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		} else {
-			ublk_get_sqe_pair(q->ring_ptr, &sqe2, &sqe);
-			io_uring_prep_read_zc(sqe2, sqe,  0,
+			ublk_get_sqe_pair3(q->ring_ptr, &sqe2, &sqe, &sqe3);
+			io_uring_prep_read_zc(sqe2, sqe, sqe3, 0,
 					iod, tag, q->q_id, 1);
 		}
 		break;
@@ -331,8 +347,8 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 				iod->start_sector << 9);
 			io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		} else {
-			ublk_get_sqe_pair(q->ring_ptr, &sqe2, &sqe);
-			io_uring_prep_write_zc(sqe2, sqe, 0,
+			ublk_get_sqe_pair3(q->ring_ptr, &sqe2, &sqe, &sqe3);
+			io_uring_prep_write_zc(sqe2, sqe, sqe3, 0,
 					iod, tag, q->q_id, 1);
 		}
 		break;
