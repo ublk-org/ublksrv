@@ -384,6 +384,84 @@ static inline void io_uring_prep_fused_primary(struct io_uring_sqe *sqe,
 	cmd->q_id	= q_id;
 }
 
+#define IORING_OP_XPIPE_ADD_BUF (IORING_OP_SENDMSG_ZC + 1)
+#define IORING_OP_XPIPE_DEL_BUF (IORING_OP_SENDMSG_ZC + 2)
+#define IORING_SETUP_XPIPE          (1U << 14)
+#define IORING_URING_CMD_XPIPE		(1U << 1)
+#define IORING_URING_CMD_XPIPE_AUTO	(1U << 2)
+#define UBLK_IO_XPIPE_ADD_BUF   0x23
+
+union xbuf_key {
+	__u64 addr;
+	struct {
+		__u32 key;
+		__u32 off;
+	};
+};
+
+static inline void ublk_set_ext_flag(struct io_uring_sqe *sqe)
+{
+	sqe->flags		|= (1 << 7);
+	sqe->addr3		= 1;
+}
+
+static inline __u64 ublk_xbuf_addr(unsigned qid, unsigned tag,
+		unsigned int off)
+{
+	union xbuf_key key = {
+		.key = ((unsigned)qid << 16) | tag,
+		.off = off,
+	};
+
+	return key.addr;
+}
+
+static inline void ublk_set_xpipe_key(struct io_uring_sqe *sqe,
+		unsigned qid, unsigned tag, unsigned xpipe_id, unsigned off)
+{
+	sqe->addr		= ublk_xbuf_addr(qid, tag, off);
+	sqe->buf_index          = xpipe_id;
+}
+
+static inline void __io_uring_prep_xbuf(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id, unsigned nr_ops, unsigned op,
+		unsigned extra_flags)
+{
+	struct ublksrv_io_cmd *cmd = (struct ublksrv_io_cmd *)sqe->cmd;
+
+	sqe->fd			= dev_fd;
+	sqe->opcode		= op;
+	sqe->flags		= IOSQE_FIXED_FILE | IOSQE_CQE_SKIP_SUCCESS |
+		extra_flags;
+	sqe->uring_cmd_flags	= IORING_URING_CMD_XPIPE;
+	if (nr_ops)
+		sqe->uring_cmd_flags |= IORING_URING_CMD_XPIPE_AUTO;
+
+	sqe->cmd_op		= UBLK_IO_XPIPE_ADD_BUF;
+	sqe->__pad1		= 0;
+
+	ublk_set_xpipe_key(sqe, q_id, tag, dev_fd, nr_ops);
+
+	cmd->tag	= tag;
+	cmd->addr	= 0;
+	cmd->q_id	= q_id;
+}
+
+static inline void io_uring_prep_add_xbuf(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id, int nr_ops)
+{
+	__io_uring_prep_xbuf(sqe, dev_fd, tag, q_id, nr_ops,
+			IORING_OP_XPIPE_ADD_BUF,
+			IOSQE_IO_LINK);
+}
+
+static inline void io_uring_prep_del_xbuf(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id)
+{
+	__io_uring_prep_xbuf(sqe, dev_fd, tag, q_id, 0,
+			IORING_OP_XPIPE_DEL_BUF, 0);
+}
+
 /**
  * \defgroup ctrl_dev control device API
  *
