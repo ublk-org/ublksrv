@@ -8,20 +8,28 @@
 
 static long use_zc;
 
+static int auto_remove_xbuf = 0;
+
 static inline void io_uring_prep_rw_zc(struct io_uring_sqe *add,
 		struct io_uring_sqe *io, struct io_uring_sqe *del, unsigned op,
 		int dev_fd, const struct ublksrv_io_desc *iod, int tag,
 		int q_id, __u8 fd)
 {
-	io_uring_prep_add_xbuf(add, dev_fd, tag, q_id, 0);
+	io_uring_prep_add_xbuf(add, dev_fd, tag, q_id, !!auto_remove_xbuf);
 	add->user_data = build_user_data(tag, add->opcode, 1, 1);
+	if (auto_remove_xbuf)
+		add->uring_cmd_flags |= IORING_URING_CMD_XPIPE_AUTO;
 
 	io_uring_prep_rw(op, io, fd, (void *)ublk_xbuf_addr(q_id, tag, 0),
 			iod->nr_sectors << 9, iod->start_sector << 9);
-	io_uring_sqe_set_flags(io, IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+	io_uring_sqe_set_flags(io, IOSQE_FIXED_FILE);
+	if (!auto_remove_xbuf)
+		io->flags |= IOSQE_IO_LINK;
 
 	io->buf_index = dev_fd;	/* xpipe_id */
 	ublk_set_ext_flag(io);
+
+	ublk_assert((auto_remove_xbuf && !del) || (!auto_remove_xbuf && del));
 
 	if (del) {
 		io_uring_prep_del_xbuf(del, dev_fd, tag, q_id);
@@ -303,7 +311,7 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	const struct ublksrv_io_desc *iod = data->iod;
-	struct io_uring_sqe *sqe, *sqe2, *sqe3;
+	struct io_uring_sqe *sqe, *sqe2, *sqe3 = NULL;
 	unsigned ublk_op = ublksrv_get_op(iod);
 
 	switch (ublk_op) {
@@ -333,7 +341,10 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 					iod->start_sector << 9);
 			io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		} else {
-			ublk_get_sqe_pair3(q->ring_ptr, &sqe2, &sqe, &sqe3);
+			if (!auto_remove_xbuf)
+				ublk_get_sqe_pair3(q->ring_ptr, &sqe2, &sqe, &sqe3);
+			else
+				ublk_get_sqe_pair(q->ring_ptr, &sqe2, &sqe);
 			io_uring_prep_read_zc(sqe2, sqe, sqe3, 0,
 					iod, tag, q->q_id, 1);
 		}
@@ -347,7 +358,10 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 				iod->start_sector << 9);
 			io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		} else {
-			ublk_get_sqe_pair3(q->ring_ptr, &sqe2, &sqe, &sqe3);
+			if (!auto_remove_xbuf)
+				ublk_get_sqe_pair3(q->ring_ptr, &sqe2, &sqe, &sqe3);
+			else
+				ublk_get_sqe_pair(q->ring_ptr, &sqe2, &sqe);
 			io_uring_prep_write_zc(sqe2, sqe, sqe3, 0,
 					iod, tag, q->q_id, 1);
 		}
