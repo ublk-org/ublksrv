@@ -170,4 +170,26 @@ static inline void ublk_get_sqe_pair(struct io_uring *r,
 	}
 }
 
+static inline void ublk_get_sqe_pair3(struct io_uring *r,
+		struct io_uring_sqe **sqe, struct io_uring_sqe **sqe2,
+		struct io_uring_sqe **sqe3)
+{
+        unsigned left = io_uring_sq_space_left(r);
+
+        if (left < 3)
+                io_uring_submit(r);
+	if (sqe) {
+		*sqe = io_uring_get_sqe(r);
+		assert(*sqe != NULL);
+	}
+	if (sqe2) {
+		*sqe2 = io_uring_get_sqe(r);
+		assert(*sqe2 != NULL);
+	}
+	if (sqe3) {
+		*sqe3 = io_uring_get_sqe(r);
+		assert(*sqe3 != NULL);
+	}
+}
+
 #endif
