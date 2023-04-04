@@ -311,22 +311,6 @@ static inline int ublk_io_buf_size(struct _ublksrv_dev *dev)
 	return ublk_queue_io_buf_size(dev) * nr_queues;
 }
 
-static void ublksrv_dev_init_io_cmds(struct _ublksrv_dev *dev, struct _ublksrv_queue *q)
-{
-	struct io_uring *r = &q->ring;
-	int i;
-
-	for (i = 0; i < q->q_depth; i++) {
-		struct io_uring_sqe *sqe = ublksrv_uring_get_sqe(r, i, true);
-
-		/* These fields should be written once, never change */
-		sqe->flags = IOSQE_FIXED_FILE;
-		sqe->rw_flags = 0;
-		sqe->ioprio = 0;
-		sqe->off = 0;
-	}
-}
-
 static int ublksrv_queue_cmd_buf_sz(struct _ublksrv_queue *q)
 {
 	int size =  q->q_depth * sizeof(struct ublksrv_io_desc);
@@ -609,8 +593,6 @@ skip_alloc_buf:
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
 		goto fail;
 	}
-
-	ublksrv_dev_init_io_cmds(dev, q);
 
 	/*
 	* N.B. PR_SET_IO_FLUSHER was added with Linux 5.6+.
