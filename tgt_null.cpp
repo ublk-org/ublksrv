@@ -4,6 +4,21 @@
 
 #include "ublksrv_tgt.h"
 
+static long use_zc;
+
+static inline void io_uring_prep_rw_zc(struct io_uring_sqe *add,
+		struct io_uring_sqe *del, unsigned op,
+		int dev_fd, const struct ublksrv_io_desc *iod, int tag,
+		int q_id)
+{
+	io_uring_prep_add_xbuf(add, dev_fd, tag, q_id, 0);
+	add->user_data = build_user_data(tag, add->opcode, 1, 1);
+
+	io_uring_prep_del_xbuf(del, dev_fd, tag, q_id);
+	del->user_data = build_user_data(tag, del->opcode, 0, 1);
+	del->flags		&= ~IOSQE_CQE_SKIP_SUCCESS;
+}
+
 static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
@@ -34,9 +49,13 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	if (type != UBLKSRV_TGT_TYPE_NULL)
 		return -1;
 
+	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 	tgt_json.dev_size = tgt->dev_size = dev_size;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
+
+	if (use_zc)
+		tgt->tgt_ring_depth *= 2;
 
 	ublksrv_tgt_set_io_data_size(tgt);
 
@@ -73,17 +92,32 @@ static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 		return ret;
 	}
 
+	use_zc = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 	ublksrv_tgt_set_io_data_size(tgt);
 	tgt->dev_size = p.basic.dev_sectors << 9;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
+	if (use_zc)
+		tgt->tgt_ring_depth *= 2;
 	return 0;
 }
 
 static co_io_job __null_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
-	ublksrv_complete_io(q, tag, data->iod->nr_sectors << 9);
+	const struct ublksrv_io_desc *iod = data->iod;
+	struct io_uring_sqe *add, *del;
+	int res = data->iod->nr_sectors << 9;
+
+	if (!use_zc)
+		goto exit;
+
+	ublk_get_sqe_pair(q->ring_ptr, &add, &del);
+	io_uring_prep_rw_zc(add, del, ublksrv_get_op(iod), 0, iod, tag, q->q_id);
+
+	co_await__suspend_always(tag);
+exit:
+	ublksrv_complete_io(q, tag, res);
 
 	co_return;
 }
@@ -98,8 +132,28 @@ static int null_handle_io_async(const struct ublksrv_queue *q,
 	return 0;
 }
 
+static void null_tgt_io_done(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct io_uring_cqe *cqe)
+{
+	int tag = user_data_to_tag(cqe->user_data);
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+	ublk_assert(tag == data->tag);
+
+	/*
+	 * tgt data is only set in case of use_zc, ignore it given we can
+	 * retrieve the result from primary command
+	 */
+	if (user_data_to_tgt_data(cqe->user_data))
+		return;
+	io->tgt_io_cqe = cqe;
+	io->co.resume();
+}
+
 struct ublksrv_tgt_type  null_tgt_type = {
 	.handle_io_async = null_handle_io_async,
+	.tgt_io_done = null_tgt_io_done,
 	.init_tgt = null_init_tgt,
 	.type	= UBLKSRV_TGT_TYPE_NULL,
 	.name	=  "null",

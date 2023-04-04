@@ -1,0 +1,7 @@
+#!/bin/bash
+
+. common/fio_common
+
+export T_TYPE_PARAMS="-t null -q 2 -z"
+
+__run_dev_perf 1
