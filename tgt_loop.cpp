@@ -178,7 +178,8 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	 * in case of buffered io, use common bs/pbs so that all FS
 	 * image can be supported
 	 */
-	if (buffered_io || fcntl(fd, F_SETFL, O_DIRECT)) {
+	if (buffered_io || !ublk_param_is_valid(&p) ||
+			fcntl(fd, F_SETFL, O_DIRECT)) {
 		p.basic.logical_bs_shift = 9;
 		p.basic.physical_bs_shift = 12;
 		buffered_io = 1;

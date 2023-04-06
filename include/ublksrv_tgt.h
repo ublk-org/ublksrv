@@ -155,4 +155,13 @@ static inline unsigned short ublk_unique_tag_to_tag(unsigned int unique_tag)
         return unique_tag & UBLK_UNIQUE_TAG_MASK;
 }
 
+static inline bool ublk_param_is_valid(const struct ublk_params *p)
+{
+	if (p->basic.logical_bs_shift < 9 || p->basic.physical_bs_shift > 12)
+		return false;
+	if (p->basic.logical_bs_shift > p->basic.physical_bs_shift)
+		return false;
+	return true;
+}
+
 #endif
