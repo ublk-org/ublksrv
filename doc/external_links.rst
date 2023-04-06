@@ -28,6 +28,8 @@ Tech
 
 `io_uring in Android OTA <https://lpc.events/event/16/contributions/1331/>`
 
+`ublk user recovery design[Chinese] <https://developer.aliyun.com/article/1084548?spm=a2c6h.13262185.profile.7.52c8766fYUXyKA>`
+
 Uses
 ====
 
