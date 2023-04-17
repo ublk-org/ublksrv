@@ -928,6 +928,16 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 	int ret;
 
 	dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "ublksrv_ctrl_init failure dev %d\n", number);
+		return -ENOMEM;
+	}
+
+	ret = ublksrv_ctrl_get_info(dev);
+	if (ret < 0) {
+		fprintf(stderr, "can't get dev info from %d\n", number);
+		goto fail;
+	}
 
 	ret = ublksrv_ctrl_start_recovery(dev);
 	if (ret < 0) {
@@ -965,12 +975,6 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 	if (ret < 0) {
 		fprintf(stderr, "can't delete old pid_file for %d, error:%s\n",
 				number, strerror(errno));
-		goto fail;
-	}
-
-	ret = ublksrv_ctrl_get_info(dev);
-	if (ret < 0) {
-		fprintf(stderr, "can't get dev info from %d\n", number);
 		goto fail;
 	}
 
