@@ -126,7 +126,7 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 {
 	struct ublksrv_io_cmd *cmd;
 	struct io_uring_sqe *sqe;
-	unsigned int cmd_op;
+	unsigned int cmd_op = 0;
 	__u64 user_data;
 
 	/* only freed io can be issued */
@@ -158,6 +158,9 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 	if (cmd_op == UBLK_IO_COMMIT_AND_FETCH_REQ)
 		cmd->result = io->result;
 
+	if (q->state & UBLKSRV_QUEUE_IOCTL_OP)
+		cmd_op = _IOWR('u', _IOC_NR(cmd_op), struct ublksrv_io_cmd);
+
 	/* These fields should be written once, never change */
 	ublksrv_set_sqe_cmd_op(sqe, cmd_op);
 	sqe->fd		= 0;	/*dev->cdev_fd*/
@@ -168,7 +171,7 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 	cmd->addr	= (__u64)io->buf_addr;
 	cmd->q_id	= q->q_id;
 
-	user_data = build_user_data(tag, cmd_op, 0, 0);
+	user_data = build_user_data(tag, _IOC_NR(cmd_op), 0, 0);
 	io_uring_sqe_set_data64(sqe, user_data);
 
 	io->flags = 0;
@@ -512,7 +515,10 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 
 	q->tgt_ops = dev->tgt.ops;	//cache ops for fast path
 	q->dev = dev;
-	q->state = 0;
+	if (ctrl_dev->dev_info.flags & UBLK_F_CMD_IOCTL_ENCODE)
+		q->state = UBLKSRV_QUEUE_IOCTL_OP;
+	else
+		q->state = 0;
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;

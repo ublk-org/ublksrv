@@ -85,6 +85,7 @@ struct ublk_io_data {
 /* queue state is only retrieved via ublksrv_queue_state() API */
 #define UBLKSRV_QUEUE_STOPPING	(1U << 0)
 #define UBLKSRV_QUEUE_IDLE	(1U << 1)
+#define UBLKSRV_QUEUE_IOCTL_OP	(1U << 2)
 
 /**
  * ublksrv_queue is 1:1 mapping with ublk driver's blk-mq queue, and
