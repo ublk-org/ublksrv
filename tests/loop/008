@@ -1,0 +1,13 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+. common/loop_common
+
+echo "run loop usercopy test"
+file=`_create_loop_image "data" $LO_IMG_SZ`
+export T_TYPE_PARAMS="-t loop -q 1 --usercopy  -f $file"
+
+__run_dev_perf 1
+
+_remove_loop_image $file

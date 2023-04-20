@@ -689,6 +689,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "user_recovery_reissue",	1,	NULL, 'i'},
 		{ "debug_mask",	1,	NULL, 0},
 		{ "unprivileged",	0,	NULL, 0},
+		{ "usercopy",	0,	NULL, 0},
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -746,6 +747,8 @@ static int cmd_dev_add(int argc, char *argv[])
 				debug_mask = strtol(optarg, NULL, 16);
 			if (!strcmp(longopts[option_index].name, "unprivileged"))
 				unprivileged = 1;
+			if (!strcmp(longopts[option_index].name, "usercopy"))
+				data.flags |= UBLK_F_USER_COPY;
 			break;
 		}
 	}
