@@ -168,7 +168,10 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 	sqe->flags	= IOSQE_FIXED_FILE;
 	sqe->rw_flags	= 0;
 	cmd->tag	= tag;
-	cmd->addr	= (__u64)io->buf_addr;
+	if (!(q->state & UBLKSRV_USER_COPY))
+		cmd->addr	= (__u64)io->buf_addr;
+	else
+		cmd->addr	= 0;
 	cmd->q_id	= q->q_id;
 
 	user_data = build_user_data(tag, _IOC_NR(cmd_op), 0, 0);
@@ -519,6 +522,8 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 		q->state = UBLKSRV_QUEUE_IOCTL_OP;
 	else
 		q->state = 0;
+	if (ctrl_dev->dev_info.flags & UBLK_F_USER_COPY)
+		q->state |= UBLKSRV_USER_COPY;
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
@@ -990,6 +995,15 @@ ublksrv_queue_get_io_data(const struct ublksrv_queue *tq, int tag)
 	struct _ublksrv_queue *q = tq_to_local(tq);
 
 	return &q->ios[tag].data;
+}
+
+void *ublksrv_queue_get_io_buf(const struct ublksrv_queue *tq, int tag)
+{
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
+	if (tag < q->q_depth)
+		return q->ios[tag].buf_addr;
+	return NULL;
 }
 
 /*

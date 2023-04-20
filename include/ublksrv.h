@@ -86,6 +86,7 @@ struct ublk_io_data {
 #define UBLKSRV_QUEUE_STOPPING	(1U << 0)
 #define UBLKSRV_QUEUE_IDLE	(1U << 1)
 #define UBLKSRV_QUEUE_IOCTL_OP	(1U << 2)
+#define UBLKSRV_USER_COPY	(1U << 3)
 
 /**
  * ublksrv_queue is 1:1 mapping with ublk driver's blk-mq queue, and
@@ -360,6 +361,15 @@ static inline unsigned int user_data_to_op(__u64 user_data)
 static inline unsigned int user_data_to_tgt_data(__u64 user_data)
 {
 	return (user_data >> 24) & 0xffff;
+}
+
+static inline __u64 ublk_pos(__u16 q_id, __u16 tag, __u32 offset)
+{
+	assert(!(offset & ~UBLK_IO_BUF_BITS_MASK));
+
+	return UBLKSRV_IO_BUF_OFFSET +
+		((((__u64)q_id) << UBLK_QID_OFF) |
+		(((__u64)tag) << UBLK_TAG_OFF) | (__u64)offset);
 }
 
 /**
@@ -803,6 +813,17 @@ extern void *ublksrv_io_private_data(const struct ublksrv_queue *q, int tag);
  */
 extern const struct ublk_io_data *ublksrv_queue_get_io_data(
 		const struct ublksrv_queue *q, int tag);
+
+/**
+ * Return pre-allocated io buffer
+ *
+ * Each IO has unique tag, so we use tag to represent specified io.
+ *
+ * @param q the ublksrv queue instance
+ * @param tag tag for this io
+ * @return pre-allocated io buffer for this io
+ */
+extern void *ublksrv_queue_get_io_buf(const struct ublksrv_queue *q, int tag);
 
 /**
  * Return current queue state
