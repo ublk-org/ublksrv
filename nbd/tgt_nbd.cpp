@@ -797,13 +797,11 @@ static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
 }
 
 static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
-		uint16_t *flags)
+		const char *jbuf, uint16_t *flags)
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
-	int jbuf_size;
-	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
 	int i;
 	struct nbd_tgt_data *data = (struct nbd_tgt_data *)dev->tgt.tgt_data;
 
@@ -854,6 +852,8 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 					needed_flags, cflags, opts, certfile,
 					keyfile, cacertfile, tlshostname, tls,
 					can_opt_go);
+		else
+			ublk_err("%s: open socket failed %d\n", __func__, sock);
 
 		tgt->fds[i + 1] = sock;
 		NBD_HS_DBG("%s:qid %d %s-%s size %luMB flags %x sock %d\n",
@@ -969,7 +969,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
-	nbd_setup_tgt(dev, type, false, &flags);
+	nbd_setup_tgt(dev, type, false, jbuf, &flags);
 
 	tgt_json.dev_size = tgt->dev_size;
 	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
@@ -1000,11 +1000,13 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 static int nbd_recovery_tgt(struct ublksrv_dev *dev, int type)
 {
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
 	uint16_t flags = 0;
 
 	dev->tgt.tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
-	nbd_setup_tgt(dev, type, true, &flags);
+	nbd_setup_tgt(dev, type, true, jbuf, &flags);
 
 	return 0;
 }
