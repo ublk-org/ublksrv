@@ -1042,11 +1042,17 @@ static int cmd_dev_user_recover(int argc, char *argv[])
 	return __cmd_dev_user_recover(number, verbose);
 }
 
+static void cmd_dev_recover_usage(const char *cmd)
+{
+	printf("%s recover [-n DEV_ID]\n", cmd);
+}
+
 static void cmd_usage(const char *cmd)
 {
 	cmd_dev_add_usage(cmd);
 	cmd_dev_del_usage(cmd);
 	cmd_dev_list_usage(cmd);
+	cmd_dev_recover_usage(cmd);
 
 	printf("%s -v [--version]\n", cmd);
 	printf("%s -h [--help]\n", cmd);
