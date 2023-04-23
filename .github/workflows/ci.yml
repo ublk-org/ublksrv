@@ -75,7 +75,12 @@ jobs:
         sudo apt update -o Acquire::Retries=3
         sudo apt install -y dnf rpm systemd-container qemu-system-x86 ovmf e2fsprogs btrfs-progs
         #python3 -m pip install --user git+https://github.com/systemd/mkosi.git
-        python3 -m pip install --user https://github.com/systemd/mkosi/archive/refs/tags/v14.tar.gz
+        #python3 -m pip install --user https://github.com/systemd/mkosi/archive/refs/tags/v14.tar.gz
+        wget https://github.com/systemd/mkosi/archive/refs/tags/v14.tar.gz
+        tar zxf v14.tar.gz
+        cd mkosi-14
+        sed -i '/gpgurl\ = \urllib.parse.urljoin/c \    gpgurl\ =\ \"https://fedoraproject.org/fedora.gpg\"' ./mkosi/__init__.py
+        python3 -m pip install --user ./
 
     # Required for ssh'ing into VM
     - name: "setup: environment"
