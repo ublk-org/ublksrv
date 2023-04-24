@@ -245,7 +245,7 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	const struct ublksrv_io_desc *iod = data->iod;
-	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
+	struct io_uring_sqe *sqe;
 	unsigned ublk_op = ublksrv_get_op(iod);
 
 	if (!sqe)
@@ -253,40 +253,49 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_FLUSH:
+		ublk_get_sqe_pair(q->ring_ptr, &sqe, NULL);
 		io_uring_prep_sync_file_range(sqe, 1 /*fds[1]*/,
 				iod->nr_sectors << 9,
 				iod->start_sector << 9,
 				IORING_FSYNC_DATASYNC);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		/* bit63 marks us as tgt io */
+		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 		break;
 	case UBLK_IO_OP_WRITE_ZEROES:
 	case UBLK_IO_OP_DISCARD:
+		ublk_get_sqe_pair(q->ring_ptr, &sqe, NULL);
 		io_uring_prep_fallocate(sqe, 1 /*fds[1]*/,
 				loop_fallocate_mode(iod),
 				iod->start_sector << 9,
 				iod->nr_sectors << 9);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		/* bit63 marks us as tgt io */
+		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 		break;
 	case UBLK_IO_OP_READ:
+		ublk_get_sqe_pair(q->ring_ptr, &sqe, NULL);
 		io_uring_prep_read(sqe, 1 /*fds[1]*/,
 				(void *)iod->addr,
 				iod->nr_sectors << 9,
 				iod->start_sector << 9);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		/* bit63 marks us as tgt io */
+		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 		break;
 	case UBLK_IO_OP_WRITE:
+		ublk_get_sqe_pair(q->ring_ptr, &sqe, NULL);
 		io_uring_prep_write(sqe, 1 /*fds[1]*/,
 				(void *)iod->addr,
 				iod->nr_sectors << 9,
 				iod->start_sector << 9);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		/* bit63 marks us as tgt io */
+		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 		break;
 	default:
 		return -EINVAL;
 	}
-
-	/* bit63 marks us as tgt io */
-	sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 
 	ublk_dbg(UBLK_DBG_IO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
