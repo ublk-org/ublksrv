@@ -27,7 +27,6 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			.dev_sectors		= dev_size >> 9,
 		},
 	};
-	int ret;
 
 	strcpy(tgt_json.name, "null");
 
@@ -37,17 +36,11 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt_json.dev_size = tgt->dev_size = dev_size;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
-
 	ublksrv_tgt_set_io_data_size(tgt);
 
-	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
-	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
-
-	do {
-		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
-		if (ret < 0)
-			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	} while (ret < 0);
+	ublk_json_write_dev_info(dev, &jbuf, &jbuf_size);
+	ublk_json_write_target_base(dev, &jbuf, &jbuf_size, &tgt_json);
+	ublk_json_write_params(dev, &jbuf, &jbuf_size, &p);
 
 	return 0;
 }
