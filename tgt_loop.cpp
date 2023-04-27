@@ -31,21 +31,18 @@ static bool backing_supports_discard(char *name)
 	return false;
 }
 
-static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
+static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
+		const char *jbuf)
 {
-	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(cdev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int fd, ret;
 	long direct_io = 0;
 	struct ublk_params p;
 	char file[PATH_MAX];
 
 	ublk_assert(jbuf);
-	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
-	ublk_assert(type == UBLKSRV_TGT_TYPE_LOOP);
 
 	ret = ublksrv_json_read_target_str_info(jbuf, PATH_MAX, "backing_file", file);
 	if (ret < 0) {
@@ -88,11 +85,23 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 	return 0;
 }
 
+static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
+{
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
+
+	ublk_assert(type == UBLKSRV_TGT_TYPE_LOOP);
+	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
+
+	return loop_setup_tgt(dev, type, true, jbuf);
+}
+
 static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
 	int buffered_io = 0;
-	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	static const struct option lo_longopts[] = {
@@ -185,11 +194,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		buffered_io = 1;
 	}
 
-	ublksrv_tgt_set_io_data_size(tgt);
-	tgt_json.dev_size = tgt->dev_size = bytes;
-	tgt->tgt_ring_depth = info->queue_depth;
-	tgt->nr_fds = 1;
-	tgt->fds[1] = fd;
+	tgt_json.dev_size = bytes;
 	p.basic.dev_sectors = bytes >> 9;
 
 	if (st.st_blksize && can_discard)
@@ -219,7 +224,9 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
 	} while (ret < 0);
 
-	return 0;
+	close(fd);
+
+	return loop_setup_tgt(dev, type, false, jbuf);
 }
 
 static void loop_usage_for_add(void)
