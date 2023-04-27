@@ -905,7 +905,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,
 	};
-	int ret;
 	int opt;
 	int option_index = 0;
 	unsigned char bs_shift = 9;
@@ -939,7 +938,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		return -EINVAL;
 #endif
 
-	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
+	ublk_json_write_dev_info(dev, &jbuf, &jbuf_size);
 	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size, "host", host_name);
 	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size, "unix", unix_path);
 	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size, "export_name", exp_name);
@@ -950,7 +949,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	nbd_setup_tgt(dev, type, false, jbuf, &flags);
 
 	tgt_json.dev_size = tgt->dev_size;
-	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
+	ublk_json_write_target_base(dev, &jbuf, &jbuf_size, &tgt_json);
 
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
@@ -966,12 +965,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	};
 
 	nbd_parse_flags(&p, flags, 1U << bs_shift);
-
-	do {
-		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
-		if (ret < 0)
-			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	} while (ret < 0);
+	ublk_json_write_params(dev, &jbuf, &jbuf_size, &p);
 
 	return 0;
 }
