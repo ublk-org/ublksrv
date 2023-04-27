@@ -103,47 +103,26 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	ublksrv_tgt_set_io_data_size(tgt);
 
 	jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
-	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
-	do {
-		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
-		if (ret < 0)
-			goto realloc;
+	ublk_json_write_dev_info(dev, &jbuf, &jbuf_size);
+	ublk_json_write_target_base(dev, &jbuf, &jbuf_size, &tgt_json);
 
-		ret = ublksrv_json_write_target_str_info(jbuf, jbuf_size,
-				"backing_file", file);
-		if (ret < 0)
-			goto realloc;
+	ublk_json_write_params(dev, &jbuf, &jbuf_size, &p);
 
-		ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size,
-				"version", qs->header.get_version());
-		if (ret < 0)
-			goto realloc;
-		ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size,
-				"cluster_bits", qs->header.get_cluster_bits());
-		if (ret < 0)
-			goto realloc;
-		ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size,
-				"header_length", qs->header.get_header_length());
-		if (ret < 0)
-			goto realloc;
-
-		ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size,
-				"l1_size", qs->header.get_l1_size());
-		if (ret < 0)
-			goto realloc;
-		ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size,
-				"refcount_table_clusters",
-				qs->header.get_refcount_table_clusters());
-		if (ret < 0)
-			goto realloc;
-		ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size,
-				"refcount_order",
-			qs->header.get_refcount_order());
- realloc:
-		if (ret < 0)
-			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	} while (ret < 0);
+	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size,
+			"backing_file", file);
+	ublk_json_write_tgt_ulong(dev, &jbuf, &jbuf_size,
+		"version", qs->header.get_version());
+	ublk_json_write_tgt_ulong(dev, &jbuf, &jbuf_size,
+		"cluster_bits", qs->header.get_cluster_bits());
+	ublk_json_write_tgt_ulong(dev, &jbuf, &jbuf_size,
+		"header_length", qs->header.get_header_length());
+	ublk_json_write_tgt_ulong(dev, &jbuf, &jbuf_size,
+		"l1_size", qs->header.get_l1_size());
+	ublk_json_write_tgt_ulong(dev, &jbuf, &jbuf_size,
+		"refcount_table_clusters",
+		qs->header.get_refcount_table_clusters());
+	ublk_json_write_tgt_ulong(dev, &jbuf, &jbuf_size,
+			"refcount_order", qs->header.get_refcount_order());
 
 	qs->header.dump_ext();
 
