@@ -113,7 +113,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	struct stat st;
 	int fd, opt;
 	char *file = NULL;
-	int jbuf_size, ret;
+	int jbuf_size;
 	char *jbuf;
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,
@@ -203,26 +203,11 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		p.types &= ~UBLK_PARAM_TYPE_DISCARD;
 
 	jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
-	ublksrv_json_write_target_base_info(jbuf, jbuf_size, &tgt_json);
-	do {
-		ret = ublksrv_json_write_target_str_info(jbuf, jbuf_size,
-				"backing_file", file);
-		if (ret < 0)
-			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	} while (ret < 0);
-	do {
-		ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size,
-				"direct_io", !buffered_io);
-		if (ret < 0)
-			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	} while (ret < 0);
-
-	do {
-		ret = ublksrv_json_write_params(&p, jbuf, jbuf_size);
-		if (ret < 0)
-			jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	} while (ret < 0);
+	ublk_json_write_dev_info(dev, &jbuf, &jbuf_size);
+	ublk_json_write_target_base(dev, &jbuf, &jbuf_size, &tgt_json);
+	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size, "backing_file", file);
+	ublk_json_write_tgt_long(dev, &jbuf, &jbuf_size, "direct_io", !buffered_io);
+	ublk_json_write_params(dev, &jbuf, &jbuf_size, &p);
 
 	close(fd);
 
