@@ -20,6 +20,38 @@ struct ublksrv_queue_info {
 static char *full_cmd;
 static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
 
+int ublk_json_write_tgt_str(struct ublksrv_dev *dev, char **jbuf,
+		int *len, const char *name, const char *val)
+{
+	int ret = 0;
+
+	do {
+		if (val)
+			ret = ublksrv_json_write_target_str_info(*jbuf,
+				*len, name, val);
+
+		if (ret < 0)
+			*jbuf = ublksrv_tgt_realloc_json_buf(dev, len);
+	} while (ret < 0);
+
+	return ret;
+}
+
+int ublk_json_write_tgt_long(struct ublksrv_dev *dev, char **jbuf,
+		int *len, const char *name, long val)
+{
+	int ret = 0;
+
+	do {
+		ret = ublksrv_json_write_target_long_info(*jbuf,
+				*len, name, val);
+		if (ret < 0)
+			*jbuf = ublksrv_tgt_realloc_json_buf(dev, len);
+	} while (ret < 0);
+
+	return ret;
+}
+
 static const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name)
 {
 	int i;

@@ -164,4 +164,9 @@ static inline bool ublk_param_is_valid(const struct ublk_params *p)
 	return true;
 }
 
+int ublk_json_write_tgt_str(struct ublksrv_dev *dev, char **jbuf,
+		int *len, const char *name, const char *val);
+int ublk_json_write_tgt_long(struct ublksrv_dev *dev, char **jbuf,
+		int *len, const char *name, long val);
+
 #endif

@@ -30,28 +30,6 @@
 #define NBD_OP_READ_REQ  0x80
 #define NBD_OP_READ_REPLY  0x81
 
-#define NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, name, val) do { \
-	int ret;						\
-	if (val)						\
-		ret = ublksrv_json_write_target_str_info(jbuf,	\
-				jbuf_size, name, val);		\
-	else							\
-		ret = 0;					\
-	if (ret < 0)						\
-		jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);	\
-	else							\
-		break;						\
-} while (1)
-
-#define NBD_WRITE_TGT_LONG(dev, jbuf, jbuf_size, name, val) do { \
-	int ret = ublksrv_json_write_target_ulong_info(jbuf, jbuf_size, \
-			name, val);					\
-	if (ret < 0)							\
-		jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);	\
-	else							\
-		break;						\
-} while (1)
-
 struct nbd_tgt_data {
 	bool unix_sock;
 	bool use_send_zc;
@@ -962,10 +940,10 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 #endif
 
 	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, jbuf_size);
-	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "host", host_name);
-	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "unix", unix_path);
-	NBD_WRITE_TGT_STR(dev, jbuf, jbuf_size, "export_name", exp_name);
-	NBD_WRITE_TGT_LONG(dev, jbuf, jbuf_size, "send_zc", send_zc);
+	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size, "host", host_name);
+	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size, "unix", unix_path);
+	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size, "export_name", exp_name);
+	ublk_json_write_tgt_long(dev, &jbuf, &jbuf_size, "send_zc", send_zc);
 
 	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
