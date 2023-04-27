@@ -705,7 +705,7 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 	dev->cdev_fd = -1;
 
 	snprintf(buf, 64, "%s%d", UBLKC_DEV, dev_id);
-	dev->cdev_fd = open(buf, O_RDWR);
+	dev->cdev_fd = open(buf, O_RDWR | O_NONBLOCK);
 	if (dev->cdev_fd < 0) {
 		ublk_err("can't open %s, ret %d\n", buf, dev->cdev_fd);
 		goto fail;
