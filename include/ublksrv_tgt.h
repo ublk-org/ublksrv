@@ -168,5 +168,12 @@ int ublk_json_write_tgt_str(struct ublksrv_dev *dev, char **jbuf,
 		int *len, const char *name, const char *val);
 int ublk_json_write_tgt_long(struct ublksrv_dev *dev, char **jbuf,
 		int *len, const char *name, long val);
+int ublk_json_write_tgt_ulong(struct ublksrv_dev *dev, char **jbuf,
+		int *len, const char *name, unsigned long val);
+int ublk_json_write_dev_info(struct ublksrv_dev *dev, char **jbuf, int *len);
+int ublk_json_write_params(struct ublksrv_dev *dev, char **jbuf, int *len,
+		const struct ublk_params *p);
+int ublk_json_write_target_base(struct ublksrv_dev *dev, char **jbuf, int *len,
+		const struct ublksrv_tgt_base_json *tgt);
 
 #endif

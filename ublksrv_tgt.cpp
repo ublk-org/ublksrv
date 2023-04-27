@@ -20,6 +20,49 @@ struct ublksrv_queue_info {
 static char *full_cmd;
 static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
 
+int ublk_json_write_dev_info(struct ublksrv_dev *dev, char **jbuf, int *len)
+{
+	int ret = 0;
+
+	do {
+		ret = ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev),
+				*jbuf, *len);
+		if (ret < 0)
+			*jbuf = ublksrv_tgt_realloc_json_buf(dev, len);
+	} while (ret < 0);
+
+	return ret;
+}
+
+int ublk_json_write_params(struct ublksrv_dev *dev, char **jbuf, int *len,
+		const struct ublk_params *p)
+{
+	int ret = 0;
+
+	do {
+		ret = ublksrv_json_write_params(p, *jbuf, *len);
+		if (ret < 0)
+			*jbuf = ublksrv_tgt_realloc_json_buf(dev, len);
+	} while (ret < 0);
+
+	return ret;
+}
+
+int ublk_json_write_target_base(struct ublksrv_dev *dev, char **jbuf, int *len,
+		const struct ublksrv_tgt_base_json *tgt)
+{
+	int ret = 0;
+
+	do {
+		ret = ublksrv_json_write_target_base_info(*jbuf, *len, tgt);
+		if (ret < 0)
+			*jbuf = ublksrv_tgt_realloc_json_buf(dev, len);
+	} while (ret < 0);
+
+	return ret;
+
+}
+
 int ublk_json_write_tgt_str(struct ublksrv_dev *dev, char **jbuf,
 		int *len, const char *name, const char *val)
 {
@@ -30,6 +73,21 @@ int ublk_json_write_tgt_str(struct ublksrv_dev *dev, char **jbuf,
 			ret = ublksrv_json_write_target_str_info(*jbuf,
 				*len, name, val);
 
+		if (ret < 0)
+			*jbuf = ublksrv_tgt_realloc_json_buf(dev, len);
+	} while (ret < 0);
+
+	return ret;
+}
+
+int ublk_json_write_tgt_ulong(struct ublksrv_dev *dev, char **jbuf,
+		int *len, const char *name, unsigned long val)
+{
+	int ret = 0;
+
+	do {
+		ret = ublksrv_json_write_target_ulong_info(*jbuf,
+				*len, name, val);
 		if (ret < 0)
 			*jbuf = ublksrv_tgt_realloc_json_buf(dev, len);
 	} while (ret < 0);
