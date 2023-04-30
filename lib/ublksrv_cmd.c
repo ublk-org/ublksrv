@@ -93,8 +93,8 @@ static inline void ublksrv_ctrl_init_cmd(struct ublksrv_ctrl_dev *dev,
 
 	io_uring_sqe_set_data(sqe, cmd);
 
-	ublk_ctrl_dbg(UBLK_DBG_CTRL_CMD, "dev %d cmd_op %x, user_data %p\n",
-			dev->dev_info.dev_id, data->cmd_op, cmd);
+	ublk_ctrl_dbg(UBLK_DBG_CTRL_CMD, "dev %d cmd_op %x/%x, user_data %p\n",
+			dev->dev_info.dev_id, data->cmd_op, cmd_op, cmd);
 }
 
 static int __ublksrv_ctrl_cmd(struct ublksrv_ctrl_dev *dev,
