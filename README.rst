@@ -162,6 +162,53 @@ Unprivileged user can pass '--unprevileged' to 'ublk add' for creating
 unprivileged ublk device, then the created ublk device is only available
 for the owner and administrator.
 
+use unprivileged ublk in docker
+-------------------------------
+
+- install the following udev rules in host machine:
+
+ACTION=="add",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown_docker.sh %k 'add' '%M' '%m'"
+ACTION=="remove",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown_docker.sh %k 'remove' '%M' '%m'"
+
+- start one container and install ublk & its dependency packages
+
+  docker run \
+    --name fedora \
+    --hostname=server.example.com \
+    --device=/dev/ublk-control \
+    --device-cgroup-rule='a *:* rmw' \
+    --tmpfs /tmp \
+    --tmpfs /run \
+    --volume /sys/fs/cgroup:/sys/fs/cgroup:ro \
+    -ti \
+    fedora:38
+
+  #inside container
+  dnf install -y git libtool automake autoconf g++ liburing-devel
+  git clone https://github.com/ming1/ubdsrv.git
+  cd ubdsrv
+  autoreconf -i&& ./configure&& make -j 4&& make install
+
+- add/delete ublk device inside container
+
+  docker exec -u $UID:$GID -w $WORK_DIR -ti fedora /bin/bash
+
+    bash-5.2$ ublk add -t null --unprivileged
+    dev id 0: nr_hw_queues 1 queue_depth 128 block size 512 dev_capacity 524288000
+    	max rq size 524288 daemon pid 178 flags 0x62 state LIVE
+    	ublkc: 237:0 ublkb: 259:1 owner: 1001:1001
+    	queue 0: tid 179 affinity(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 )
+    	target {"dev_size":268435456000,"name":"null","type":0}
+    bash-5.2$ ls -l /dev/ublk*
+    crw-rw-rw-. 1 root root  10, 123 May  1 04:35 /dev/ublk-control
+    brwx------. 1 1001 1001 259,   1 May  1 04:36 /dev/ublkb0
+    crwx------. 1 1001 1001 237,   0 May  1 04:36 /dev/ublkc0
+    bash-5.2$ ublk del -n 0
+    bash-5.2$ ls -l /dev/ublk*
+    crw-rw-rw-. 1 root root 10, 123 May  1 04:35 /dev/ublk-control
+
+- example of ublk in docker: ``tests/debug/ublk_docker``
+
 test
 ====
 
