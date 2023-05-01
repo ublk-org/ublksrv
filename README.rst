@@ -49,18 +49,20 @@ Quick start
 how to build ublksrv:
 --------------------
 
+.. code-block:: console
+
   autoreconf -i
-
   ./configure   #pkg-config and libtool is usually needed
-
   make
 
 note: './configure' requires liburing 2.2 package installed, if liburing 2.2
 isn't available in your distribution, please configure via the following
 command, or refer to ``build_with_liburing_src`` [#build_with_liburing_src]_
 
-  PKG_CONFIG_PATH=${LIBURING_DIR} \
-  ./configure \
+.. code-block:: console
+
+   PKG_CONFIG_PATH=${LIBURING_DIR} \
+   ./configure \
     CFLAGS="-I${LIBURING_DIR}/src/include" \
     CXXFLAGS="-I${LIBURING_DIR}/src/include" \
     LDFLAGS="-L${LIBURING_DIR}/src"
@@ -72,16 +74,14 @@ has to be supported in the liburing source.
 c++20 is required for building ublk utility, but libublksrv and demo_null.c &
 demo_event.c can be built independently:
 
-#build libublksrv
+- build libublksrv ::
 
-make -C lib/
+    make -C lib/
 
-#build demo_null && demo_event
+- build demo_null && demo_event ::
 
-make -C lib/
-
-make demo_null demo_event
-
+    make -C lib/
+    make demo_null demo_event
 
 help
 ----
@@ -145,10 +145,10 @@ KERNEL=="ublk-control", MODE="0666", OPTIONS+="static_node=ublk-control"
 
 Also when new ublk device is added, we need ublk to change device
 ownership to the device's real owner, so the following rules are
-needed:
+needed: ::
 
-KERNEL=="ublkc*",RUN+="ublk_chown.sh %k"
-KERNEL=="ublkb*",RUN+="ublk_chown.sh %k"
+    KERNEL=="ublkc*",RUN+="ublk_chown.sh %k"
+    KERNEL=="ublkb*",RUN+="ublk_chown.sh %k"
 
 ``ublk_chown.sh`` can be found under ``utils/`` too.
 
@@ -165,16 +165,20 @@ for the owner and administrator.
 use unprivileged ublk in docker
 -------------------------------
 
-- install the following udev rules in host machine:
+- install the following udev rules in host machine: ::
 
-ACTION=="add",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown_docker.sh %k 'add' '%M' '%m'"
-ACTION=="remove",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown_docker.sh %k 'remove' '%M' '%m'"
+    ACTION=="add",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown_docker.sh %k 'add' '%M' '%m'"
+    ACTION=="remove",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown_docker.sh %k 'remove' '%M' '%m'"
 
-- start one container and install ublk & its dependency packages
+``ublk_chown_docker.sh`` can be found under ``utils/``.
+
+- run one container and install ublk & its dependency packages
+
+.. code-block:: console
 
   docker run \
     --name fedora \
-    --hostname=server.example.com \
+    --hostname=ublk-docker.example.com \
     --device=/dev/ublk-control \
     --device-cgroup-rule='a *:* rmw' \
     --tmpfs /tmp \
@@ -183,28 +187,37 @@ ACTION=="remove",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown_docker.sh 
     -ti \
     fedora:38
 
-  #inside container
+.. code-block:: console
+
+  #run the following commands inside the above container
   dnf install -y git libtool automake autoconf g++ liburing-devel
   git clone https://github.com/ming1/ubdsrv.git
   cd ubdsrv
   autoreconf -i&& ./configure&& make -j 4&& make install
 
-- add/delete ublk device inside container
+- add/delete ublk device inside container by unprivileged user
 
-  docker exec -u $UID:$GID -w $WORK_DIR -ti fedora /bin/bash
+.. code-block:: console
 
-    bash-5.2$ ublk add -t null --unprivileged
+  docker exec -u 1001:1001 -ti fedora /bin/bash
+
+.. code-block:: console
+
+  #run the following commands inside the above container
+  bash-5.2$ ublk add -t null --unprivileged
     dev id 0: nr_hw_queues 1 queue_depth 128 block size 512 dev_capacity 524288000
     	max rq size 524288 daemon pid 178 flags 0x62 state LIVE
     	ublkc: 237:0 ublkb: 259:1 owner: 1001:1001
     	queue 0: tid 179 affinity(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 )
     	target {"dev_size":268435456000,"name":"null","type":0}
-    bash-5.2$ ls -l /dev/ublk*
+
+  bash-5.2$ ls -l /dev/ublk*
     crw-rw-rw-. 1 root root  10, 123 May  1 04:35 /dev/ublk-control
     brwx------. 1 1001 1001 259,   1 May  1 04:36 /dev/ublkb0
     crwx------. 1 1001 1001 237,   0 May  1 04:36 /dev/ublkc0
-    bash-5.2$ ublk del -n 0
-    bash-5.2$ ls -l /dev/ublk*
+
+  bash-5.2$ ublk del -n 0
+  bash-5.2$ ls -l /dev/ublk*
     crw-rw-rw-. 1 root root 10, 123 May  1 04:35 /dev/ublk-control
 
 - example of ublk in docker: ``tests/debug/ublk_docker``
