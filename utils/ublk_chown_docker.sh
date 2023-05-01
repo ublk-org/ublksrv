@@ -9,6 +9,7 @@ ublk_docker_add()
 	local uid=$4
 	local container=$5
 
+	#echo "docker add $name" >> /tmp/udev_docker_udev.log
 	if [[ "$name" == *"ublkc"* ]]; then
 		docker exec -u 0 $container mknod /dev/$name c $maj $min
 		docker exec -u 0 $container chown $uid /dev/$name
@@ -28,6 +29,7 @@ ublk_docker_remove()
 	local uid=$4
 	local container=$5
 
+	#echo "docker remove $name" >> /tmp/udev_docker_udev.log
 	if [[ "$name" == *"ublkc"* ]]; then
 		docker exec -u 0 $container rm /dev/$name
 	elif [[ "$name" == *"ublkb"* ]]; then
@@ -41,15 +43,24 @@ ID=`${MY_DIR}/ublk_user_id $1`
 
 #echo $@ >> /tmp/udev_docker_udev.log
 
-CONTAINERS=""
-
-for C in $CONTAINERS; do
-	if [ "$2" == "add" ]; then
-		ublk_docker_add $DEV $3 $4 $ID $C
-	elif [ "$2" == "remove" ]; then
-		ublk_docker_remove $DEV $3 $4 $ID $C
+#add ublk devices for interested containers
+if [ "$2" == "add" ]; then
+	if CONTAINERS=`docker ps --format "{{.Names}}"`; then
+		#echo $CONTAINERS >> /tmp/udev_docker_udev.log
+		for C in $CONTAINERS; do
+			if ps -ax | grep docker | grep $ID > /dev/null 2>&1; then
+				ublk_docker_add $DEV $3 $4 $ID $C
+			fi
+		done
 	fi
-done
+elif [ "$2" == "remove" ]; then
+	if CONTAINERS=`docker ps --format "{{.Names}}"`; then
+		#echo $CONTAINERS >> /tmp/udev_docker_udev.log
+		for C in $CONTAINERS; do
+			ublk_docker_remove $DEV $3 $4 $ID $C
+		done
+	fi
+fi
 
 if [ "$2" == "add" ]; then
 	if [ "${ID}" != "-1:-1" ]; then
