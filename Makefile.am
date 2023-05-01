@@ -13,7 +13,7 @@ AM_CXXFLAGS = -fcoroutines -std=c++20
 
 sbin_PROGRAMS = ublk ublk_user_id
 noinst_PROGRAMS = demo_null demo_event
-dist_sbin_SCRIPTS = utils/ublk_chown.sh
+dist_sbin_SCRIPTS = utils/ublk_chown.sh utils/ublk_chown_docker.sh
 
 ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp qcow2/tgt_qcow2.cpp \
 			   qcow2/qcow2.cpp qcow2/qcow2_meta.cpp qcow2/utils.cpp \
