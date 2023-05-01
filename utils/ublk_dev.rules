@@ -2,5 +2,5 @@
 # Udev rules for ublk devices.
 
 KERNEL=="ublk-control", MODE="0666", OPTIONS+="static_node=ublk-control"
-KERNEL=="ublkc*",RUN+="/usr/local/sbin/ublk_chown.sh %k"
-KERNEL=="ublkb*",RUN+="/usr/local/sbin/ublk_chown.sh %k"
+ACTION=="add",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown.sh %k 'add' '%M' '%m'"
+ACTION=="remove",KERNEL=="ublk[bc]*",RUN+="/usr/local/sbin/ublk_chown.sh %k 'remove' '%M' '%m'"
