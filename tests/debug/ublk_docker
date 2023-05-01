@@ -1,0 +1,113 @@
+#!/bin/bash
+
+get_user_id()
+{
+	local user=$1
+	local my_uid
+	local my_gid
+
+	if ! my_uid=`id -u $user`; then
+		adduser --shell /bin/bash  $user
+		passwd -d $user
+	fi
+
+	my_gid=`id -g $user`
+	echo "$my_uid:$my_gid"
+}
+
+remove_container()
+{
+	local container=$1
+
+	docker stop $container
+	docker rm $container
+}
+
+add_container()
+{
+	local container=$1
+	docker run --name $container --hostname=server.example.com \
+		--device=/dev/ublk-control \
+		--device-cgroup-rule='a *:* rmw' \
+		--tmpfs /tmp --tmpfs /run --volume /sys/fs/cgroup:/sys/fs/cgroup:ro \
+		--detach -i fedora:38
+	docker exec -i $container dnf install -y git libtool automake autoconf g++ liburing-devel
+	docker exec -i $container git config --global http.version HTTP/1.1
+}
+
+install_ublk()
+{
+	local container=$1
+
+	docker exec -i $container git clone -b next https://github.com/ming1/ubdsrv.git
+	docker exec -i -w /ubdsrv $container autoreconf -i
+	docker exec -i -w /ubdsrv $container ./configure
+	docker exec -i -w /ubdsrv $container make -j4 install
+}
+
+test_ublk()
+{
+	local container=$1
+	local ugid=$2
+	local ublk_script=`mktemp`
+
+	echo "#!/bin/bash" >> $ublk_script
+	echo "ublk add -t null -n 10 --unprivileged" >> $ublk_script
+	echo "ublk list" >> $ublk_script
+	echo "sleep 2" >> $ublk_script
+	echo "ls -l /dev/ublk[bc]10" >> $ublk_script
+	echo "dd if=/dev/zero of=/dev/ublkb10 bs=1M count=64" >> $ublk_script
+	echo "ublk del -n 10" >> $ublk_script
+	echo "sleep 2" >> $ublk_script
+	echo "ls -l /dev/ublk[bc]10" >> $ublk_script
+
+	chmod +x $ublk_script
+	chown $ugid $ublk_script
+
+	docker cp -a $ublk_script $container:/test.sh
+	docker exec -u $ugid -i $container bash -c "cat /test.sh"
+	docker exec -u $ugid -i $container bash -c ". /test.sh"
+	rm -f $ublk_script
+}
+
+ublk_clean()
+{
+	local container=$1
+	local this_log=$2
+
+	cat $this_log
+	remove_container $container > /dev/null 2>&1
+	rm "$this_log"
+	exit -1
+}
+
+C="ublk_docker"
+UG=""
+ULOG=`mktemp`
+
+if ! UG=`get_user_id ublk_docker`; then
+		echo "no ublk_docker user for running test"
+		exit -1
+fi
+
+echo "setup container"
+if ! add_container $C >> "$ULOG"; then
+		echo "add container failed"
+		ublk_clean $C "$ULOG"
+fi
+
+echo "install ublk from github"
+if ! install_ublk $C >> "$ULOG" 2>&1; then
+		echo "install ublk failed"
+		ublk_clean $C "$ULOG"
+fi
+
+echo "add/del ublk inside container by user ublk_docker($UG)"
+if ! test_ublk $C $UG; then
+		echo "test ublk in container failed"
+		ublk_clean $C "$ULOG"
+fi
+
+echo "remove container"
+remove_container $C >> "$ULOG"
+rm "$ULOG"
