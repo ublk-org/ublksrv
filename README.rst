@@ -277,6 +277,17 @@ libublksrv API doc
 API is documented in include/ublksrv.h, and doxygen doc can be generated
 by running 'make doxygen_doc', the generated html docs are in doc/html.
 
+Todo:
+====
+
+libublk
+------
+
+Move libublksrv out of ublksrv project, and make it as one standalone repo
+and name it as libublk.
+
+It is planned to do it when ublk driver UAPI changes(feature addition) is slow down.
+
 License
 =======
 
