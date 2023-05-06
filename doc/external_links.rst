@@ -9,6 +9,8 @@ Tech
 2023
 ----
 
+`ublk: the new and improved way to serve SPDK storage locally! <https://spdk.io/news/2023/03/28/ublk/>`
+
 `btrfs-ublk <https://github.com/snarkmaster/btrfs-ublk>`
 
 `Zero-copy I/O for ublk, three different ways <https://lwn.net/Articles/926118/>`
