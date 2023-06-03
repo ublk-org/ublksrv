@@ -11,8 +11,9 @@
 #define CTRL_CMD_NO_TRANS	4
 
 struct ublksrv_ctrl_cmd_data {
-	unsigned short cmd_op;
+	unsigned int cmd_op;
 	unsigned short flags;
+	unsigned short _pad;
 
 	__u64 data[1];
 	__u16 dev_path_len;
