@@ -559,6 +559,19 @@ int ublksrv_ctrl_end_recovery(struct ublksrv_ctrl_dev *dev, int daemon_pid)
 	return ret;
 }
 
+int ublksrv_ctrl_get_features(struct ublksrv_ctrl_dev *dev,
+		__u64 *features)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_U_CMD_GET_FEATURES,
+		.flags	= CTRL_CMD_HAS_BUF,
+		.addr = (__u64)features,
+		.len = sizeof(*features),
+	};
+
+	return __ublksrv_ctrl_cmd(dev, &data);
+}
+
 const struct ublksrv_ctrl_dev_info *ublksrv_ctrl_get_dev_info(
 		const struct ublksrv_ctrl_dev *dev)
 {

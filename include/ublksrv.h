@@ -490,6 +490,14 @@ extern const struct ublksrv_ctrl_dev_info *ublksrv_ctrl_get_dev_info(
 		const struct ublksrv_ctrl_dev *dev);
 
 /**
+ * Return feature set supported by ublk driver
+ *
+ * @features points to buffer for holding the returned features
+ */
+extern int ublksrv_ctrl_get_features(struct ublksrv_ctrl_dev *dev,
+		__u64 *features);
+
+/**
  * Return run dir of ublk device
  *
  * Device pid file and json string stored under this dir
