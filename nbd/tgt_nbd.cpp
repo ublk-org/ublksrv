@@ -774,7 +774,7 @@ static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
 	}
 }
 
-static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
+static int nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 		const char *jbuf, uint16_t *flags)
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
@@ -801,6 +801,10 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	bool tls = false;
 
 	long send_zc = 0;
+
+
+	if (info->flags & UBLK_F_USER_COPY)
+		return -EINVAL;
 
 	ublk_assert(jbuf);
 	ublk_assert(type == UBLKSRV_TGT_TYPE_NBD);
@@ -857,6 +861,8 @@ static void nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 		sizeof(struct nbd_io_data);
 
 	ublksrv_dev_set_cq_depth(dev, 2 * tgt->tgt_ring_depth);
+
+	return 0;
 }
 
 static void nbd_parse_flags(struct ublk_params *p, uint16_t flags, uint32_t bs)
@@ -912,6 +918,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	const char *unix_path = NULL;
 	const char *exp_name = NULL;
 	uint16_t flags = 0;
+	int ret;
 
 	strcpy(tgt_json.name, "nbd");
 
@@ -946,7 +953,9 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
-	nbd_setup_tgt(dev, type, false, jbuf, &flags);
+	ret = nbd_setup_tgt(dev, type, false, jbuf, &flags);
+	if (ret)
+		return ret;
 
 	tgt_json.dev_size = tgt->dev_size;
 	ublk_json_write_target_base(dev, &jbuf, &jbuf_size, &tgt_json);
@@ -978,9 +987,7 @@ static int nbd_recovery_tgt(struct ublksrv_dev *dev, int type)
 
 	dev->tgt.tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
-	nbd_setup_tgt(dev, type, true, jbuf, &flags);
-
-	return 0;
+	return nbd_setup_tgt(dev, type, true, jbuf, &flags);
 }
 
 struct ublksrv_tgt_type  nbd_tgt_type = {
