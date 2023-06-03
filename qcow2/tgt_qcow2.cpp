@@ -38,6 +38,10 @@ static int qcow2_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	};
 	Qcow2State *qs;
 
+	/* qcow2 doesn't support user copy yet */
+	if (info->flags & UBLK_F_USER_COPY)
+		return -EINVAL;
+
 	//1024 queue depth is enough for qcow2, then we can store
 	//tag & l1 entry index in single u32 variable.
 	if (info->queue_depth > QCOW2_MAX_QUEUE_DEPTH)
@@ -144,6 +148,10 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 	ublk_assert(jbuf);
 	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
 	ublk_assert(type == UBLKSRV_TGT_TYPE_QCOW2);
+
+	/* qcow2 doesn't support user copy yet */
+	if (info->flags & UBLK_F_USER_COPY)
+		return -EINVAL;
 
 	ret = ublksrv_json_read_target_str_info(jbuf, PATH_MAX, "backing_file", file);
 	if (ret < 0) {
