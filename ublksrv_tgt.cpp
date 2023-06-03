@@ -1013,6 +1013,54 @@ static void cmd_dev_list_usage(const char *cmd)
 	printf("%s list [-n DEV_ID]\n", cmd);
 }
 
+#define const_ilog2(x) (63 - __builtin_clzll(x))
+
+static int cmd_dev_get_features(int argc, char *argv[])
+{
+	struct ublksrv_dev_data data = {
+		.dev_id = -1,
+		.run_dir = UBLKSRV_PID_DIR,
+	};
+	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
+	__u64 features = 0;
+	int ret;
+	static const char *feat_map[] = {
+		[const_ilog2(UBLK_F_SUPPORT_ZERO_COPY)] = "ZERO_COPY",
+		[const_ilog2(UBLK_F_URING_CMD_COMP_IN_TASK)] = "COMP_IN_TASK",
+		[const_ilog2(UBLK_F_NEED_GET_DATA)] = "GET_DATA",
+		[const_ilog2(UBLK_F_USER_RECOVERY)] = "USER_RECOVERY",
+		[const_ilog2(UBLK_F_USER_RECOVERY_REISSUE)] = "RECOVERY_REISSUE",
+		[const_ilog2(UBLK_F_UNPRIVILEGED_DEV)] = "UNPRIVILEGED_DEV",
+		[const_ilog2(UBLK_F_CMD_IOCTL_ENCODE)] = "CMD_IOCTL_ENCODE",
+	};
+
+	ret = ublksrv_ctrl_get_features(dev, &features);
+	if (!ret) {
+		int i;
+
+		printf("ublk_drv features: 0x%llx\n", features);
+
+		for (i = 0; i < sizeof(features); i++) {
+			const char *feat;
+
+			if (!((1ULL << i)  & features))
+				continue;
+			if (i < sizeof(feat_map) / sizeof(feat_map[0]))
+				feat = feat_map[i];
+			else
+				feat = "unknown";
+			printf("\t%-20s: 0x%llx\n", feat, 1ULL << i);
+		}
+	}
+
+	return ret;
+}
+
+static void cmd_dev_get_features_help(const char *cmd)
+{
+	printf("%s features\n", cmd);
+}
+
 static int __cmd_dev_user_recover(int number, bool verbose)
 {
 	const struct ublksrv_tgt_type *tgt_type;
@@ -1153,6 +1201,7 @@ static void cmd_usage(const char *cmd)
 	cmd_dev_del_usage(cmd);
 	cmd_dev_list_usage(cmd);
 	cmd_dev_recover_usage(cmd);
+	cmd_dev_get_features_help(cmd);
 
 	printf("%s -v [--version]\n", cmd);
 	printf("%s -h [--help]\n", cmd);
@@ -1186,6 +1235,8 @@ int main(int argc, char *argv[])
 		ret = cmd_list_dev_info(argc, argv);
 	else if (!strcmp(cmd, "recover"))
 		ret = cmd_dev_user_recover(argc, argv);
+	else if (!strcmp(cmd, "features"))
+		ret = cmd_dev_get_features(argc, argv);
 	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
 		cmd_usage(prog_name);
 		ret = EXIT_SUCCESS;
