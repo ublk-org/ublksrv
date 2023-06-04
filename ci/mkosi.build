@@ -11,6 +11,10 @@
 
 set -eo pipefail
 
+mkdir -p $DESTDIR/root/
+echo "systemctl restart systemd-networkd" >> $DESTDIR/root/.bash_profile
+chmod +x $DESTDIR/root/.bash_profile
+
 # Build newer version of liburing
 cd $SRCDIR
 git clone git://git.kernel.dk/liburing.git
