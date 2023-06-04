@@ -99,15 +99,7 @@ jobs:
     - name: "build: fedora image"
       working-directory: ci
       run: |
-        tee mkosi.default <<- EOF
-        [Distribution]
-        Distribution=fedora
-        Release=36
-        [Content]
-        Environment=CI_BUILD=1
-        Packages=nbd,nbdkit
-        EOF
-        sudo $(which mkosi) --ssh 1 --config mkosi.default
+        sudo $(which mkosi) build
 
     - name: "start: boot fedora in qemu"
       working-directory: ci
