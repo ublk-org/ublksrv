@@ -583,7 +583,6 @@ skip_alloc_buf:
 	}
 
 	q->ring_ptr = &q->ring;
-	io_uring_register_ring_fd(&q->ring);
 
 	ret = io_uring_register_files(&q->ring, dev->tgt.fds,
 			dev->tgt.nr_fds + 1);
@@ -592,6 +591,8 @@ skip_alloc_buf:
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
 		goto fail;
 	}
+
+	io_uring_register_ring_fd(&q->ring);
 
 	/*
 	* N.B. PR_SET_IO_FLUSHER was added with Linux 5.6+.
