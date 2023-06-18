@@ -49,8 +49,10 @@ void setmysockopt(int sock) {
 
 void err_nonfatal(const char *s) {
 	char s1[150], *s2;
-
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 	strncpy(s1, s, sizeof(s1));
+#pragma GCC diagnostic pop
 	if ((s2 = strstr(s, "%m"))) {
 		strncpy(s1 + (s2 - s), strerror(errno), sizeof(s1) - (s2 - s));
 		s2 += 2;
