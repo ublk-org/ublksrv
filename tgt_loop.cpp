@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
+#include "ublk_cmd.h"
+#include <atomic>
 #include <config.h>
 
 #include <linux/blkzoned.h>
@@ -7,6 +9,7 @@
 #include <stdint.h>
 #include <sys/epoll.h>
 #include "ublksrv_tgt.h"
+#include <sys/queue.h>
 
 static bool user_copy;
 
@@ -186,6 +189,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		/* TODO: lift these values from loop target */
 		p.zoned.max_open_zones = 14;
 		p.zoned.max_active_zones = 14;
+		p.zoned.max_zone_append_sectors = zone_size;
 	}
 
 	if (fstat(fd, &st) < 0)
@@ -307,25 +311,25 @@ static void loop_queue_tgt_read(const struct ublksrv_queue *q,
 	}
 }
 
-static void loop_queue_tgt_write(const struct ublksrv_queue *q,
-		const struct ublksrv_io_desc *iod, int tag)
+static void loop_queue_tgt_write_pos(const struct ublksrv_queue *q,
+				 const struct ublksrv_io_desc *iod, int tag, __u64 pos)
 {
 	unsigned ublk_op = ublksrv_get_op(iod);
 
 	if (user_copy) {
 		struct io_uring_sqe *sqe, *sqe2;
-		__u64 pos = ublk_pos(q->q_id, tag, 0);
+		__u64 rpos = ublk_pos(q->q_id, tag, 0);
 		void *buf = ublksrv_queue_get_io_buf(q, tag);
 
 		ublk_get_sqe_pair(q->ring_ptr, &sqe, &sqe2);
 		io_uring_prep_read(sqe, 0 /*fds[0]*/,
-			buf, iod->nr_sectors << 9, pos);
+			buf, iod->nr_sectors << 9, rpos);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 		sqe->user_data = build_user_data(tag, ublk_op, 1, 1);
 
 		io_uring_prep_write(sqe2, 1 /*fds[1]*/,
 			buf, iod->nr_sectors << 9,
-			iod->start_sector << 9);
+			pos);
 		io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
 		/* bit63 marks us as tgt io */
 		sqe2->user_data = build_user_data(tag, ublk_op, 0, 1);
@@ -337,19 +341,200 @@ static void loop_queue_tgt_write(const struct ublksrv_queue *q,
 		io_uring_prep_write(sqe, 1 /*fds[1]*/,
 			buf,
 			iod->nr_sectors << 9,
-			iod->start_sector << 9);
+			pos);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		/* bit63 marks us as tgt io */
 		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 	}
 }
 
+static void loop_queue_tgt_write(const struct ublksrv_queue *q,
+				 const struct ublksrv_io_desc *iod, int tag)
+{
+	loop_queue_tgt_write_pos(q, iod, tag, iod->start_sector << 9);
+}
+
+#include <atomic>
+
+std::atomic<struct ublk_io_tgt*> owner = nullptr;
+
+static bool zone_lock(struct ublk_io_tgt* io) {
+	struct ublk_io_tgt* tmp = nullptr;
+	return owner.compare_exchange_strong(tmp, io);
+}
+
+static void zone_unlock(struct ublk_io_tgt *io)
+{
+	 bool ok = owner.compare_exchange_strong(io, nullptr);
+	 assert(ok);
+}
+
+static void zone_enqueue(const struct ublksrv_queue *q, struct ublk_io_tgt* io) {
+	// Enqueue locally
+	struct ublksrv_queue *mq = (struct ublksrv_queue *)q;
+
+	struct iod_queue_entry* element = (struct iod_queue_entry*) malloc(sizeof(struct iod_queue_entry));
+	assert(element != nullptr);
+
+	element->io = io;
+
+	STAILQ_INSERT_TAIL(&mq->waiting, element, entry);
+
+}
+
+static bool loop_handle_io_queued(struct ublksrv_queue *q)
+{
+	if (!STAILQ_EMPTY(&q->waiting)) {
+		struct iod_queue_entry* entry = STAILQ_FIRST(&q->waiting);
+		struct ublk_io_tgt *io = entry->io;
+		STAILQ_REMOVE_HEAD(&q->waiting, entry);
+		free(entry);
+		io->co.resume();
+	}
+
+	return STAILQ_EMPTY(&q->waiting);
+}
+
+static int loop_zone_get_wp(const struct ublksrv_queue *q,
+			    const struct ublksrv_io_desc *iod,
+			    __u64* out_wp)
+{
+	int nr_zones = 1;
+	struct blk_zone_report *report;
+	int ret = 0;
+
+	if (!out_wp)
+		return EINVAL;
+
+	report = (struct blk_zone_report *) malloc(
+		sizeof(struct blk_zone_report) +
+		sizeof(struct blk_zone) * nr_zones);
+
+	if (!report) {
+		syslog(LOG_ERR, "%s: failed to allocate", __func__);
+		return ENOMEM;
+	}
+
+	report->sector = iod->start_sector;
+	report->nr_zones = nr_zones;
+
+	ret = ioctl(q->dev->tgt.fds[1], BLKREPORTZONE, report);
+	if (ret) {
+		syslog(LOG_ERR, "%s: BLKREPORTZONE failed\n", __func__);
+		ret = EIO;
+		goto out;
+	}
+
+	if (report->nr_zones == 0) {
+		ret = EIO;
+		goto out;
+	}
+
+	*out_wp = report->zones[0].wp;
+
+out:
+	free(report);
+	return ret;
+}
+
+static int loop_handle_zone_append(const struct ublksrv_queue *q,
+				   const struct ublk_io_data *data, int tag)
+{
+	const struct ublksrv_io_desc *iod = data->iod;
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+	__u64 wp;
+
+	if (zone_lock(io)) {
+		int ret = loop_zone_get_wp(q, iod, &wp);
+		if (ret) {
+			return -ret;
+		}
+		loop_queue_tgt_write_pos(q, iod, tag, wp << 9);
+		io->zone_append_alba = wp;
+		return 3;
+	} else {
+		zone_enqueue(q, io);
+		return 2;
+	}
+}
+
+static bool loop_handle_report_zones(const struct ublksrv_queue *q,
+				       const struct ublk_io_data *data, int tag)
+{
+	const struct ublksrv_io_desc *iod = data->iod;
+	unsigned ublk_op = ublksrv_get_op(iod);
+
+	ublk_assert(ublk_op == UBLK_IO_OP_REPORT_ZONES);
+
+	struct blk_zone_report *report;
+	int ret = 0;
+	unsigned int nr_zones = iod->nr_sectors / q->dev->tgt.zone_size_sectors;
+	struct blk_zone *zone_info = (struct blk_zone *)iod->addr;
+	void *buf = ublksrv_queue_get_io_buf(q, tag);
+
+	report = (struct blk_zone_report *) malloc(
+		sizeof(struct blk_zone_report) +
+		sizeof(struct blk_zone) * nr_zones);
+
+
+	if (!report) {
+		syslog(LOG_ERR, "%s: failed to allocate", __func__);
+		ublksrv_complete_io(q, tag, -errno);
+		return true;
+	}
+
+	report->sector = iod->start_sector;
+	report->nr_zones = nr_zones;
+
+	ret = ioctl(q->dev->tgt.fds[1], BLKREPORTZONE, report);
+	if (ret) {
+		syslog(LOG_ERR, "%s: BLKREPORTZONE failed\n", __func__);
+		ret = -1;
+		free(report);
+		goto out;
+	}
+
+	if (report->nr_zones == 0) {
+		/* Reporting zero length zone to indicate end */
+		memset(zone_info, 0, sizeof(*zone_info));
+		ret = -1;
+		free(report);
+		goto out;
+	}
+
+	// TODO: write directly to io buffer
+	ret = sizeof(*zone_info) * report->nr_zones;
+
+	// Trusting the kernel to not ask for a report larger than max IO size
+	memcpy(buf, &report->zones[0], ret);
+	free(report);
+
+	if (user_copy) {
+		__u64 pos = ublk_pos(q->q_id, tag, 0);
+		struct io_uring_sqe *sqe;
+		ublk_get_sqe_pair(q->ring_ptr, &sqe, NULL);
+		io_uring_prep_write(sqe, 0 /*fds[0]*/, buf, ret, pos);
+		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		/* bit63 marks us as tgt io */
+		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
+		return true;
+	}
+
+	memcpy(zone_info, buf, ret);
+
+out:
+	ublksrv_complete_io(q, tag, ret);
+	return false;
+}
+
 static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
 	const struct ublksrv_io_desc *iod = data->iod;
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 	struct io_uring_sqe *sqe;
 	unsigned ublk_op = ublksrv_get_op(iod);
+	int ret = 1;
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_FLUSH:
@@ -379,75 +564,24 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 	case UBLK_IO_OP_WRITE:
 		loop_queue_tgt_write(q, iod, tag);
 		break;
+	case UBLK_IO_OP_ZONE_APPEND:
+		ret = loop_handle_zone_append(q, data, tag);
+		break;
+	case UBLK_IO_OP_REPORT_ZONES:
+		if (!loop_handle_report_zones(q, data, tag))
+			ret = 4;
+		break;
 	default:
 		return -EINVAL;
 	}
 
 	ublk_dbg(UBLK_DBG_IO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
-	ublk_dbg(UBLK_DBG_IO, "%s: queue io op %d(%llu %x %llx)"
-				" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
-			__func__, ublk_op, sqe->off, sqe->len, sqe->addr,
-			q->q_id, tag, ublk_op, 1, sqe->user_data);
 
-	return 1;
+	return ret;
 }
 
-static bool __loop_handle_report_zones(const struct ublksrv_queue *q,
-				       const struct ublk_io_data *data, int tag)
-{
-	const struct ublksrv_io_desc *iod = data->iod;
-	unsigned ublk_op = ublksrv_get_op(iod);
-
-	if (ublk_op == UBLK_IO_OP_REPORT_ZONES) {
-		struct blk_zone_report *report;
-		int ret = 0;
-		unsigned int nr_zones =
-			iod->nr_sectors / q->dev->tgt.zone_size_sectors;
-		struct blk_zone *zone_info = (struct blk_zone *)iod->addr;
-
-		report = (struct blk_zone_report *)malloc(
-			sizeof(struct blk_zone_report) +
-			sizeof(struct blk_zone) * nr_zones);
-
-		if (!report) {
-		       syslog(LOG_ERR, "%s: failed to allocate", __func__);
-		       ublksrv_complete_io(q, tag, -errno);
-		       return true;
-		}
-
-		report->sector = iod->start_sector;
-		report->nr_zones = nr_zones;
-
-		ret = ioctl(q->dev->tgt.fds[1], BLKREPORTZONE, report);
-		if (ret) {
-		       syslog(LOG_ERR, "%s: BLKREPORTZONE failed\n", __func__);
-		       ret = -1;
-		       goto out;
-		}
-
-		if (report->nr_zones == 0) {
-		       /* Reporting zero length zone to indicate end */
-		       memset(zone_info, 0, sizeof(*zone_info));
-		       ret = -1;
-		       goto out;
-		}
-
-		// TODO: write directly to io buffer
-		ret = sizeof(*zone_info) * report->nr_zones;
-
-		memcpy(zone_info, &report->zones[0], ret);
-
-out:
-		free(report);
-		ublksrv_complete_io(q, tag, ret);
-		return true;
-	}
-
-	return false;
-}
-
-static bool __loop_handle_zone_ops(const struct ublksrv_queue *q,
+static bool loop_handle_zone_ops(const struct ublksrv_queue *q,
 				   const struct ublk_io_data *data, int tag)
 {
 	const struct ublksrv_io_desc *iod = data->iod;
@@ -485,8 +619,7 @@ static bool __loop_handle_zone_ops(const struct ublksrv_queue *q,
 		ublksrv_complete_io(q, tag, ret);
 		return true;
 	}
-
-	return __loop_handle_report_zones(q, data, tag);
+	return false;
 }
 
 static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
@@ -495,13 +628,26 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 {
 	int ret;
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+	const struct ublksrv_io_desc *iod = data->iod;
 
-	if (__loop_handle_zone_ops(q, data, tag))
+	if (loop_handle_zone_ops(q, data, tag))
 		co_return;
 
 	io->queued_tgt_io = 0;
  again:
 	ret = loop_queue_tgt_io(q, data, tag);
+	io->suspend_reason = ret;
+
+	if (ret == 2) {
+		// Waiting for lock
+		co_await__suspend_always(tag);
+		goto again;
+	}
+
+	if (ret == 4) {
+		co_return;
+	}
+
 	if (ret > 0) {
 		if (io->queued_tgt_io)
 			ublk_err("bad queued_tgt_io %d\n", io->queued_tgt_io);
@@ -510,10 +656,19 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 		co_await__suspend_always(tag);
 		io->queued_tgt_io -= 1;
 
+
 		if (io->tgt_io_cqe->res == -EAGAIN)
 			goto again;
 
-		ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);
+		if (io->suspend_reason == 3)
+			zone_unlock(io);
+
+		unsigned ublk_op = ublksrv_get_op(iod);
+		if (ublk_op == UBLK_IO_OP_ZONE_APPEND)
+			ublksrv_complete_io_alba(q, tag, io->tgt_io_cqe->res,
+						 io->zone_append_alba);
+		else
+			ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);
 	} else if (ret < 0) {
 		ublk_err( "fail to queue io %d, ret %d\n", tag, tag);
 	} else {
@@ -541,7 +696,7 @@ static void loop_tgt_io_done(const struct ublksrv_queue *q,
 		return;
 
 	ublk_assert(tag == data->tag);
-	if (!io->queued_tgt_io)
+	if (!io->queued_tgt_io && io->suspend_reason == 1)
 		ublk_err("%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
 			__func__, cqe->res, q->q_id,
 			user_data_to_tag(cqe->user_data),
@@ -556,14 +711,15 @@ static void loop_deinit_tgt(const struct ublksrv_dev *dev)
 	close(dev->tgt.fds[1]);
 }
 
-struct ublksrv_tgt_type  loop_tgt_type = {
+struct ublksrv_tgt_type loop_tgt_type = {
 	.handle_io_async = loop_handle_io_async,
 	.tgt_io_done = loop_tgt_io_done,
-	.usage_for_add	=  loop_usage_for_add,
+	.handle_io_queued = loop_handle_io_queued,
+	.usage_for_add = loop_usage_for_add,
 	.init_tgt = loop_init_tgt,
-	.deinit_tgt	=  loop_deinit_tgt,
-	.type	= UBLKSRV_TGT_TYPE_LOOP,
-	.name	=  "loop",
+	.deinit_tgt = loop_deinit_tgt,
+	.type = UBLKSRV_TGT_TYPE_LOOP,
+	.name = "loop",
 	.recovery_tgt = loop_recovery_tgt,
 };
 

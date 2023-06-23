@@ -347,7 +347,8 @@ struct ublk_param_devt {
 struct ublk_param_zoned {
 	__u32	max_open_zones;
 	__u32	max_active_zones;
-	__u8	reserved[24];
+	__u32 max_zone_append_sectors;
+	__u8	reserved[20];
 };
 
 struct ublk_params {

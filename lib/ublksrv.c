@@ -122,7 +122,9 @@ static void ublksrv_tgt_deinit(struct _ublksrv_dev *dev)
 }
 
 static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
-		struct ublk_io *io, unsigned tag)
+				       struct ublk_io *io, unsigned tag,
+				       char use_alba,
+				       __u64 alba)
 {
 	struct ublksrv_io_cmd *cmd;
 	struct io_uring_sqe *sqe;
@@ -170,8 +172,11 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 	cmd->tag	= tag;
 	if (!(q->state & UBLKSRV_USER_COPY))
 		cmd->addr	= (__u64)io->buf_addr;
+	else if (use_alba)
+		cmd->addr       = alba;
 	else
 		cmd->addr	= 0;
+
 	cmd->q_id	= q->q_id;
 
 	user_data = build_user_data(tag, _IOC_NR(cmd_op), 0, 0);
@@ -195,7 +200,19 @@ int ublksrv_complete_io(const struct ublksrv_queue *tq, unsigned tag, int res)
 
 	ublksrv_mark_io_done(io, res);
 
-	return ublksrv_queue_io_cmd(q, io, tag);
+	return ublksrv_queue_io_cmd(q, io, tag, 0, 0);
+}
+
+int ublksrv_complete_io_alba(const struct ublksrv_queue *tq, unsigned tag,
+			     int res, __u64 alba)
+{
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
+	struct ublk_io *io = &q->ios[tag];
+
+	ublksrv_mark_io_done(io, res);
+
+	return ublksrv_queue_io_cmd(q, io, tag, 1, alba);
 }
 
 /*
@@ -285,7 +302,7 @@ static void ublksrv_submit_fetch_commands(struct _ublksrv_queue *q)
 	int i = 0;
 
 	for (i = 0; i < q->q_depth; i++)
-		ublksrv_queue_io_cmd(q, &q->ios[i], i);
+		ublksrv_queue_io_cmd(q, &q->ios[i], i, 0, 0);
 
 	__ublksrv_queue_event(q);
 }
@@ -516,6 +533,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 			sizeof(struct ublk_io) * nr_ios);
 	dev->__queues[q_id] = q;
 
+	STAILQ_INIT(&q->waiting);
 	q->tgt_ops = dev->tgt.ops;	//cache ops for fast path
 	q->dev = dev;
 	if (ctrl_dev->dev_info.flags & UBLK_F_CMD_IOCTL_ENCODE)
@@ -804,7 +822,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 		q->tgt_ops->handle_io_async(local_to_tq(q), &io->data);
 	} else if (cqe->res == UBLK_IO_RES_NEED_GET_DATA) {
 		io->flags |= UBLKSRV_NEED_GET_DATA | UBLKSRV_IO_FREE;
-		ublksrv_queue_io_cmd(q, io, tag);
+		ublksrv_queue_io_cmd(q, io, tag, 0, 0);
 	} else {
 		/*
 		 * COMMIT_REQ will be completed immediately since no fetching
@@ -910,11 +928,16 @@ int ublksrv_process_io(const struct ublksrv_queue *tq)
 	if (ublksrv_queue_is_done(q))
 		return -ENODEV;
 
+again:
 	ret = io_uring_submit_and_wait_timeout(&q->ring, &cqe, 1, tsp, NULL);
 
 	ublksrv_reset_aio_batch(q);
 	reapped = ublksrv_reap_events_uring(&q->ring);
 	ublksrv_submit_aio_batch(q);
+
+	if (q->tgt_ops->handle_io_queued)
+		if (!q->tgt_ops->handle_io_queued(local_to_tq(q)))
+			goto again;
 
 	if (q->tgt_ops->handle_io_background)
 		q->tgt_ops->handle_io_background(local_to_tq(q),

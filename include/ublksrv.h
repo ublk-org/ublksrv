@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 #include <assert.h>
+#include <sys/queue.h>
 
 #include "liburing.h"
 
@@ -88,6 +89,13 @@ struct ublk_io_data {
 #define UBLKSRV_QUEUE_IOCTL_OP	(1U << 2)
 #define UBLKSRV_USER_COPY	(1U << 3)
 
+struct iod_queue_entry {
+	struct ublk_io_tgt *io;
+	STAILQ_ENTRY(iod_queue_entry) entry;
+};
+
+STAILQ_HEAD(iod_queue_head, iod_queue_entry);
+
 /**
  * ublksrv_queue is 1:1 mapping with ublk driver's blk-mq queue, and
  * has same queue depth with ublk driver's blk-mq queue.
@@ -104,6 +112,8 @@ struct ublksrv_queue {
 
 	/** which device this queue belongs to */
 	const struct ublksrv_dev *dev;
+
+	struct iod_queue_head waiting;
 
 	/** queue's private data, passed from ublksrv_queue_init() */
 	void *private_data;
@@ -247,6 +257,8 @@ struct ublksrv_tgt_type {
 	void (*handle_io_background)(const struct ublksrv_queue *, int
 			nr_queued_io);
 
+
+	bool (*handle_io_queued)(struct ublksrv_queue *q);
 	/**
 	 * show target specific command line for adding new device
 	 *
@@ -891,7 +903,11 @@ extern int ublksrv_process_io(const struct ublksrv_queue *q);
  * @param res io result
  */
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
+
+extern int ublksrv_complete_io_alba(const struct ublksrv_queue *tq, unsigned tag,
+				    int res, __u64 alba);
 /** @} */ // end of ublksrv_queue group
+
 
 #ifdef __cplusplus
 }

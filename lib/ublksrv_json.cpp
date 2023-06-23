@@ -100,8 +100,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_discard,
 	reserved0)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_zoned,
-	max_open_zones,
-	max_active_zones)
+						max_open_zones,
+						max_active_zones,
+						max_zone_append_sectors)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
 	len, types, basic, discard, zoned)

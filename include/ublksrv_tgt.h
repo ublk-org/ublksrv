@@ -99,6 +99,8 @@ struct ublk_io_tgt {
 	co_handle_type co;
 	const struct io_uring_cqe *tgt_io_cqe;
 	int queued_tgt_io;	/* obsolete */
+	int suspend_reason;
+	__u64 zone_append_alba;
 };
 
 static inline struct ublk_io_tgt *__ublk_get_io_tgt_data(const struct ublk_io_data *io)

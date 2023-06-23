@@ -43,11 +43,12 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			}
 		}
 
-    dev->tgt.zone_size_sectors = zone_size;
+		dev->tgt.zone_size_sectors = zone_size;
 		p.basic.chunk_sectors = zone_size;
 		p.types |= UBLK_PARAM_TYPE_ZONED;
 		p.zoned.max_open_zones = 14;
 		p.zoned.max_active_zones = 14;
+		p.zoned.max_zone_append_sectors = zone_size;
 	}
 
 	int ret;
