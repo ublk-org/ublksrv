@@ -10,13 +10,13 @@ using namespace sw::redis;
 
 class ThreadSafeCache {
 public:
-    ThreadSafeCache(Redis& redis) : redis(redis), workloadThreshold(4096), isClearingCache(false) {}
+    ThreadSafeCache(Redis* redis) : redis(redis), workloadThreshold(8192), isClearingCache(false) {}
 
     void addToCache(std::string key, std::string value) {
         std::unique_lock<std::mutex> lock(cacheMutex);
         if (cache.size() >= workloadThreshold) {
             if (!isClearingCache) {
-                int to_sync = workloadThreshold / 4;
+                int to_sync = workloadThreshold / 8;
                 cache[key] = value;
                 isClearingCache = true;
                 std::vector<std::string> keys;
@@ -51,11 +51,20 @@ public:
         return cache[key];
     }
 
+    void emptyCache() { 
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        auto pipeline = redis->pipeline();
+        for (const auto& pair : cache) { 
+            pipeline.set(pair.first,pair.second);
+        }
+        pipeline.exec();
+        cache.clear();        
+    }
 
 private:
     void performWorkload(const std::vector<std::string>& keys) {
         //redis.set("perform","workload");
-        auto pipeline = redis.pipeline();
+        auto pipeline = redis->pipeline();
         for (const auto& key : keys) { 
             auto value = cache[key];
             pipeline.set(key,value);
@@ -74,7 +83,7 @@ private:
 
     std::unordered_map<std::string, std::string> cache;
     std::mutex cacheMutex;
-    Redis& redis;
+    Redis* redis;
     std::condition_variable cacheCondition;
     const size_t workloadThreshold;
     std::atomic<bool> isClearingCache;

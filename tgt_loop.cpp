@@ -16,9 +16,9 @@
 #define PAGE_SIZE 4096
 using namespace sw::redis;
 
-Redis redis = Redis("tcp://192.168.188.129:6385");
+Redis* redis = nullptr;
 
-ThreadSafeCache redis_cache(redis);
+ThreadSafeCache* redis_cache = nullptr;
 
 
 static bool backing_supports_discard(char *name)
@@ -122,12 +122,14 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	static const struct option lo_longopts[] = {
 		{ "file",		1,	NULL, 'f' },
 		{ "buffered_io",	no_argument, &buffered_io, 1},
+	        {"redis_addr", 1, NULL, 'r'},  // New option for Redis address
 		{ NULL }
 	};
 	unsigned long long bytes;
 	struct stat st;
 	int fd, opt;
 	char *file = NULL;
+        char *redis_addr = NULL;  // New variable to store the Redis address
 	int jbuf_size;
 	char *jbuf;
 	struct ublksrv_tgt_base_json tgt_json = {
@@ -155,18 +157,29 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	if (type != UBLKSRV_TGT_TYPE_LOOP)
 		return -1;
 
-	while ((opt = getopt_long(argc, argv, "-:f:",
-				  lo_longopts, NULL)) != -1) {
+	    while ((opt = getopt_long(argc, argv, "-:f:r:", lo_longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'f':
 			file = strdup(optarg);
 			break;
-		}
+		
+	        case 'r':
+	                redis_addr = strdup(optarg);
+	                break;
+        	}
 	}
 
 	if (!file)
 		return -1;
-
+	if (!redis_addr){
+		return -1;
+	}
+	redis = new Redis(redis_addr);
+	if (redis == nullptr) { 
+		return -1;
+	}
+	redis_cache = new ThreadSafeCache(redis);
+	
 	fd = open(file, O_RDWR);
 	if (fd < 0) {
 		ublk_err( "%s: backing file %s can't be opened\n",
@@ -347,7 +360,7 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 				{
 					std::string key = std::to_string(iod->start_sector +(i << 3));
 					std::string value = std::string(static_cast<const char*>((void*)(iod->addr +(i* PAGE_SIZE))),PAGE_SIZE);
-					redis_cache.addToCache(key,value);
+					redis_cache->addToCache(key,value);
 				}
 				ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);
 			}
@@ -361,11 +374,11 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 				for (int i = 0; i < num_of_pages; i++)
 				{
 					std::string key = std::to_string(iod->start_sector + (i << 3));
-					auto val = redis_cache.getFromCache(key);
+					auto val = redis_cache->getFromCache(key);
 					if (val.length() != 0) { 
 						std::memcpy((void*) (iod->addr + (i*PAGE_SIZE)), val.c_str(),PAGE_SIZE);
 					} else {
-					        OptionalString value = redis.get(key);
+					        OptionalString value = redis->get(key);
 						if (value) { 
 							std::memcpy((void*) (iod->addr + (i*PAGE_SIZE)), value->data(),value->size());
 						}
@@ -377,7 +390,14 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 			}
 			ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);
 		}
+		else if (ublk_op == UBLK_IO_OP_DISCARD) {
+			redis->set("discard","not_supported");
+		}
+		else if (ublk_op == UBLK_IO_OP_FLUSH) {
+			redis->set("FLUSH","not_supported");
+		}
 		else {	
+			redis->set("wtf","wtf");
 			ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);
 		}
 	} else if (ret < 0) {
@@ -415,6 +435,7 @@ static void loop_tgt_io_done(const struct ublksrv_queue *q,
 
 static void loop_deinit_tgt(const struct ublksrv_dev *dev)
 {
+	redis_cache->emptyCache();
 	fsync(dev->tgt.fds[1]);
 	close(dev->tgt.fds[1]);
 }
