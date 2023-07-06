@@ -468,19 +468,18 @@ static bool loop_handle_report_zones(const struct ublksrv_queue *q,
 
 	struct blk_zone_report *report;
 	int ret = 0;
+	size_t write_size;
 	unsigned int nr_zones = iod->nr_sectors / q->dev->tgt.zone_size_sectors;
-	struct blk_zone *zone_info = (struct blk_zone *)iod->addr;
 	void *buf = ublksrv_queue_get_io_buf(q, tag);
 
 	report = (struct blk_zone_report *) malloc(
 		sizeof(struct blk_zone_report) +
 		sizeof(struct blk_zone) * nr_zones);
 
-
 	if (!report) {
 		syslog(LOG_ERR, "%s: failed to allocate", __func__);
 		ublksrv_complete_io(q, tag, -errno);
-		return true;
+		return false;
 	}
 
 	report->sector = iod->start_sector;
@@ -489,42 +488,38 @@ static bool loop_handle_report_zones(const struct ublksrv_queue *q,
 	ret = ioctl(q->dev->tgt.fds[1], BLKREPORTZONE, report);
 	if (ret) {
 		syslog(LOG_ERR, "%s: BLKREPORTZONE failed\n", __func__);
-		ret = -1;
 		free(report);
-		goto out;
+		ublksrv_complete_io(q, tag, ret);
+		return false;
 	}
 
 	if (report->nr_zones == 0) {
 		/* Reporting zero length zone to indicate end */
-		memset(zone_info, 0, sizeof(*zone_info));
-		ret = -1;
-		free(report);
-		goto out;
+		write_size = sizeof(struct blk_zone);
+		memset(buf, 0, write_size);
+		goto out_write;
 	}
 
-	// TODO: write directly to io buffer
-	ret = sizeof(*zone_info) * report->nr_zones;
+	write_size = sizeof(struct blk_zone) * report->nr_zones;
 
 	// Trusting the kernel to not ask for a report larger than max IO size
-	memcpy(buf, &report->zones[0], ret);
+	memcpy(buf, &report->zones[0], write_size);
+
+
+ out_write:
+	// User_copy required
+	assert(user_copy);
 	free(report);
+	__u64 pos = ublk_pos(q->q_id, tag, 0);
+	struct io_uring_sqe *sqe;
+	ublk_get_sqe_pair(q->ring_ptr, &sqe, NULL);
+	io_uring_prep_write(sqe, 0 /*fds[0]*/, buf, write_size, pos);
+	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+	/* bit63 marks us as tgt io */
+	sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 
-	if (user_copy) {
-		__u64 pos = ublk_pos(q->q_id, tag, 0);
-		struct io_uring_sqe *sqe;
-		ublk_get_sqe_pair(q->ring_ptr, &sqe, NULL);
-		io_uring_prep_write(sqe, 0 /*fds[0]*/, buf, ret, pos);
-		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
-		/* bit63 marks us as tgt io */
-		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
-		return true;
-	}
+	return true;
 
-	memcpy(zone_info, buf, ret);
-
-out:
-	ublksrv_complete_io(q, tag, ret);
-	return false;
 }
 
 static int loop_queue_tgt_io(const struct ublksrv_queue *q,
