@@ -9,6 +9,8 @@ Tech
 2023
 ----
 
+`ublk: virtual block devices in userspace(DevConf.CZ 2023) <https://www.youtube.com/watch?v=6JqNPirreoY>`
+
 `ublk: the new and improved way to serve SPDK storage locally! <https://spdk.io/news/2023/03/28/ublk/>`
 
 `btrfs-ublk <https://github.com/snarkmaster/btrfs-ublk>`
