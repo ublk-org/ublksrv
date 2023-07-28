@@ -266,7 +266,7 @@ int ublksrv_queue_send_event(const struct ublksrv_queue *tq)
 		const int cnt = sizeof(uint64_t);
 
 		if (write(q->efd, &data, cnt) != cnt) {
-			ublk_err("%s: read wrong bytes from eventfd\n",
+			ublk_err("%s: wrote wrong bytes to eventfd\n",
 					__func__);
 			return -EPIPE;
 		}
