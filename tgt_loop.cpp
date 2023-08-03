@@ -469,7 +469,7 @@ static bool loop_handle_report_zones(const struct ublksrv_queue *q,
 	struct blk_zone_report *report;
 	int ret = 0;
 	size_t write_size;
-	unsigned int nr_zones = iod->nr_sectors / q->dev->tgt.zone_size_sectors;
+	unsigned int nr_zones = iod->nr_zones;
 	void *buf = ublksrv_queue_get_io_buf(q, tag);
 
 	report = (struct blk_zone_report *) malloc(

@@ -268,7 +268,10 @@ struct ublksrv_io_desc {
 	/* op: bit 0-7, flags: bit 8-31 */
 	__u32		op_flags;
 
-	__u32		nr_sectors;
+	union {
+		__u32		nr_sectors;
+		__u32 nr_zones;
+	};
 
 	/* start sector for this io */
 	__u64		start_sector;
@@ -297,11 +300,14 @@ struct ublksrv_io_cmd {
 	/* io result, it is valid for COMMIT* command only */
 	__s32	result;
 
-	/*
-	 * userspace buffer address in ublksrv daemon process, valid for
-	 * FETCH* command only
-	 */
-	__u64	addr;
+	union {
+		/*
+		 * userspace buffer address in ublksrv daemon process, valid for
+		 * FETCH* command only
+		 */
+		__u64	addr;
+		__u64 zone_append_lba;
+	};
 };
 
 struct ublk_param_basic {

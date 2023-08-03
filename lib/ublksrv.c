@@ -173,7 +173,7 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 	if (!(q->state & UBLKSRV_USER_COPY))
 		cmd->addr	= (__u64)io->buf_addr;
 	else if (use_alba)
-		cmd->addr       = alba;
+		cmd->zone_append_lba     = alba;
 	else
 		cmd->addr	= 0;
 
