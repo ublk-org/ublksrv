@@ -884,6 +884,7 @@ static int __cmd_dev_del(int number, bool log)
 	int ret;
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
+		.run_dir = UBLKSRV_PID_DIR,
 	};
 
 	dev = ublksrv_ctrl_init(&data);
