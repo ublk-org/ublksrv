@@ -90,7 +90,7 @@ jobs:
     - name: "cache: os packages"
       uses: actions/cache@v3
       with:
-        path: mkosi.cache
+        path: ~/mkosi.cache
         key: fedora-cache-v2
 
     - name: "acquire: ubdsrv"
@@ -99,12 +99,14 @@ jobs:
     - name: "build: fedora image"
       working-directory: ci
       run: |
+        [ -d ~/mkosi.cache ] && ln -s mkosi.cache ~/mkosi.cache
         sudo $(which mkosi) build
+        if [ ! -d ~/mkosi.cache ]; then cp -fr ./mkosi.cache ~/; fi
 
     - name: "start: boot fedora in qemu"
       working-directory: ci
       run: |
-        RUNNER_TRACKING_ID="" && sudo $(which mkosi) qemu -serial none -monitor none -display none | tee ${{ github.workspace }}/qemu.log &
+        RUNNER_TRACKING_ID="" && sudo $(which mkosi) qemu -serial none -monitor none -display none -device virtio-net-pci,netdev=network0 -netdev user,id=network0,hostfwd=tcp:127.0.0.1:5555-:22 | tee ${{ github.workspace }}/qemu.log &
 
     - name: "connect: check ssh connection"
       shell: bash
