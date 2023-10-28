@@ -891,6 +891,7 @@ static int __cmd_dev_del(int number, bool log)
 
 	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
+		ret = 0;
 		if (log)
 			fprintf(stderr, "can't get dev info from %d: %d\n", number, ret);
 		goto fail;
