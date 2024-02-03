@@ -852,6 +852,15 @@ extern const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *
  */
 extern void ublksrv_queue_deinit(const struct ublksrv_queue *q);
 
+/**
+ * Return how many unconsumed cqes in CQ of queue uring
+ *
+ * @param q the ublksrv queue instance
+ *
+ * Return -1 if uring isn't setup correctly
+ */
+extern int ublksrv_queue_unconsumed_cqes(const struct ublksrv_queue *q);
+
 extern int ublksrv_queue_handled_event(const struct ublksrv_queue *q);
 extern int ublksrv_queue_send_event(const struct ublksrv_queue *q);
 

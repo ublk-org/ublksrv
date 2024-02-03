@@ -325,6 +325,14 @@ static int ublksrv_queue_cmd_buf_sz(struct _ublksrv_queue *q)
 	return round_up(size, page_sz);
 }
 
+int ublksrv_queue_unconsumed_cqes(const struct ublksrv_queue *tq)
+{
+	if (tq->ring_ptr)
+		return io_uring_cq_ready(tq->ring_ptr);
+
+	return -1;
+}
+
 void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
