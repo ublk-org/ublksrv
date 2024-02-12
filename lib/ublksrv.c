@@ -204,7 +204,7 @@ int ublksrv_complete_io(const struct ublksrv_queue *tq, unsigned tag, int res)
  */
 static inline int __ublksrv_queue_event(struct _ublksrv_queue *q)
 {
-	if (q->efd > 0) {
+	if (q->efd >= 0) {
 		struct io_uring_sqe *sqe;
 		__u64 user_data = build_eventfd_data();
 
@@ -232,7 +232,7 @@ int ublksrv_queue_handled_event(const struct ublksrv_queue *tq)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
 
-	if (q->efd > 0) {
+	if (q->efd >= 0) {
 		unsigned long long data;
 		const int cnt = sizeof(uint64_t);
 
@@ -261,7 +261,7 @@ int ublksrv_queue_send_event(const struct ublksrv_queue *tq)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
 
-	if (q->efd > 0) {
+	if (q->efd >= 0) {
 		unsigned long long data = 1;
 		const int cnt = sizeof(uint64_t);
 
@@ -342,7 +342,7 @@ void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 	if (q->dev->tgt.ops->deinit_queue)
 		q->dev->tgt.ops->deinit_queue(tq);
 
-	if (q->efd > 0)
+	if (q->efd >= 0)
 		close(q->efd);
 
 	io_uring_unregister_ring_fd(&q->ring);
@@ -406,7 +406,7 @@ static void ublksrv_set_sched_affinity(struct _ublksrv_dev *dev,
 
 static void ublksrv_kill_eventfd(struct _ublksrv_queue *q)
 {
-	if ((q->state & UBLKSRV_QUEUE_STOPPING) && q->efd > 0) {
+	if ((q->state & UBLKSRV_QUEUE_STOPPING) && q->efd >= 0) {
 		unsigned long long data = 1;
 		int ret;
 
@@ -417,11 +417,14 @@ static void ublksrv_kill_eventfd(struct _ublksrv_queue *q)
 	}
 }
 
+/*
+ * Return eventfs or negative errno
+ */
 static int ublksrv_setup_eventfd(struct _ublksrv_queue *q)
 {
 	const struct ublksrv_ctrl_dev_info *info = &q->dev->ctrl_dev->dev_info;
 
-        if (!(info->ublksrv_flags & UBLKSRV_F_NEED_EVENTFD)) {
+	if (!(info->ublksrv_flags & UBLKSRV_F_NEED_EVENTFD)) {
 		q->efd = -1;
 		return 0;
 	}
@@ -440,7 +443,7 @@ static int ublksrv_setup_eventfd(struct _ublksrv_queue *q)
 
 	q->efd = eventfd(0, 0);
 	if (q->efd < 0)
-		return q->efd;
+		return -errno;
 	return 0;
 }
 
@@ -631,9 +634,11 @@ skip_alloc_buf:
 
 	setpriority(PRIO_PROCESS, getpid(), -20);
 
-	if (ublksrv_setup_eventfd(q) < 0) {
-		ublk_err("ublk dev %d queue %d setup eventfd failed",
-			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
+	ret = ublksrv_setup_eventfd(q);
+	if (ret < 0) {
+		ublk_err("ublk dev %d queue %d setup eventfd failed: %s",
+			q->dev->ctrl_dev->dev_info.dev_id, q->q_id,
+			strerror(-ret));
 		goto fail;
 	}
 
