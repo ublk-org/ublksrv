@@ -1079,6 +1079,7 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 	char *buf = NULL;
 	char pid_file[64];
 	int ret;
+	unsigned elapsed = 0;
 
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
@@ -1092,10 +1093,18 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 		goto fail;
 	}
 
-	ret = ublksrv_ctrl_start_recovery(dev);
-	if (ret < 0) {
-			fprintf(stderr, "can't start recovery for %d\n", number);
-		goto fail;
+	while (elapsed < 30000000) {
+		unsigned unit = 100000;
+		ret = ublksrv_ctrl_start_recovery(dev);
+		if (ret < 0 && ret != -EBUSY) {
+			fprintf(stderr, "can't start recovery for %d ret %d\n",
+					number, ret);
+			goto fail;
+		}
+		if (ret >= 0)
+			break;
+		usleep(unit);
+		elapsed += unit;
 	}
 
 	buf = ublksrv_tgt_get_dev_data(dev);
