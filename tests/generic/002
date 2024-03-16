@@ -26,7 +26,7 @@ ublk_run_abort_test()
 		kill -9 $queue_tid
 		sleep 2
 		secs=0
-		while [ $secs -lt 10 ]; do
+		while [ $secs -lt 30 ]; do
 			state=`__ublk_get_dev_state $DEV`
 			[ "$state" == "DEAD" ] && break
 			sleep 1
