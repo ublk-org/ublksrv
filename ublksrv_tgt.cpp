@@ -690,6 +690,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "debug_mask",	1,	NULL, 0},
 		{ "unprivileged",	0,	NULL, 0},
 		{ "usercopy",	0,	NULL, 0},
+		{ "zoned",		0,	NULL, 'x' },
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -712,7 +713,7 @@ static int cmd_dev_add(int argc, char *argv[])
 
 	mkpath(data.run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:i:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:i:zxs:",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -749,6 +750,9 @@ static int cmd_dev_add(int argc, char *argv[])
 				unprivileged = 1;
 			if (!strcmp(longopts[option_index].name, "usercopy"))
 				data.flags |= UBLK_F_USER_COPY;
+			break;
+		case 'x':
+			data.flags |= UBLK_F_ZONED;
 			break;
 		}
 	}
