@@ -323,7 +323,10 @@ struct ublksrv_tgt_type {
 	/** deinit queue data, counter pair of ->init_queue */
 	void (*deinit_queue)(const struct ublksrv_queue *);
 
-	unsigned long reserved[5];
+	/* called before init_tgt, and from control context */
+	int (*get_bpf_progs)(unsigned long flags, int *fds, unsigned int max_fds);
+
+	unsigned long reserved[4];
 };
 
 /**
@@ -416,6 +419,16 @@ extern int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev);
  * @param dev the ublksrv control device instance
  */
 extern int ublksrv_ctrl_add_dev(struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Register bpf fds for this device
+ *
+ * @param dev the ublksrv control device instance
+ * @param type bpf prog type
+ * @fd bpf prog fd
+ */
+extern int ublksrv_ctrl_register_bpf(struct ublksrv_ctrl_dev *ctrl_dev,
+		unsigned int type, int fd);
 
 /**
  * Delete this ublk device by sending command to ublk driver

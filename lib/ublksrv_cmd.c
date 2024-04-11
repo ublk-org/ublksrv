@@ -255,6 +255,26 @@ int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev,
 	return ret;
 }
 
+int ublksrv_ctrl_register_bpf(struct ublksrv_ctrl_dev *ctrl_dev,
+		unsigned type, int fd)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op	= UBLK_U_CMD_REG_BPF,
+		.flags	= CTRL_CMD_HAS_DATA | CTRL_CMD_NO_TRANS,
+	};
+	int ret;
+	__u64 val;
+
+	ublk_un_privileged_prep_data(ctrl_dev, data);
+
+	val = (((__u64)type) << 32) | fd;
+	data.data[0] = val;
+
+	ret = __ublksrv_ctrl_cmd(ctrl_dev, &data);
+
+	return ret;
+}
+
 /*
  * Stop the ublksrv device:
  *
