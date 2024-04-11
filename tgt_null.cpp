@@ -3,6 +3,9 @@
 #include <config.h>
 
 #include "ublksrv_tgt.h"
+#include "bpf/ublk_null.skel.h"
+
+struct ublk_null *bpf_obj;
 
 static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
@@ -91,12 +94,42 @@ static int null_handle_io_async(const struct ublksrv_queue *q,
 	return 0;
 }
 
+static int null_bpf_progs(unsigned long flags, int *fds, unsigned int max_fds)
+{
+	int fd;
+	int nr_fds = 0;
+
+	bpf_obj = ublk_null__open_and_load();
+	ublk_null__attach(bpf_obj);
+
+	if (!(flags & UBLK_F_BLOCKING))
+		fd = bpf_program__fd(bpf_obj->progs.ublk_null_handle_io);
+	else
+		fd = bpf_program__fd(bpf_obj->progs.ublk_null_handle_io_sleep);
+	if (fd >= 0)
+		fds[nr_fds++] = fd;
+
+	fd = bpf_program__fd(bpf_obj->progs.ublk_null_handle_io_task);
+	if (fd >= 0)
+		fds[nr_fds++] = fd;
+
+	return nr_fds;
+}
+
+static void null_deinit_tgt(const struct ublksrv_dev *dev)
+{
+	ublk_null__detach(bpf_obj);
+	ublk_null__destroy(bpf_obj);
+}
+
 struct ublksrv_tgt_type  null_tgt_type = {
 	.handle_io_async = null_handle_io_async,
 	.init_tgt = null_init_tgt,
+	.deinit_tgt = null_deinit_tgt,
 	.type	= UBLKSRV_TGT_TYPE_NULL,
 	.name	=  "null",
 	.recovery_tgt = null_recovery_tgt,
+	.get_bpf_progs = null_bpf_progs,
 };
 
 static void tgt_null_init() __attribute__((constructor));

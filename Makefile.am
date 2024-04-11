@@ -19,9 +19,10 @@ ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp qcow2/tgt_qcow2.cpp \
 			   qcow2/qcow2.cpp qcow2/qcow2_meta.cpp qcow2/utils.cpp \
 			   qcow2/qcow2_flush_meta.cpp \
 			   nbd/tgt_nbd.cpp nbd/cliserv.c nbd/nbd-client.c
+BUILT_SOURCES = bpf/ublk_null.skel.h
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
-ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include
-ublk_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
+ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include -I/usr/include
+ublk_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS) -lelf -lz -lrt -lpthread -lbpf
 
 demo_null_SOURCES = demo_null.c
 demo_null_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
@@ -41,7 +42,11 @@ ublk_user_id_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ublksrv.pc
 
-CLEANFILES = *~ test cscope.* include/*~ *.d qcow2/*~ nbd/*~ utils/*~ doc/html/*
+$(BUILT_SOURCES):
+	echo "build bpf progs"
+	make -C bpf/
+
+CLEANFILES = *~ test cscope.* include/*~ *.d qcow2/*~ nbd/*~ utils/*~ doc/html/* bpf/*.o bpf/progs/vmlinux.h $(BUILT_SOURCES)
 
 R = 10
 D = tests/tmp/

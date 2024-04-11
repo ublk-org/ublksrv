@@ -285,6 +285,12 @@ Any kind of contribution is welcome!
 Development is done over github.
 
 
+ebpf
+====
+
+ebpf support requires clang(>=16) and libbpf-devel.
+
+
 Todo:
 ====
 
