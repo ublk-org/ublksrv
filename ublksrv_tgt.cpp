@@ -689,6 +689,8 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "debug_mask",	1,	NULL, 0},
 		{ "unprivileged",	0,	NULL, 0},
 		{ "usercopy",	0,	NULL, 0},
+		{ "bpf",	0,	NULL, 0},
+		{ "blocking",	0,	NULL, 0},
 		{ NULL }
 	};
 	struct ublksrv_dev_data data = {0};
@@ -703,6 +705,8 @@ static int cmd_dev_add(int argc, char *argv[])
 	const char *dump_buf;
 	int option_index = 0;
 	unsigned int debug_mask = 0;
+	int bpf_fds[8] = { -1 };
+	int nr_bpf_fds;
 
 	data.queue_depth = DEF_QD;
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
@@ -748,6 +752,10 @@ static int cmd_dev_add(int argc, char *argv[])
 				unprivileged = 1;
 			if (!strcmp(longopts[option_index].name, "usercopy"))
 				data.flags |= UBLK_F_USER_COPY;
+			if (!strcmp(longopts[option_index].name, "bpf"))
+				data.flags |= UBLK_F_BPF | UBLK_F_USER_COPY;
+			if (!strcmp(longopts[option_index].name, "blocking"))
+				data.flags |= UBLK_F_BLOCKING;
 			break;
 		}
 	}
@@ -783,6 +791,20 @@ static int cmd_dev_add(int argc, char *argv[])
 	data.flags |= tgt_type->ublk_flags;
 	data.ublksrv_flags |= tgt_type->ublksrv_flags;
 
+	if (data.flags & UBLK_F_BPF) {
+		if (tgt_type->get_bpf_progs == NULL) {
+			fprintf(stderr, "dev type %x doesn't implement get_bpf_progs \n", data.tgt_type);
+			return -EINVAL;
+		}
+		nr_bpf_fds = tgt_type->get_bpf_progs(data.flags, bpf_fds, sizeof(bpf_fds));
+
+		/* so far support at most two bpf io handling prog */
+		if (nr_bpf_fds > 2 || nr_bpf_fds <= 0) {
+			fprintf(stderr, "%s: get_bpf_progs return wrong nr_fds\n", data.tgt_type);
+			return -EINVAL;
+		}
+	}
+
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;
 	data.tgt_argv = argv;
@@ -796,6 +818,26 @@ static int cmd_dev_add(int argc, char *argv[])
 	if (ret < 0) {
 		fprintf(stderr, "can't add dev %d, ret %d\n", data.dev_id, ret);
 		goto fail;
+	}
+
+	if (data.flags & UBLK_F_BPF) {
+		if (bpf_fds[0] > 0) {
+			ret = ublksrv_ctrl_register_bpf(dev, UBLK_BPF_QUEUE_CMD, bpf_fds[0]);
+			if (ret < 0) {
+				fprintf(stderr, "can't register bpf dev %d for %d, ret %d\n",
+						data.dev_id,UBLK_BPF_QUEUE_CMD, ret);
+				goto fail;
+			}
+		}
+
+		if (bpf_fds[1] > 0) {
+			ret = ublksrv_ctrl_register_bpf(dev, UBLK_BPF_IO_TASK, bpf_fds[1]);
+			if (ret < 0) {
+				fprintf(stderr, "can't register bpf dev %d for %d, ret %d\n",
+						data.dev_id, UBLK_BPF_IO_TASK, ret);
+				goto fail;
+			}
+		}
 	}
 
 	{
