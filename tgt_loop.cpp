@@ -7,6 +7,7 @@
 #include "ublksrv_tgt.h"
 
 static bool user_copy;
+static bool block_device;
 
 static bool backing_supports_discard(char *name)
 {
@@ -176,10 +177,12 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 			return -1;
 		if (ioctl(fd, BLKPBSZGET, &pbs) != 0)
 			return -1;
+		block_device = true;
 		p.basic.logical_bs_shift = ilog2(bs);
 		p.basic.physical_bs_shift = ilog2(pbs);
 		can_discard = backing_supports_discard(file);
 	} else if (S_ISREG(st.st_mode)) {
+		block_device = false;
 		bytes = st.st_size;
 		can_discard = true;
 		p.basic.logical_bs_shift = ilog2(st.st_blksize);
@@ -398,7 +401,19 @@ static int loop_handle_io_async(const struct ublksrv_queue *q,
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-	io->co = __loop_handle_io_async(q, data, data->tag);
+	if (block_device && ublksrv_get_op(data->iod) == UBLK_IO_OP_DISCARD) {
+		__u64 r[2];
+		int res;
+
+		io_uring_submit(q->ring_ptr);
+
+		r[0] = data->iod->start_sector << 9;
+		r[1] = data->iod->nr_sectors << 9;
+		res = ioctl(q->dev->tgt.fds[1], BLKDISCARD, &r);
+		ublksrv_complete_io(q, data->tag, res);
+	} else {
+		io->co = __loop_handle_io_async(q, data, data->tag);
+	}
 	return 0;
 }
 
