@@ -80,6 +80,7 @@ jobs:
         tar zxf v14.tar.gz
         cd mkosi-14
         sed -i '/gpgurl\ = \urllib.parse.urljoin/c \    gpgurl\ =\ \"https://fedoraproject.org/fedora.gpg\"' ./mkosi/__init__.py
+        sed -i 's/gpgcheck = True/gpgcheck = False/g' ./mkosi/__init__.py
         python3 -m pip install --user ./
 
     # Required for ssh'ing into VM
