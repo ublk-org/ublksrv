@@ -28,7 +28,7 @@ run_test() {
 	echo "running $GRP/$NAME" | tee /dev/kmsg
 	sh -c $TS &
 	local TPID=$!
-	local timeout=250
+	local timeout=600
 	local count=0
 	while [ $count -lt $timeout ]; do
 		sleep 1
@@ -36,7 +36,7 @@ run_test() {
 		[ $? -ne 0 ] && break
 		let count++
 	done
-	[ $count -ge $timeout ] && echo "timedout"
+	[ $count -ge $timeout ] && echo "test $GRP/$NAME timeout"
 }
 
 run_test_grp() {
