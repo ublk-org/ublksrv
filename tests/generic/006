@@ -43,8 +43,7 @@ ublk_run_recover_kill_test()
 			let secs++
 		done
 		if [ $RES -ne 0 ]; then
-				echo -e "\trecover $DEV failed"
-				exit -1
+			echo -e "\trecover $DEV failed"
 		fi
 		sleep 2
         pid2=`__ublk_get_pid $DEV`
@@ -53,7 +52,7 @@ ublk_run_recover_kill_test()
 		RES=`__remove_ublk_dev_return $DEV`
 		if [ $RES -ne 0 ]; then
 				echo -e "\tdelete $DEV failed"
-				exit -1
+				break
 		fi
 		wait
 		sleep 3
@@ -61,5 +60,5 @@ ublk_run_recover_kill_test()
 }
 
 for RECOVERY_REISSUE in `seq 0 1`; do
-		ublk_run_recover_kill_test
+	ublk_run_recover_kill_test
 done

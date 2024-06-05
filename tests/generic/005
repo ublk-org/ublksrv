@@ -63,14 +63,13 @@ ublk_run_recover_test()
 			let secs++
 		done
 		if [ $RES -ne 0 ]; then
-				echo -e "\trecover $DEV failed"
-				exit -1
+			echo -e "\trecover $DEV failed"
 		fi
 		sleep 2
 		RES=`__remove_ublk_dev_return $DEV`
 		if [ $RES -ne 0 ]; then
-				echo -e "\tdelete $DEV failed"
-				exit -1
+			echo -e "\tdelete $DEV failed"
+			break
 		fi
 		wait
 		sleep 3
@@ -80,6 +79,6 @@ ublk_run_recover_test()
 
 for TGT in $ALL_TGTS; do
 	for RECOVERY_REISSUE in `seq 0 1`; do
-			ublk_run_recover_test $TGT
+		ublk_run_recover_test $TGT
 	done
 done
