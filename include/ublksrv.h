@@ -539,6 +539,13 @@ extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
  */
 extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev);
 
+/**
+ * Return true if this control device is for recovering
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev);
+
 /** @} */ // end of ctrl_dev group
 
 

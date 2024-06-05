@@ -343,11 +343,10 @@ static void *ublksrv_io_handler_fn(void *data)
 	int buf_size;
 	char *buf;
 	const char *jbuf;
-	bool recoverying = dinfo->state == UBLK_S_DEV_QUIESCED;
 
 	pthread_mutex_lock(&jbuf_lock);
 
-	if (!recoverying) {
+	if (!ublksrv_is_recovering(cdev)) {
 		do {
 			buf = __ublksrv_tgt_realloc_json_buf(dev, &buf_size);
 			ret = ublksrv_json_write_queue_info(cdev, buf, buf_size,

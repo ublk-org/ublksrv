@@ -589,6 +589,7 @@ void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 {
 	dev->tgt_type = tgt_type;
 	dev->tgt_ops = tgt_ops;
+	dev->tgt_argc = -1;
 	dev->recovery_jbuf = recovery_jbuf;
 }
 

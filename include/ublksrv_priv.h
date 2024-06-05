@@ -55,8 +55,11 @@ struct ublksrv_ctrl_dev {
 			int tgt_argc;
 			char **tgt_argv;
 		};
-		/* used by ->recovery_tgt() */
-		const char *recovery_jbuf;
+		/* used by ->recovery_tgt(), tgt_argc == -1 */
+		struct {
+			int padding;
+			const char *recovery_jbuf;
+		};
 	};
 
 	cpu_set_t *queues_cpuset;

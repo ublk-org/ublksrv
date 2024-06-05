@@ -8,6 +8,11 @@
 #include "ublksrv_priv.h"
 #include "ublksrv_aio.h"
 
+bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev)
+{
+	return ctrl_dev->tgt_argc == -1;
+}
+
 static inline struct ublksrv_io_desc *ublksrv_get_iod(
 		const struct _ublksrv_queue *q, int tag)
 {
@@ -74,7 +79,7 @@ static int __ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 	optind = 0;     /* so that we can parse our arguments */
 	tgt->ops = ops;
 
-	if (dev->ctrl_dev->dev_info.state != UBLK_S_DEV_QUIESCED)
+	if (!ublksrv_is_recovering(dev->ctrl_dev))
 		ret = ops->init_tgt(local_to_tdev(dev), type, argc, argv);
 	else {
 		if (ops->recovery_tgt)
