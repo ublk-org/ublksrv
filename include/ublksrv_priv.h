@@ -18,6 +18,7 @@
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 #include <sys/poll.h>
+#include <sys/queue.h>
 
 #include "ublk_cmd.h"
 #include "ublksrv_utils.h"
@@ -89,6 +90,7 @@ struct _ublksrv_queue {
 
 	struct io_uring *ring_ptr;
 	struct _ublksrv_dev *dev;
+	struct iod_queue_head waiting;
 	void *private_data;
 	/*************************************************/
 
