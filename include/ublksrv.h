@@ -425,6 +425,13 @@ extern int ublksrv_ctrl_add_dev(struct ublksrv_ctrl_dev *dev);
 extern int ublksrv_ctrl_del_dev(struct ublksrv_ctrl_dev *dev);
 
 /**
+ * Delete this ublk device asynchronously by sending command to ublk driver
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern int ublksrv_ctrl_del_dev_async(struct ublksrv_ctrl_dev *dev);
+
+/**
  * Retrieve ublk device info by sending command to ublk control device
  *
  * @param dev the ublksrv control device instance

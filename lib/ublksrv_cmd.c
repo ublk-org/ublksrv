@@ -289,6 +289,18 @@ int ublksrv_ctrl_add_dev(struct ublksrv_ctrl_dev *dev)
 	return ret;
 }
 
+int ublksrv_ctrl_del_dev_async(struct ublksrv_ctrl_dev *dev)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op = UBLK_U_CMD_DEL_DEV_ASYNC,
+		.flags = CTRL_CMD_NO_TRANS,
+	};
+
+	ublk_un_privileged_prep_data(dev, data);
+
+	return __ublksrv_ctrl_cmd(dev, &data);
+}
+
 int ublksrv_ctrl_del_dev(struct ublksrv_ctrl_dev *dev)
 {
 	struct ublksrv_ctrl_cmd_data data = {
