@@ -877,7 +877,7 @@ static void cmd_dev_add_usage(const char *cmd)
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
 
-static int __cmd_dev_del(int number, bool log)
+static int __cmd_dev_del(int number, bool log, bool async)
 {
 	struct ublksrv_ctrl_dev *dev;
 	int ret;
@@ -906,9 +906,12 @@ static int __cmd_dev_del(int number, bool log)
 	if (ret < 0)
 		fprintf(stderr, "stop daemon %d failed\n", number);
 
-	ret = ublksrv_ctrl_del_dev(dev);
+	if (async)
+		ret = ublksrv_ctrl_del_dev_async(dev);
+	else
+		ret = ublksrv_ctrl_del_dev(dev);
 	if (ret < 0) {
-		fprintf(stderr, "delete dev %d failed\n", number);
+		fprintf(stderr, "delete dev %d failed %d\n", number, ret);
 		goto fail;
 	}
 
@@ -922,13 +925,16 @@ static int cmd_dev_del(int argc, char *argv[])
 	static const struct option longopts[] = {
 		{ "number",		1,	NULL, 'n' },
 		{ "all",		0,	NULL, 'a' },
+		{ "async",		0,	NULL,  0  },
 		{ NULL }
 	};
 	int number = -1;
 	int opt, ret, i;
+	unsigned async = 0;
+	int option_index = 0;
 
 	while ((opt = getopt_long(argc, argv, "n:a",
-				  longopts, NULL)) != -1) {
+				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'a':
 			break;
@@ -936,14 +942,17 @@ static int cmd_dev_del(int argc, char *argv[])
 		case 'n':
 			number = strtol(optarg, NULL, 10);
 			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "async"))
+				async = 1;
 		}
 	}
 
 	if (number >= 0)
-		return __cmd_dev_del(number, true);
+		return __cmd_dev_del(number, true, async);
 
 	for (i = 0; i < MAX_NR_UBLK_DEVS; i++)
-		ret = __cmd_dev_del(i, false);
+		ret = __cmd_dev_del(i, false, async);
 
 	return ret;
 }
