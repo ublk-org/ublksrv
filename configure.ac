@@ -38,6 +38,15 @@ AX_PTHREAD
 dnl Check for C++.
 AC_PROG_CXX
 
+AS_CASE([$CXX],
+  [*clang++*], [ENABLE_CORO_FLAG=""],
+  [*g++*], [ENABLE_CORO_FLAG="-fcoroutines"],
+  [ENABLE_CORO_FLAG=""]
+)
+
+CXXFLAGS="$CXXFLAGS $ENABLE_CORO_FLAG"
+
+
 dnl --enable-gcc-warnings to turn on GCC warnings (for developers).
 AC_ARG_ENABLE([gcc-warnings],
     [AS_HELP_STRING([--enable-gcc-warnings],
