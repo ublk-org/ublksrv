@@ -178,6 +178,11 @@
 /* Copy between request and user buffer by pread()/pwrite() */
 #define UBLK_F_USER_COPY	(1UL << 7)
 
+/*
+ * Enable zoned device support
+ */
+#define UBLK_F_ZONED (1ULL << 8)
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1
@@ -231,12 +236,20 @@ struct ublksrv_ctrl_dev_info {
 	__u64   reserved2;
 };
 
-#define		UBLK_IO_OP_READ		0
-#define		UBLK_IO_OP_WRITE		1
-#define		UBLK_IO_OP_FLUSH		2
-#define		UBLK_IO_OP_DISCARD	3
-#define		UBLK_IO_OP_WRITE_SAME	4
-#define		UBLK_IO_OP_WRITE_ZEROES	5
+enum ublk_op {
+	UBLK_IO_OP_READ = 0,
+	UBLK_IO_OP_WRITE = 1,
+	UBLK_IO_OP_FLUSH = 2,
+	UBLK_IO_OP_DISCARD = 3,
+	UBLK_IO_OP_WRITE_SAME = 4,
+	UBLK_IO_OP_WRITE_ZEROES = 5,
+	UBLK_IO_OP_ZONE_OPEN = 10,
+	UBLK_IO_OP_ZONE_CLOSE = 11,
+	UBLK_IO_OP_ZONE_FINISH = 12,
+	UBLK_IO_OP_ZONE_APPEND = 13,
+	UBLK_IO_OP_ZONE_RESET = 15,
+	UBLK_IO_OP_REPORT_ZONES = 18,
+};
 
 #define		UBLK_IO_F_FAILFAST_DEV		(1U << 8)
 #define		UBLK_IO_F_FAILFAST_TRANSPORT	(1U << 9)
@@ -257,7 +270,10 @@ struct ublksrv_io_desc {
 	/* op: bit 0-7, flags: bit 8-31 */
 	__u32		op_flags;
 
-	__u32		nr_sectors;
+	union {
+		__u32		nr_sectors;
+		__u32 nr_zones;
+	};
 
 	/* start sector for this io */
 	__u64		start_sector;
@@ -286,11 +302,14 @@ struct ublksrv_io_cmd {
 	/* io result, it is valid for COMMIT* command only */
 	__s32	result;
 
-	/*
-	 * userspace buffer address in ublksrv daemon process, valid for
-	 * FETCH* command only
-	 */
-	__u64	addr;
+	union {
+		/*
+		 * userspace buffer address in ublksrv daemon process, valid for
+		 * FETCH* command only
+		 */
+		__u64	addr;
+		__u64 zone_append_lba;
+	};
 };
 
 struct ublk_param_basic {
@@ -333,6 +352,13 @@ struct ublk_param_devt {
 	__u32   disk_minor;
 };
 
+struct ublk_param_zoned {
+	__u32	max_open_zones;
+	__u32	max_active_zones;
+	__u32 max_zone_append_sectors;
+	__u8	reserved[20];
+};
+
 struct ublk_params {
 	/*
 	 * Total length of parameters, userspace has to set 'len' for both
@@ -344,11 +370,13 @@ struct ublk_params {
 #define UBLK_PARAM_TYPE_BASIC           (1 << 0)
 #define UBLK_PARAM_TYPE_DISCARD         (1 << 1)
 #define UBLK_PARAM_TYPE_DEVT            (1 << 2)
+#define UBLK_PARAM_TYPE_ZONED           (1 << 3)
 	__u32	types;			/* types of parameter included */
 
 	struct ublk_param_basic		basic;
 	struct ublk_param_discard	discard;
 	struct ublk_param_devt		devt;
+	struct ublk_param_zoned	zoned;
 };
 
 #endif
