@@ -1055,7 +1055,7 @@ static int cmd_dev_get_features(int argc, char *argv[])
 
 		printf("ublk_drv features: 0x%llx\n", features);
 
-		for (i = 0; i < sizeof(features); i++) {
+		for (i = 0; i < sizeof(features) * 8; i++) {
 			const char *feat;
 
 			if (!((1ULL << i)  & features))
