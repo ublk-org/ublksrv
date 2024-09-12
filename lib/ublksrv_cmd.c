@@ -145,6 +145,7 @@ void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev)
 
 struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 {
+	struct io_uring_params p;
 	struct ublksrv_ctrl_dev *dev = (struct ublksrv_ctrl_dev *)calloc(1,
 			sizeof(*dev));
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
@@ -171,7 +172,8 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 	dev->tgt_argv = data->tgt_argv;
 
 	/* 32 is enough to send ctrl commands */
-	ret = ublksrv_setup_ring(&dev->ring, 32, 32, IORING_SETUP_SQE128);
+	ublksrv_setup_ring_params(&p, 32, IORING_SETUP_SQE128);
+	ret = io_uring_queue_init_params(32, &dev->ring, &p);
 	if (ret < 0) {
 		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
 		free(dev);

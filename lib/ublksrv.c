@@ -509,6 +509,7 @@ static void ublksrv_calculate_depths(const struct _ublksrv_dev *dev, int
 const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 		unsigned short q_id, void *queue_data)
 {
+	struct io_uring_params p;
 	struct _ublksrv_dev *dev = tdev_to_local(tdev);
 	struct _ublksrv_queue *q;
 	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
@@ -595,8 +596,9 @@ skip_alloc_buf:
 		//ublk_assert(io_data_size ^ (unsigned long)q->ios[i].data.private_data);
 	}
 
-	ret = ublksrv_setup_ring(&q->ring, ring_depth, cq_depth,
+	ublksrv_setup_ring_params(&p, cq_depth,
 			IORING_SETUP_SQE128 | IORING_SETUP_COOP_TASKRUN);
+	ret = io_uring_queue_init_params(ring_depth, &q->ring, &p);
 	if (ret < 0) {
 		ublk_err("ublk dev %d queue %d setup io_uring failed %d",
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);

@@ -215,17 +215,12 @@ static inline int is_target_io(__u64 user_data)
 	return (user_data & (1ULL << 63)) != 0;
 }
 
-/* two helpers for setting up io_uring */
-static inline int ublksrv_setup_ring(struct io_uring *r, int depth,
+static inline void ublksrv_setup_ring_params(struct io_uring_params *p,
 		int cq_depth, unsigned flags)
 {
-	struct io_uring_params p;
-
-	memset(&p, 0, sizeof(p));
-	p.flags = flags | IORING_SETUP_CQSIZE;
-	p.cq_entries = cq_depth;
-
-	return io_uring_queue_init_params(depth, r, &p);
+	memset(p, 0, sizeof(*p));
+	p->flags = flags | IORING_SETUP_CQSIZE;
+	p->cq_entries = cq_depth;
 }
 
 static inline struct io_uring_sqe *ublksrv_uring_get_sqe(struct io_uring *r,
