@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0
+# SPDX-License-Identifier: MIT or GPL-2.0-only
 
 ublk_docker_add()
 {

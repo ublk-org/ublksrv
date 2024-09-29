@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: GPL-2.0
+# SPDX-License-Identifier: MIT or GPL-2.0-only
 
 GITDESC=$(git describe --dirty|sed -e 's/^v//' 2>/dev/null)
 
