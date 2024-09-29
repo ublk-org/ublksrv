@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: GPL-2.0
 #!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
 
 export QCOW2_IMG_SZ=2G
 

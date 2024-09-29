@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0
+# SPDX-License-Identifier: MIT or GPL-2.0-only
 #
 #usage:
 #	export UBLK_DBG_DEV=/dev/vdc; make test T=debug/test_dev
