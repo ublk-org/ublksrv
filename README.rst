@@ -305,7 +305,7 @@ by MIT license.
 The library functions (all code in lib/ directory and include/ublksrv.h)
 are covered by dual licensed LGPL and MIT, see COPYING.LGPL and LICENSE.
 
-qcow2 target code is covered by GPL-2.0, see COPYING.
+qcow2 and nbd target code is covered by GPL-2.0, see COPYING.
 
 All other source code are covered by dual licensed GPL and MIT, see
 COPYING and LICENSE.
