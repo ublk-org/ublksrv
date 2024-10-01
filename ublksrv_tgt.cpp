@@ -685,6 +685,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		{ "uring_comp",		1,	NULL, 'u' },
 		{ "need_get_data",	1,	NULL, 'g' },
 		{ "user_recovery",	1,	NULL, 'r'},
+		{ "user_recovery_fail_io",	1,	NULL, 'e'},
 		{ "user_recovery_reissue",	1,	NULL, 'i'},
 		{ "debug_mask",	1,	NULL, 0},
 		{ "unprivileged",	0,	NULL, 0},
@@ -698,6 +699,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	int uring_comp = 0;
 	int need_get_data = 0;
 	int user_recovery = 0;
+	int user_recovery_fail_io = 0;
 	int user_recovery_reissue = 0;
 	int unprivileged = 0;
 	const char *dump_buf;
@@ -711,7 +713,7 @@ static int cmd_dev_add(int argc, char *argv[])
 
 	mkpath(data.run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:i:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -737,6 +739,9 @@ static int cmd_dev_add(int argc, char *argv[])
 			break;
 		case 'r':
 			user_recovery = strtol(optarg, NULL, 10);
+			break;
+		case 'e':
+			user_recovery_fail_io = strtol(optarg, NULL, 10);
 			break;
 		case 'i':
 			user_recovery_reissue = strtol(optarg, NULL, 10);
@@ -765,6 +770,8 @@ static int cmd_dev_add(int argc, char *argv[])
 		data.flags |= UBLK_F_NEED_GET_DATA;
 	if (user_recovery)
 		data.flags |= UBLK_F_USER_RECOVERY;
+	if (user_recovery_fail_io)
+		data.flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_FAIL_IO;
 	if (user_recovery_reissue)
 		data.flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
 	if (unprivileged)
@@ -871,8 +878,8 @@ static void cmd_dev_add_usage(const char *cmd)
 	printf("%s add -t %s\n", cmd, data.names);
 	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
 	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
-	printf("\t-i USER_RECOVERY_REISSUE --debug_mask=0x{DBG_MASK}\n");
-	printf("\t--unprivileged\n\n");
+	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
+	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n\n");
 	printf("\ttarget specific command line:\n");
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
@@ -1047,6 +1054,7 @@ static int cmd_dev_get_features(int argc, char *argv[])
 		[const_ilog2(UBLK_F_CMD_IOCTL_ENCODE)] = "CMD_IOCTL_ENCODE",
 		[const_ilog2(UBLK_F_USER_COPY)] = "USER_COPY",
 		[const_ilog2(UBLK_F_ZONED)] = "ZONED",
+		[const_ilog2(UBLK_F_USER_RECOVERY_FAIL_IO)] = "RECOVERY_FAIL_IO",
 	};
 
 	ret = ublksrv_ctrl_get_features(dev, &features);

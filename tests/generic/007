@@ -1,0 +1,163 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+echo -e "\ttest nosrv (state after ublk server is killed) and recovery behavior"
+echo -e "\tfor all valid recovery options"
+echo
+
+DD_PID=0
+
+# submit an I/O async and store pid into DD_PID
+submit_io()
+{
+	dd if=$1 of=/dev/null iflag=direct count=1 bs=4k 2>/dev/null &
+	DD_PID=$!
+}
+
+# check the status of the I/O issued by DD_PID
+# 0 - I/O succeeded
+# 1 - I/O error
+# 2 - I/O queued
+check_io_status()
+{
+	sleep 1
+	# if process is still alive after 1 second, I/O is likely queued
+	if ps -p $DD_PID > /dev/null 2>/dev/null; then
+		return 2
+	else
+		if wait $DD_PID; then return 0; else return 1; fi
+	fi
+}
+
+del_dev()
+{
+	sleep 2
+	RES=`__remove_ublk_dev_return $1`
+	if [ $RES -ne 0 ]; then
+		echo -e "\t\tdelete $1 failed"
+		return 1
+	fi
+	wait
+	sleep 3
+}
+
+ublk_run_recovery_test()
+{
+	export T_TYPE_PARAMS="-t null -r $RECOVERY -i $RECOVERY_REISSUE -e $RECOVERY_FAIL_IO"
+	echo -e "\trunning with params: $T_TYPE_PARAMS"
+	DEV=`__create_ublk_dev`
+
+	echo -e "\t\tcheck behavior before nosrv - expect no error"
+	submit_io $DEV
+	check_io_status
+	RES=$?
+	if [ $RES -ne 0 ]; then
+		echo -e "\t\tI/O error while ublk server still up!"
+		return 1
+	fi
+
+	pid1=`__ublk_get_pid $DEV`
+	kill -9 $pid1
+	sleep 2
+	echo -ne "\t\tcheck behavior during nosrv - "
+	submit_io $DEV
+	check_io_status
+	RES=$?
+	if [ $RECOVERY_FAIL_IO -ne 0 ]; then
+		echo "expect I/O error"
+		if [ $RES -ne 1 ]; then
+			echo -e "\t\tincorrect nosrv behavior!"
+			echo -e "\t\texpected io error, got $RES"
+			return 1
+		fi
+	elif [ $RECOVERY -ne 0 ]; then
+		echo "expect I/O queued"
+		if [ $RES -ne 2 ]; then
+			echo -e "\t\tincorrect nosrv behavior!"
+			echo -e "\t\texpected queued io, got $RES"
+			return 1
+		fi
+	else
+		echo "expect I/O error" # because device should be gone
+		if [ $RES -ne 1 ]; then
+			echo -e "\t\tincorrect nosrv behavior!"
+			echo -e "\t\texpected io error, got $RES"
+			return 1
+		fi
+	fi
+
+	echo -e "\t\ttry to recover the device"
+	secs=0
+	while [ $secs -lt 10 ]; do
+		RES=`__recover_ublk_dev $DEV`
+		[ $RES -eq 0 ] && break
+		sleep 1
+		let secs++
+	done
+	if [ $RES -ne 0 ]; then
+		echo -e "\t\tfailed to recover device!"
+		if [ $RECOVERY -ne 0 ]; then
+			return 1
+		else
+			echo -e "\t\tforgiving expected recovery failure"
+			del_dev $DEV
+			echo
+			return 0
+		fi
+	else
+		if [ $RECOVERY -eq 0 ]; then
+			echo -e "\t\trecovery unexpectedly succeeded!"
+			return 1
+		fi
+	fi
+
+	# if I/O queued before, make sure it completes now
+	if [ $RECOVERY_FAIL_IO -eq 0 ] && [ $RECOVERY -ne 0 ]; then
+		echo -e "\t\tchecking that I/O completed after recovery"
+		check_io_status
+		RES=$?
+		if [ $RES -ne 0 ]; then
+			echo -e "\t\tpreviously queued I/O did not succeed!"
+			echo -e "\t\texpected success got $RES"
+			return 1
+		fi
+	fi
+
+	echo -e "\t\tcheck behavior after recovery - expect no error"
+	submit_io $DEV
+	check_io_status
+	RES=$?
+	if [ $RES -ne 0 ]; then
+		echo -e "\t\tI/O error after recovery!"
+		return 1
+	fi
+
+	# cleanup
+	pid2=`__ublk_get_pid $DEV`
+	kill -9 $pid2
+	del_dev $DEV
+
+	echo
+}
+
+RECOVERY=0
+RECOVERY_REISSUE=0
+RECOVERY_FAIL_IO=0
+ublk_run_recovery_test
+
+RECOVERY=1
+RECOVERY_REISSUE=0
+RECOVERY_FAIL_IO=0
+ublk_run_recovery_test
+
+RECOVERY=1
+RECOVERY_REISSUE=1
+RECOVERY_FAIL_IO=0
+ublk_run_recovery_test
+
+RECOVERY=1
+RECOVERY_REISSUE=0
+RECOVERY_FAIL_IO=1
+ublk_run_recovery_test

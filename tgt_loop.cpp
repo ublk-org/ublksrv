@@ -99,7 +99,6 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
 
 	ublk_assert(type == UBLKSRV_TGT_TYPE_LOOP);
-	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
 
 	return loop_setup_tgt(dev, type, true, jbuf);
 }
