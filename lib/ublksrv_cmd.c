@@ -438,6 +438,8 @@ static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 		return "LIVE";
 	case UBLK_S_DEV_QUIESCED:
 		return "QUIESCED";
+	case UBLK_S_DEV_FAIL_IO:
+		return "FAIL_IO";
 	default:
 		return "UNKNOWN";
 	};

@@ -146,7 +146,6 @@ static int qcow2_recovery_tgt(struct ublksrv_dev *dev, int type)
 	int tgt_depth;
 
 	ublk_assert(jbuf);
-	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
 	ublk_assert(type == UBLKSRV_TGT_TYPE_QCOW2);
 
 	/* qcow2 doesn't support user copy yet */

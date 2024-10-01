@@ -56,7 +56,6 @@ static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 	struct ublk_params p;
 
 	ublk_assert(jbuf);
-	ublk_assert(info->state == UBLK_S_DEV_QUIESCED);
 	ublk_assert(type == UBLKSRV_TGT_TYPE_NULL);
 
 	ret = ublksrv_json_read_params(&p, jbuf);

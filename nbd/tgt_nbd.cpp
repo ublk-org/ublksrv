@@ -808,7 +808,6 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 
 	ublk_assert(jbuf);
 	ublk_assert(type == UBLKSRV_TGT_TYPE_NBD);
-	ublk_assert(!recovery || info->state == UBLK_S_DEV_QUIESCED);
 
 	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "host",
 			host_name);
