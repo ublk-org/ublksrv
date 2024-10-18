@@ -26,7 +26,11 @@
 
 
 /* todo: relace the hardcode name with /dev/char/maj:min */
-#define UBLKC_DEV	"/dev/ublkc"
+#ifdef UBLKC_PREFIX
+#define	UBLKC_DEV	UBLKC_PREFIX "/ublkc"
+#else
+#define	UBLKC_DEV	"/dev/ublkc"
+#endif
 #define UBLKC_PATH_MAX	32
 
 #ifdef __cplusplus

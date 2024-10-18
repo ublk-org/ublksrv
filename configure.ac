@@ -153,6 +153,24 @@ else
   AC_MSG_RESULT([no])
 fi
 
+ublk_control=/dev/ublk-control
+AC_ARG_WITH(
+  [ublk_control],
+  [AS_HELP_STRING([--with-ublk_control], [Set the ublk control device. Defaults to /dev/ublk-control.])],
+  [ublk_control="$withval"]
+  [],
+)
+AC_DEFINE_UNQUOTED([UBLK_CONTROL], ["${ublk_control}"], [ublk control device.])
+
+ublkc_prefix=/dev
+AC_ARG_WITH(
+  [ublkc_prefix],
+  [AS_HELP_STRING([--with-ublkc_prefix], [Set the directory prefix for ublkc devices. Defaults to /dev.])],
+  [ublkc_prefix="$withval"]
+  [],
+)
+AC_DEFINE_UNQUOTED([UBLKC_PREFIX], ["${ublkc_prefix}"], [prefix for ublkc devices.])
+
 AC_CHECK_PROGS([DOXYGEN], [doxygen])
 if test -z "$DOXYGEN"; then
    AC_MSG_WARN([Doxygen not found - continue without Doxygen support])

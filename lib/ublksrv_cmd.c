@@ -4,7 +4,11 @@
 
 #include "ublksrv_priv.h"
 
+#ifdef UBLK_CONTROL
+#define	CTRL_DEV	UBLK_CONTROL
+#else
 #define	CTRL_DEV	"/dev/ublk-control"
+#endif
 
 #define CTRL_CMD_HAS_DATA	1
 #define CTRL_CMD_HAS_BUF	2
