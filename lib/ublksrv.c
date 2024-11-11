@@ -238,7 +238,7 @@ int ublksrv_queue_handled_event(const struct ublksrv_queue *tq)
 	struct _ublksrv_queue *q = tq_to_local(tq);
 
 	if (q->efd >= 0) {
-		unsigned long long data;
+		uint64_t data;
 		const int cnt = sizeof(uint64_t);
 
 		/* read has to be done, otherwise poll event won't be stopped */
@@ -267,7 +267,7 @@ int ublksrv_queue_send_event(const struct ublksrv_queue *tq)
 	struct _ublksrv_queue *q = tq_to_local(tq);
 
 	if (q->efd >= 0) {
-		unsigned long long data = 1;
+		uint64_t data = 1;
 		const int cnt = sizeof(uint64_t);
 
 		if (write(q->efd, &data, cnt) != cnt) {
@@ -412,13 +412,13 @@ static void ublksrv_set_sched_affinity(struct _ublksrv_dev *dev,
 static void ublksrv_kill_eventfd(struct _ublksrv_queue *q)
 {
 	if ((q->state & UBLKSRV_QUEUE_STOPPING) && q->efd >= 0) {
-		unsigned long long data = 1;
+		uint64_t data = 1;
 		int ret;
 
-		ret = write(q->efd, &data, 8);
-		if (ret != 8)
-			ublk_err("%s:%d write fail %d/%d\n",
-					__func__, __LINE__, ret, 8);
+		ret = write(q->efd, &data, sizeof(uint64_t));
+		if (ret != sizeof(uint64_t))
+			ublk_err("%s:%d write fail %d/%zu\n",
+					__func__, __LINE__, ret, sizeof(uint64_t));
 	}
 }
 
@@ -899,13 +899,13 @@ static void ublksrv_submit_aio_batch(struct _ublksrv_queue *q)
 
 	for (i = 0; i < q->nr_ctxs; i++) {
 		struct ublksrv_aio_ctx *ctx = q->ctxs[i];
-		unsigned long data = 1;
+		uint64_t data = 1;
 		int ret;
 
-		ret = write(ctx->efd, &data, 8);
-		if (ret != 8)
-			ublk_err("%s:%d write fail %d/%d\n",
-					__func__, __LINE__, ret, 8);
+		ret = write(ctx->efd, &data, sizeof(uint64_t));
+		if (ret != sizeof(uint64_t))
+			ublk_err("%s:%d write fail ctx[%d]: %d/%zu\n",
+					__func__, __LINE__, i, ret, sizeof(uint64_t));
 	}
 }
 
