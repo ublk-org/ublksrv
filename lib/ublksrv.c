@@ -330,6 +330,14 @@ static int ublksrv_queue_cmd_buf_sz(struct _ublksrv_queue *q)
 	return round_up(size, page_sz);
 }
 
+static int queue_max_cmd_buf_sz(void)
+{
+	unsigned int page_sz = getpagesize();
+
+	return round_up(UBLK_MAX_QUEUE_DEPTH * sizeof(struct ublksrv_io_desc),
+			page_sz);
+}
+
 int ublksrv_queue_unconsumed_cqes(const struct ublksrv_queue *tq)
 {
 	if (tq->ring_ptr)
@@ -549,8 +557,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 	q->tid = ublksrv_gettid();
 
 	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
-	off = UBLKSRV_CMD_BUF_OFFSET +
-		q_id * (UBLK_MAX_QUEUE_DEPTH * sizeof(struct ublksrv_io_desc));
+	off = UBLKSRV_CMD_BUF_OFFSET + q_id * queue_max_cmd_buf_sz();
 	q->io_cmd_buf = (char *)mmap(0, cmd_buf_size, PROT_READ,
 			MAP_SHARED | MAP_POPULATE, dev->cdev_fd, off);
 	if (q->io_cmd_buf == MAP_FAILED) {
