@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT or LGPL-2.1-only
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
+
 #include "ublksrv_priv.h"
 
 #define aio_log ublk_log
