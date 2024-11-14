@@ -408,11 +408,8 @@ static void ublksrv_set_sched_affinity(struct _ublksrv_dev *dev,
 	const struct ublksrv_ctrl_dev *cdev = dev->ctrl_dev;
 	unsigned dev_id = cdev->dev_info.dev_id;
 	cpu_set_t *cpuset = ublksrv_get_queue_affinity(cdev, q_id);
-	pthread_t thread = pthread_self();
-	int ret;
 
-	ret = pthread_setaffinity_np(thread, sizeof(cpu_set_t), cpuset);
-	if (ret)
+	if (sched_setaffinity(0, sizeof(cpu_set_t), cpuset) < 0)
 		ublk_err("ublk dev %u queue %u set affinity failed",
 				dev_id, q_id);
 }
