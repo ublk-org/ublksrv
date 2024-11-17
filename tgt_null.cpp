@@ -33,6 +33,9 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	if (type != UBLKSRV_TGT_TYPE_NULL)
 		return -1;
 
+	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
+		return -1;
+
 	tgt_json.dev_size = tgt->dev_size = dev_size;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
