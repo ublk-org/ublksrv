@@ -918,6 +918,10 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	const char *exp_name = NULL;
 	uint16_t flags = 0;
 	int ret;
+	unsigned int attrs = UBLK_ATTR_VOLATILE_CACHE;
+
+	if (read_only)
+		attrs |= UBLK_ATTR_READ_ONLY;
 
 	strcpy(tgt_json.name, "nbd");
 
@@ -962,7 +966,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
 		.basic = {
-			.attrs = read_only ? UBLK_ATTR_READ_ONLY : 0U,
+			.attrs = attrs,
 			.logical_bs_shift	= bs_shift,
 			.physical_bs_shift	= 12,
 			.io_opt_shift		= 12,
