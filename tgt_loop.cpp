@@ -303,6 +303,7 @@ static void loop_queue_tgt_write(const struct ublksrv_queue *q,
 			buf, iod->nr_sectors << 9,
 			iod->start_sector << 9);
 		io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
+		sqe2->rw_flags |= RWF_DSYNC;
 		/* bit63 marks us as tgt io */
 		sqe2->user_data = build_user_data(tag, ublk_op, 0, 1);
 	} else {
@@ -315,6 +316,7 @@ static void loop_queue_tgt_write(const struct ublksrv_queue *q,
 			iod->nr_sectors << 9,
 			iod->start_sector << 9);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		sqe->rw_flags |= RWF_DSYNC;
 		/* bit63 marks us as tgt io */
 		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 	}
