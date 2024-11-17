@@ -3,7 +3,6 @@
 
 . common/fio_common
 . common/loop_common
-. common/qcow2_common
 . common/nbd_common
 
 ublk_run_mount_test()
@@ -55,7 +54,7 @@ ublk_run_mount_type()
 
 MNT=`mktemp -d`
 
-for TYPE in "loop" "qcow2" "nbd"; do
+for TYPE in "loop" ""nbd"; do
 	ublk_run_mount_type $TYPE $MNT
 done
 

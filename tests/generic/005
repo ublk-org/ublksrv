@@ -3,7 +3,6 @@
 
 . common/fio_common
 . common/loop_common
-. common/qcow2_common
 . common/nbd_common
 
 echo -e "\trun fio with dev recovery, type 1:"
@@ -33,11 +32,7 @@ ublk_run_recover_test()
 		local backing="-f $file"
 	fi
 
-	if [ "$type" == "qcow2" ]; then
-		QUEUES=1
-	else
-		QUEUES=2
-	fi
+	QUEUES=2
 
 	for CNT in `seq $LOOPS`; do
 		export T_TYPE_PARAMS="-t $type -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -r $RECOVERY -i $RECOVERY_REISSUE $backing"

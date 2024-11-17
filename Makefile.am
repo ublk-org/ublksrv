@@ -15,9 +15,7 @@ sbin_PROGRAMS = ublk ublk_user_id
 noinst_PROGRAMS = demo_null demo_event
 dist_sbin_SCRIPTS = utils/ublk_chown.sh utils/ublk_chown_docker.sh
 
-ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp qcow2/tgt_qcow2.cpp \
-			   qcow2/qcow2.cpp qcow2/qcow2_meta.cpp qcow2/utils.cpp \
-			   qcow2/qcow2_flush_meta.cpp \
+ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp \
 			   nbd/tgt_nbd.cpp nbd/cliserv.c nbd/nbd-client.c
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include
@@ -41,7 +39,7 @@ ublk_user_id_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ublksrv.pc
 
-CLEANFILES = *~ test cscope.* include/*~ *.d qcow2/*~ nbd/*~ utils/*~ doc/html/*
+CLEANFILES = *~ test cscope.* include/*~ *.d nbd/*~ utils/*~ doc/html/*
 
 R = 10
 D = tests/tmp/
