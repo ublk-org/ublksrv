@@ -54,7 +54,7 @@ ublk_run_mount_type()
 
 MNT=`mktemp -d`
 
-for TYPE in "loop" ""nbd"; do
+for TYPE in "loop" "nbd"; do
 	ublk_run_mount_type $TYPE $MNT
 done
 
