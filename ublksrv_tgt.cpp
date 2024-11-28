@@ -894,6 +894,10 @@ static int __cmd_dev_del(int number, bool log, bool async)
 	};
 
 	dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "ublksrv_ctrl_init failed id %d\n", number);
+		return -errno;
+	}
 
 	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
@@ -978,6 +982,10 @@ static int list_one_dev(int number, bool log, bool verbose)
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
 	int ret;
 
+	if (!dev) {
+		fprintf(stderr, "ublksrv_ctrl_init failed id %d\n", number);
+		return -errno;
+	}
 	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
 		if (log)
@@ -1057,6 +1065,11 @@ static int cmd_dev_get_features(int argc, char *argv[])
 		[const_ilog2(UBLK_F_USER_RECOVERY_FAIL_IO)] = "RECOVERY_FAIL_IO",
 	};
 
+	if (!dev) {
+		fprintf(stderr, "ublksrv_ctrl_init failed id\n");
+		return -errno;
+	}
+
 	ret = ublksrv_ctrl_get_features(dev, &features);
 	if (!ret) {
 		int i;
@@ -1102,7 +1115,7 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failure dev %d\n", number);
-		return -ENOMEM;
+		return -errno;
 	}
 
 	ret = ublksrv_ctrl_get_info(dev);
