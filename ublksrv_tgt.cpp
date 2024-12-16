@@ -984,7 +984,7 @@ static int list_one_dev(int number, bool log, bool verbose)
 
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failed id %d\n", number);
-		return -errno;
+		return -ENODEV;
 	}
 	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
@@ -1030,8 +1030,12 @@ static int cmd_list_dev_info(int argc, char *argv[])
 	if (number >= 0)
 		return list_one_dev(number, true, verbose);
 
-	for (i = 0; i < MAX_NR_UBLK_DEVS; i++)
-		list_one_dev(i, false, verbose);
+	for (i = 0; i < MAX_NR_UBLK_DEVS; i++) {
+		int ret = list_one_dev(i, false, verbose);
+
+		if (ret == -ENODEV)
+			return ret;
+	}
 
 	return 0;
 }
