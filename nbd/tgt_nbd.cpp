@@ -833,8 +833,10 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 					needed_flags, cflags, opts, certfile,
 					keyfile, cacertfile, tlshostname, tls,
 					can_opt_go);
-		else
+		else {
 			ublk_err("%s: open socket failed %d\n", __func__, sock);
+			return sock;
+		}
 
 		tgt->fds[i + 1] = sock;
 		NBD_HS_DBG("%s:qid %d %s-%s size %luMB flags %x sock %d\n",
