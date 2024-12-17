@@ -123,7 +123,9 @@ static int __ublksrv_ctrl_cmd(struct ublksrv_ctrl_dev *dev,
 		return ret;
 	}
 
-	ret = io_uring_wait_cqe(&dev->ring, &cqe);
+	do {
+		ret = io_uring_wait_cqe(&dev->ring, &cqe);
+	} while (ret == -EINTR);
 	if (ret < 0) {
 		fprintf(stderr, "wait cqe: %s\n", strerror(-ret));
 		return ret;
