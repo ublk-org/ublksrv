@@ -69,8 +69,6 @@ static int __ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 	if (strcmp(ops->name, type_name))
 		return -EINVAL;
 
-	if (!ops->init_tgt)
-		return -EINVAL;
 	if (!ops->handle_io_async)
 		return -EINVAL;
 	if (!ops->alloc_io_buf ^ !ops->free_io_buf)
@@ -79,9 +77,12 @@ static int __ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 	optind = 0;     /* so that we can parse our arguments */
 	tgt->ops = ops;
 
-	if (!ublksrv_is_recovering(dev->ctrl_dev))
-		ret = ops->init_tgt(local_to_tdev(dev), type, argc, argv);
-	else {
+	if (!ublksrv_is_recovering(dev->ctrl_dev)) {
+		if (ops->init_tgt)
+			ret = ops->init_tgt(local_to_tdev(dev), type, argc, argv);
+		else
+			ret = 0;
+	} else {
 		if (ops->recovery_tgt)
 			ret = ops->recovery_tgt(local_to_tdev(dev), type);
 		else
