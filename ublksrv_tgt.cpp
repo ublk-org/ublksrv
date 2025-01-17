@@ -796,7 +796,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "can't init dev %d\n", data.dev_id);
-		return -ENODEV;
+		return -EOPNOTSUPP;
 	}
 
 	ret = ublksrv_ctrl_add_dev(dev);
@@ -896,7 +896,7 @@ static int __cmd_dev_del(int number, bool log, bool async)
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failed id %d\n", number);
-		return -errno;
+		return -EOPNOTSUPP;
 	}
 
 	ret = ublksrv_ctrl_get_info(dev);
@@ -962,8 +962,11 @@ static int cmd_dev_del(int argc, char *argv[])
 	if (number >= 0)
 		return __cmd_dev_del(number, true, async);
 
-	for (i = 0; i < MAX_NR_UBLK_DEVS; i++)
+	for (i = 0; i < MAX_NR_UBLK_DEVS; i++) {
 		ret = __cmd_dev_del(i, false, async);
+		if (ret == -EOPNOTSUPP)
+			return ret;
+	}
 
 	return ret;
 }
@@ -984,7 +987,7 @@ static int list_one_dev(int number, bool log, bool verbose)
 
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failed id %d\n", number);
-		return -ENODEV;
+		return -EOPNOTSUPP;
 	}
 	ret = ublksrv_ctrl_get_info(dev);
 	if (ret < 0) {
@@ -1033,7 +1036,7 @@ static int cmd_list_dev_info(int argc, char *argv[])
 	for (i = 0; i < MAX_NR_UBLK_DEVS; i++) {
 		int ret = list_one_dev(i, false, verbose);
 
-		if (ret == -ENODEV)
+		if (ret == -EOPNOTSUPP)
 			return ret;
 	}
 
@@ -1071,7 +1074,7 @@ static int cmd_dev_get_features(int argc, char *argv[])
 
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failed id\n");
-		return -errno;
+		return -EOPNOTSUPP;
 	}
 
 	ret = ublksrv_ctrl_get_features(dev, &features);
@@ -1119,7 +1122,7 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failure dev %d\n", number);
-		return -errno;
+		return -EOPNOTSUPP;
 	}
 
 	ret = ublksrv_ctrl_get_info(dev);
