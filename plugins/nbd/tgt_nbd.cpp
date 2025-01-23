@@ -1009,9 +1009,7 @@ struct ublksrv_tgt_type  nbd_tgt_type = {
 	.deinit_queue = nbd_deinit_queue,
 };
 
-static void tgt_nbd_init() __attribute__((constructor));
-
-static void tgt_nbd_init(void)
+extern "C" void tgt_init(void)
 {
 	ublksrv_register_tgt_type(&nbd_tgt_type);
 }

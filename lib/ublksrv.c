@@ -1048,3 +1048,22 @@ int ublksrv_dev_get_cq_depth(struct ublksrv_dev *tdev)
 {
 	return tdev_to_local(tdev)->cq_depth;
 }
+
+struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
+
+int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
+{
+	if (type->type < UBLKSRV_TGT_TYPE_MAX && !tgt_list[type->type]) {
+		tgt_list[type->type] = type;
+		return 0;
+	}
+	return -1;
+}
+
+void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
+{
+	if (type->type < UBLKSRV_TGT_TYPE_MAX && tgt_list[type->type]) {
+		tgt_list[type->type] = NULL;
+	}
+}
+

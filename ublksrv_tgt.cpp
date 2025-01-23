@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
+#include <dirent.h>
+#include <dlfcn.h>
+#include <sys/types.h>
+
 #include "config.h"
 #include "ublksrv_tgt.h"
 
@@ -18,7 +22,6 @@ struct ublksrv_queue_info {
 
 /********************cmd handling************************/
 static char *full_cmd;
-static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
 
 int ublk_json_write_dev_info(struct ublksrv_dev *dev, char **jbuf, int *len)
 {
@@ -141,23 +144,6 @@ static void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
 		handle_tgt_type(i, type, data);
 	}
 }
-
-int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
-{
-	if (type->type < UBLKSRV_TGT_TYPE_MAX && !tgt_list[type->type]) {
-		tgt_list[type->type] = type;
-		return 0;
-	}
-	return -1;
-}
-
-void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
-{
-	if (type->type < UBLKSRV_TGT_TYPE_MAX && tgt_list[type->type]) {
-		tgt_list[type->type] = NULL;
-	}
-}
-
 
 static char *mprintf(const char *fmt, ...)
 {
@@ -1259,6 +1245,52 @@ static void cmd_usage(const char *cmd)
 	printf("%s -h [--help]\n", cmd);
 }
 
+static int load_modules(const char *path)
+{
+	DIR *dh;
+	struct dirent *de;
+
+	dh = opendir(path);
+	if (dh == NULL) {
+		printf("Can not open module dir %s\n", path);
+		return EXIT_FAILURE;
+	}
+	while((de = readdir(dh))) {
+		int len = strlen(de->d_name);
+		void *dl;
+		char *soname = NULL;
+		ublksrv_plugin_init_t init_func;
+
+		if (de->d_type != DT_REG)
+			continue;
+		if (len <= 3)
+			continue;
+		if (strcmp(&de->d_name[len - 3], ".so"))
+			continue;
+		asprintf(&soname, "%s/%s", path, de->d_name);
+		if (soname == NULL) {
+			fprintf(stderr, "Failed to allocate memory for so path\n");
+			return EXIT_FAILURE;
+		}
+		dl = dlopen(soname, RTLD_LAZY | RTLD_LOCAL);
+		if (dl == NULL) {
+			fprintf(stderr, "Failed to open %s %s\n", soname, strerror(errno));
+			free(soname);
+			continue;
+		}
+		init_func = (ublksrv_plugin_init_t) dlsym(dl, "tgt_init");
+		if (init_func == NULL) {
+			fprintf(stderr, "%s is not a ublksrv module. Skipping\n", soname);
+			free(soname);
+			continue;
+		}
+		free(soname);
+		init_func();
+	}
+	closedir(dh);
+	return EXIT_SUCCESS;
+}
+
 int main(int argc, char *argv[])
 {
 	const char *prog_name = "ublk";
@@ -1271,6 +1303,11 @@ int main(int argc, char *argv[])
 	strncpy(exe, full_cmd, PATH_MAX - 1);
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
+
+	ret = load_modules(UBLKSRV_PLUGIN_DIR);
+	if (ret) {
+		return ret;
+	}
 
 	cmd = pop_cmd(&argc, argv);
 	if (cmd == NULL) {

@@ -7,7 +7,7 @@ EXTRA_DIST = \
 	.gitignore \
 	LICENSE
 
-SUBDIRS = include lib tests
+SUBDIRS = include lib plugins tests
 
 AM_CXXFLAGS = -std=c++20
 
@@ -15,11 +15,13 @@ sbin_PROGRAMS = ublk ublk_user_id
 noinst_PROGRAMS = demo_null demo_event
 dist_sbin_SCRIPTS = utils/ublk_chown.sh utils/ublk_chown_docker.sh
 
-ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp \
-			   nbd/tgt_nbd.cpp nbd/cliserv.c nbd/nbd-client.c
+ublk_SOURCES = ublksrv_tgt.cpp 
+
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include
 ublk_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
+
+ublk_CPPFLAGS += -DUBLKSRV_PLUGIN_DIR='"@UBLKSRV_PLUGIN_DIR@"'
 
 demo_null_SOURCES = demo_null.c
 demo_null_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)

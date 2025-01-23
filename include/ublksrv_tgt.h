@@ -120,22 +120,6 @@ static inline void ublksrv_tgt_set_io_data_size(struct ublksrv_tgt_info *tgt)
 //static_assert(sizeof(struct ublk_io_tgt) == sizeof(struct ublk_io), "ublk_io is defined as wrong");
 
 enum {
-	/* evaluate communication cost, ublksrv_null vs /dev/nullb0 */
-	UBLKSRV_TGT_TYPE_NULL,
-
-	/* ublksrv_loop vs. /dev/loop */
-	UBLKSRV_TGT_TYPE_LOOP,
-
-	UBLKSRV_TGT_TYPE_QCOW2,
-
-	UBLKSRV_TGT_TYPE_NBD,
-
-	UBLKSRV_TGT_TYPE_MAX = 256,
-};
-extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
-extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);
-
-enum {
 	UBLK_UNIQUE_TAG_BITS = 16,
 	UBLK_UNIQUE_TAG_MASK = (1 << UBLK_UNIQUE_TAG_BITS) - 1,
 };
@@ -188,5 +172,7 @@ static inline void ublk_get_sqe_pair(struct io_uring *r,
 	if (sqe2)
 		*sqe2 = io_uring_get_sqe(r);
 }
+
+typedef void (*ublksrv_plugin_init_t)(void);
 
 #endif

@@ -914,6 +914,24 @@ extern int ublksrv_process_io(const struct ublksrv_queue *q);
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
 /** @} */ // end of ublksrv_queue group
 
+enum {
+	/* evaluate communication cost, ublksrv_null vs /dev/nullb0 */
+	UBLKSRV_TGT_TYPE_NULL,
+
+	/* ublksrv_loop vs. /dev/loop */
+	UBLKSRV_TGT_TYPE_LOOP,
+
+	UBLKSRV_TGT_TYPE_QCOW2,
+
+	UBLKSRV_TGT_TYPE_NBD,
+
+	UBLKSRV_TGT_TYPE_MAX = 256,
+};
+extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
+extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);
+extern struct ublksrv_tgt_type *tgt_list[];
+
+
 #ifdef __cplusplus
 }
 #endif

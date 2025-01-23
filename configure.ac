@@ -98,6 +98,16 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 [AC_MSG_RESULT([no])
  AM_CONDITIONAL([HAVE_LIBURING_SEND_ZC], false)])
 
+#
+# Specify runtime directory
+AC_ARG_WITH([plugin-dir],
+	AS_HELP_STRING([--with-plugin-dir=DIR],[Specify the plugin directory for ublksrv]))
+AS_IF([test -n "$with_plugin_dir"],
+	[UBLKSRV_PLUGIN_DIR="$with_plugin_dir"],
+	[UBLKSRV_PLUGIN_DIR="${libdir}/ublksrv/$VERSION"])
+AC_SUBST(UBLKSRV_PLUGIN_DIR, "$UBLKSRV_PLUGIN_DIR", [The ublksrv plugin directory])
+
+
 #gnutls is only for nbd target, borrowed from nbd-client project
 AC_ARG_WITH([gnutls],
 	[AS_HELP_STRING([--without-gnutls],
@@ -183,6 +193,8 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile
                  include/Makefile
                  lib/Makefile
+                 plugins/Makefile
+                 plugins/nbd/Makefile
                  tests/Makefile
                  ublksrv.pc])
 

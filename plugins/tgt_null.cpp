@@ -101,9 +101,7 @@ struct ublksrv_tgt_type  null_tgt_type = {
 	.recovery_tgt = null_recovery_tgt,
 };
 
-static void tgt_null_init() __attribute__((constructor));
-
-static void tgt_null_init(void)
+extern "C" void tgt_init(void)
 {
 	ublksrv_register_tgt_type(&null_tgt_type);
 }

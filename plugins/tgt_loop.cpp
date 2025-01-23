@@ -453,9 +453,7 @@ struct ublksrv_tgt_type  loop_tgt_type = {
 	.recovery_tgt = loop_recovery_tgt,
 };
 
-static void tgt_loop_init() __attribute__((constructor));
-
-static void tgt_loop_init(void)
+extern "C" void tgt_init(void)
 {
 	ublksrv_register_tgt_type(&loop_tgt_type);
 }
