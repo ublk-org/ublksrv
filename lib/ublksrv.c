@@ -858,6 +858,13 @@ static int ublksrv_reap_events_uring(struct io_uring *r)
 	return count;
 }
 
+int ublksrv_queue_reap_events(struct ublksrv_queue *tq)
+{
+	if (tq->ring_ptr)
+		return ublksrv_reap_events_uring(tq->ring_ptr);
+	return -1;
+}
+
 static void ublksrv_queue_discard_io_pages(struct _ublksrv_queue *q)
 {
 	const struct ublksrv_ctrl_dev *cdev = q->dev->ctrl_dev;

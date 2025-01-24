@@ -912,6 +912,14 @@ extern int ublksrv_process_io(const struct ublksrv_queue *q);
  * @param res io result
  */
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
+
+/**
+ * Reap events received from queue
+ *
+ * @param tq the pointer for ublksrv_queue
+ */
+extern int ublksrv_queue_reap_events(struct ublksrv_queue *tq);
+
 /** @} */ // end of ublksrv_queue group
 
 #ifdef __cplusplus
