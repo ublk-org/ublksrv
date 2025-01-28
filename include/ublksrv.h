@@ -918,7 +918,7 @@ extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int 
  *
  * @param tq the pointer for ublksrv_queue
  */
-extern int ublksrv_queue_reap_events(struct ublksrv_queue *tq);
+extern int ublksrv_queue_reap_events(const struct ublksrv_queue *tq);
 
 /** @} */ // end of ublksrv_queue group
 
