@@ -817,8 +817,9 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 			exp_name);
 	ublksrv_json_read_target_ulong_info(jbuf, "send_zc", &send_zc);
 
-	NBD_HS_DBG("%s: host %s unix %s exp_name %s send_zc\n", __func__,
+	NBD_HS_DBG("%s: host %s unix %s exp_name %s send_zc: %ld\n", __func__,
 			host_name, unix_path, exp_name, send_zc);
+
 	for (i = 0; i < info->nr_hw_queues; i++) {
 		int sock;
 		unsigned int opts = 0;
