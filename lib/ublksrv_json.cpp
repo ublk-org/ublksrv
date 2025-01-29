@@ -171,7 +171,7 @@ int ublksrv_json_read_target_str_info(const char *jbuf, int len,
 }
 
 int ublksrv_json_read_target_ulong_info(const char *jbuf,
-		const char *name, long *val)
+		const char *name, unsigned long *val)
 {
 	json j;
 	std::string s;
