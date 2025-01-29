@@ -41,7 +41,7 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int fd, ret;
-	long direct_io = 0;
+	unsigned long direct_io = 0;
 	struct ublk_params p;
 	char file[PATH_MAX];
 
