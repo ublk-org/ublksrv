@@ -996,7 +996,7 @@ static int list_one_dev(int number, bool log, bool verbose)
 	} else {
 		const char *buf = ublksrv_tgt_get_dev_data(dev);
 
-		if (verbose)
+		if (verbose && buf)
 			ublksrv_json_dump(buf);
 		else
 			ublksrv_ctrl_dump(dev, buf);
