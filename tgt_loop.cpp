@@ -6,8 +6,10 @@
 #include <sys/epoll.h>
 #include "ublksrv_tgt.h"
 
-static bool user_copy;
-static bool block_device;
+struct loop_tgt_data {
+	bool user_copy;
+	bool block_device;
+};
 
 static bool backing_supports_discard(char *name)
 {
@@ -44,6 +46,8 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	unsigned long direct_io = 0;
 	struct ublk_params p;
 	char file[PATH_MAX];
+	struct loop_tgt_data *tgt_data = (struct loop_tgt_data*)dev->tgt.tgt_data;
+	struct stat sb;
 
 	ublk_assert(jbuf);
 
@@ -76,6 +80,14 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 		return fd;
 	}
 
+	if (fstat(fd, &sb) < 0) {
+		ublk_err( "%s: unable to stat %s\n",
+				  __func__, file);
+		return -1;
+	}
+
+	tgt_data->block_device = S_ISBLK(sb.st_mode);
+
 	if (direct_io)
 		fcntl(fd, F_SETFL, O_DIRECT);
 
@@ -84,9 +96,10 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 1;
 	tgt->fds[1] = fd;
-	user_copy = info->flags & UBLK_F_USER_COPY;
-	if (user_copy)
+	tgt_data->user_copy = info->flags & UBLK_F_USER_COPY;
+	if (tgt_data->user_copy)
 		tgt->tgt_ring_depth *= 2;
+
 
 	return 0;
 }
@@ -97,6 +110,8 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
 
 	ublk_assert(type == UBLKSRV_TGT_TYPE_LOOP);
+
+	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
 	return loop_setup_tgt(dev, type, true, jbuf);
 }
@@ -174,12 +189,10 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 			return -1;
 		if (ioctl(fd, BLKPBSZGET, &pbs) != 0)
 			return -1;
-		block_device = true;
 		p.basic.logical_bs_shift = ilog2(bs);
 		p.basic.physical_bs_shift = ilog2(pbs);
 		can_discard = backing_supports_discard(file);
 	} else if (S_ISREG(st.st_mode)) {
-		block_device = false;
 		bytes = st.st_size;
 		can_discard = true;
 		p.basic.logical_bs_shift = ilog2(st.st_blksize);
@@ -216,6 +229,8 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 	close(fd);
 
+	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
+
 	return loop_setup_tgt(dev, type, false, jbuf);
 }
 
@@ -250,8 +265,9 @@ static void loop_queue_tgt_read(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag)
 {
 	unsigned ublk_op = ublksrv_get_op(iod);
+	const struct loop_tgt_data *tgt_data = (struct loop_tgt_data*) q->dev->tgt.tgt_data;
 
-	if (user_copy) {
+	if (tgt_data->user_copy) {
 		struct io_uring_sqe *sqe, *sqe2;
 		__u64 pos = ublk_pos(q->q_id, tag, 0);
 		void *buf = ublksrv_queue_get_io_buf(q, tag);
@@ -287,8 +303,9 @@ static void loop_queue_tgt_write(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag)
 {
 	unsigned ublk_op = ublksrv_get_op(iod);
+	const struct loop_tgt_data *tgt_data = (struct loop_tgt_data*) q->dev->tgt.tgt_data;
 
-	if (user_copy) {
+	if (tgt_data->user_copy) {
 		struct io_uring_sqe *sqe, *sqe2;
 		__u64 pos = ublk_pos(q->q_id, tag, 0);
 		void *buf = ublksrv_queue_get_io_buf(q, tag);
@@ -399,8 +416,9 @@ static int loop_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+	const struct loop_tgt_data *tgt_data = (struct loop_tgt_data*) q->dev->tgt.tgt_data;
 
-	if (block_device && ublksrv_get_op(data->iod) == UBLK_IO_OP_DISCARD) {
+	if (tgt_data->block_device && ublksrv_get_op(data->iod) == UBLK_IO_OP_DISCARD) {
 		__u64 r[2];
 		int res;
 
@@ -440,6 +458,7 @@ static void loop_deinit_tgt(const struct ublksrv_dev *dev)
 {
 	fsync(dev->tgt.fds[1]);
 	close(dev->tgt.fds[1]);
+	free(dev->tgt.tgt_data);
 }
 
 struct ublksrv_tgt_type  loop_tgt_type = {
