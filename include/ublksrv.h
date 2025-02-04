@@ -186,6 +186,9 @@ struct ublksrv_tgt_type {
 	 * has to be implemented. Otherwise, target can implement
 	 * ->handle_event() for processing io completion there.
 	 *
+	 * The return value is not checked. The user is responsible for handling
+	 * any failure.
+	 *
 	 *  Required.
 	 */
 	int (*handle_io_async)(const struct ublksrv_queue *,
