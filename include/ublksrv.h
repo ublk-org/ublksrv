@@ -556,6 +556,32 @@ extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev 
  */
 extern bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev);
 
+/**
+ *
+ * Store the device json in the pidfile
+ */
+extern int ublksrv_tgt_store_dev_data(const struct ublksrv_dev *dev,
+				      const char *buf);
+
+/**
+ *
+ * Read the device json from the pid file
+ */
+extern char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev);
+
+/**
+ *
+ * Read the pid of the io daemon
+ */
+extern int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
+				     bool check_data);
+
+/**
+ *
+ * Validate the pid-fiel json buffer
+ */
+extern int ublksrv_check_dev_data(const char *buf, int size);
+
 /** @} */ // end of ctrl_dev group
 
 

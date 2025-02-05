@@ -271,64 +271,6 @@ char *ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size)
 	return buf;
 }
 
-static int ublksrv_tgt_store_dev_data(const struct ublksrv_dev *dev,
-		const char *buf)
-{
-	int ret;
-	int len = ublksrv_json_get_length(buf);
-	int fd = ublksrv_get_pidfile_fd(dev);
-
-	if (fd < 0) {
-		ublk_err( "fail to get fd of pid file, ret %d\n",
-				fd);
-		return fd;
-	}
-
-	ret = pwrite(fd, buf, len, JSON_OFFSET);
-	if (ret <= 0)
-		ublk_err( "fail to write json data to pid file, ret %d\n",
-				ret);
-
-	return ret;
-}
-
-static char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev)
-{
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(cdev);
-	int dev_id = info->dev_id;
-	struct stat st;
-	char pid_file[256];
-	char *buf;
-	int size, fd, ret;
-	const char *run_dir = ublksrv_ctrl_get_run_dir(cdev);
-
-	if (!run_dir)
-		return 0;
-
-	snprintf(pid_file, 256, "%s/%d.pid", run_dir, dev_id);
-	fd = open(pid_file, O_RDONLY);
-
-	if (fd <= 0)
-		return NULL;
-
-	if (fstat(fd, &st) < 0)
-		return NULL;
-
-	if (st.st_size <=  JSON_OFFSET)
-		return NULL;
-
-	size = st.st_size - JSON_OFFSET;
-	buf = (char *)malloc(size);
-	ret = pread(fd, buf, size, JSON_OFFSET);
-	if (ret <= 0)
-		fprintf(stderr, "fail to read json from %s ret %d\n",
-				pid_file, ret);
-	close(fd);
-
-	return buf;
-}
-
 static void *ublksrv_io_handler_fn(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
@@ -480,71 +422,6 @@ static int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev)
 {
 	start_daemon(ublksrv_io_handler, (void *)dev);
 	return 0;
-}
-
-static int ublksrv_check_dev_data(const char *buf, int size)
-{
-	struct ublk_params p;
-
-	if (size < JSON_OFFSET)
-		return -EINVAL;
-
-	return ublksrv_json_read_params(&p, &buf[JSON_OFFSET]);
-}
-
-static int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
-		bool check_data)
-{
-	const char *run_dir = ublksrv_ctrl_get_run_dir(ctrl_dev);
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ctrl_dev);
-	int ret = -1, pid_fd;
-	char path[256];
-	char *buf = NULL;
-	int size = JSON_OFFSET;
-	int daemon_pid;
-	struct stat st;
-
-	if (!run_dir)
-		return -EINVAL;
-
-	snprintf(path, 256, "%s/%d.pid", run_dir, info->dev_id);
-
-	pid_fd = open(path, O_RDONLY);
-	if (pid_fd < 0)
-		goto out;
-
-	if (fstat(pid_fd, &st) < 0)
-		goto out;
-
-	if (check_data)
-		size = st.st_size;
-	else
-		size = JSON_OFFSET;
-
-	buf = (char *)malloc(size);
-	if (read(pid_fd, buf, size) <= 0)
-		goto out;
-
-	daemon_pid = strtol(buf, NULL, 10);
-	if (daemon_pid < 0)
-		goto out;
-
-	ret = kill(daemon_pid, 0);
-	if (ret)
-		goto out;
-
-	if (check_data) {
-		ret = ublksrv_check_dev_data(buf, size);
-		if (ret)
-			goto out;
-	}
-	ret = daemon_pid;
-out:
-	if (pid_fd > 0)
-		close(pid_fd);
-	free(buf);
-	return ret;
 }
 
 /* Not called from ublksrv daemon */
