@@ -586,7 +586,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	data.queue_depth = DEF_QD;
 	data.nr_hw_queues = DEF_NR_HW_QUEUES;
 	data.dev_id = -1;
-	data.run_dir = UBLKSRV_PID_DIR;
+	data.run_dir = ublksrv_get_pid_dir();
 
 	mkpath(data.run_dir);
 
@@ -767,7 +767,7 @@ static int __cmd_dev_del(int number, bool log, bool async)
 	int ret;
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
-		.run_dir = UBLKSRV_PID_DIR,
+		.run_dir = ublksrv_get_pid_dir(),
 	};
 
 	dev = ublksrv_ctrl_init(&data);
@@ -857,7 +857,7 @@ static int list_one_dev(int number, bool log, bool verbose)
 {
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
-		.run_dir = UBLKSRV_PID_DIR,
+		.run_dir = ublksrv_get_pid_dir(),
 	};
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
 	int ret;
@@ -931,7 +931,7 @@ static int cmd_dev_get_features(int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {
 		.dev_id = -1,
-		.run_dir = UBLKSRV_PID_DIR,
+		.run_dir = ublksrv_get_pid_dir(),
 	};
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
 	__u64 features = 0;
@@ -986,7 +986,7 @@ static int __cmd_dev_user_recover(int number, bool verbose)
 	const struct ublksrv_tgt_type *tgt_type;
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
-		.run_dir = UBLKSRV_PID_DIR,
+		.run_dir = ublksrv_get_pid_dir(),
 	};
 	struct ublksrv_ctrl_dev_info  dev_info;
 	struct ublksrv_ctrl_dev *dev;

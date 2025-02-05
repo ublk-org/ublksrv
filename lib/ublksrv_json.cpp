@@ -9,6 +9,8 @@
 /* json device data is stored at this offset of pid file */
 #define JSON_OFFSET   32
 
+#define UBLKSRV_PID_DIR  "/tmp/ublksrvd"
+
 #define  parse_json(j, jbuf)	\
 	try {						\
 		j = json::parse(std::string(jbuf));	\
@@ -470,4 +472,9 @@ out:
 		close(pid_fd);
 	free(buf);
 	return ret;
+}
+
+const char *ublksrv_get_pid_dir(void)
+{
+	return UBLKSRV_PID_DIR;
 }

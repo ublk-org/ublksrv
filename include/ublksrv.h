@@ -582,6 +582,12 @@ extern int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
  */
 extern int ublksrv_check_dev_data(const char *buf, int size);
 
+/**
+ *
+ * Get the pid dir
+ */
+extern const char *ublksrv_get_pid_dir(void);
+
 /** @} */ // end of ctrl_dev group
 
 
