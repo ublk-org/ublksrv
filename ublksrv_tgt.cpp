@@ -17,7 +17,6 @@ struct ublksrv_queue_info {
 
 
 /********************cmd handling************************/
-static char *full_cmd;
 static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
 
 int ublk_json_write_dev_info(struct ublksrv_dev *dev, char **jbuf, int *len)
@@ -159,23 +158,6 @@ void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
 }
 
 
-static char *mprintf(const char *fmt, ...)
-{
-	va_list args;
-	char *str;
-	int ret;
-
-	va_start(args, fmt);
-	ret = vasprintf(&str, fmt, args);
-	va_end(args);
-
-	if (ret < 0) {
-		return NULL;
-	}
-
-	return str;
-}
-
 static char *pop_cmd(int *argc, char *argv[])
 {
 	char *cmd = argv[1];
@@ -186,7 +168,6 @@ static char *pop_cmd(int *argc, char *argv[])
 	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
 	(*argc)--;
 
-	full_cmd = mprintf("%s %s", full_cmd, cmd);
 	return cmd;
 }
 
@@ -1144,8 +1125,7 @@ int main(int argc, char *argv[])
 	int ret;
 	char exe[PATH_MAX];
 
-	full_cmd = argv[0];
-	strncpy(exe, full_cmd, PATH_MAX - 1);
+	strncpy(exe, argv[0], PATH_MAX - 1);
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
