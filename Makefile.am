@@ -15,7 +15,7 @@ sbin_PROGRAMS = ublk ublk_user_id
 noinst_PROGRAMS = demo_null demo_event
 dist_sbin_SCRIPTS = utils/ublk_chown.sh utils/ublk_chown_docker.sh
 
-ublk_SOURCES = ublksrv_tgt.cpp tgt_null.cpp tgt_loop.cpp \
+ublk_SOURCES = ublk.cpp ublksrv_tgt.cpp tgt_loop.cpp \
 			   nbd/tgt_nbd.cpp nbd/cliserv.c nbd/nbd-client.c
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include

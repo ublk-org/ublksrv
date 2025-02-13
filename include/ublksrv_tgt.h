@@ -185,4 +185,15 @@ static inline void ublk_get_sqe_pair(struct io_uring *r,
 		*sqe2 = io_uring_get_sqe(r);
 }
 
+int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev);
+int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev);
+void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
+			    const char *jbuf);
+
+struct ublksrv_queue_info {
+	const struct ublksrv_dev *dev;
+	int qid;
+	pthread_t thread;
+};
+
 #endif
