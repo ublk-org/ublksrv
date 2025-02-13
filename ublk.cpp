@@ -98,6 +98,23 @@ static int mkpath(const char *dir)
 }
 #pragma GCC diagnostic pop
 
+static int ublksrv_execve_helper(const char *type, int argc, char *argv[])
+{
+	char *cmd, **nargv;
+	char *nenv[] = { NULL };
+	int i;
+
+	asprintf(&cmd, "ublk.%s", type);
+	nargv = (char **)calloc(argc + 1, sizeof(char *));
+	if (!nargv)
+		return -ENOMEM;
+	nargv[0] = cmd;
+	for (i = 1; i < argc; i++)
+		nargv[i] = argv[i];
+
+	return execve(nargv[0], nargv, nenv);
+}
+
 static int cmd_dev_add(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
@@ -207,8 +224,11 @@ static int cmd_dev_add(int argc, char *argv[])
 	}
 	tgt_type = ublksrv_find_tgt_type(data.tgt_type);
 	if (tgt_type == NULL) {
-		fprintf(stderr, "unknown dev type: %s\n", data.tgt_type);
-		return -EINVAL;
+		ret = ublksrv_execve_helper(data.tgt_type, argc, argv);
+		if (ret) {
+			fprintf(stderr, "failed to spawn target\n");
+			return ret;
+		}
 	}
 	data.tgt_ops = tgt_type;
 	data.flags |= tgt_type->ublk_flags;
