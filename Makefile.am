@@ -11,11 +11,11 @@ SUBDIRS = include lib tests
 
 AM_CXXFLAGS = -std=c++20
 
-sbin_PROGRAMS = ublk ublk.null ublk_user_id
+sbin_PROGRAMS = ublk ublk.null ublk.loop ublk_user_id
 noinst_PROGRAMS = demo_null demo_event
 dist_sbin_SCRIPTS = utils/ublk_chown.sh utils/ublk_chown_docker.sh
 
-ublk_SOURCES = ublk.cpp ublksrv_tgt.cpp tgt_loop.cpp \
+ublk_SOURCES = ublk.cpp ublksrv_tgt.cpp \
 			   nbd/tgt_nbd.cpp nbd/cliserv.c nbd/nbd-client.c
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include
@@ -25,6 +25,11 @@ ublk_null_SOURCES = ublk.null.cpp ublksrv_tgt.cpp
 ublk_null_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_null_CPPFLAGS = $(ublk_null_CFLAGS) -I$(top_srcdir)/include
 ublk_null_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
+
+ublk_loop_SOURCES = ublk.loop.cpp ublksrv_tgt.cpp
+ublk_loop_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
+ublk_loop_CPPFLAGS = $(ublk_loop_CFLAGS) -I$(top_srcdir)/include
+ublk_loop_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
 demo_null_SOURCES = demo_null.c
 demo_null_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
