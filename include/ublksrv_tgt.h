@@ -197,5 +197,6 @@ struct ublksrv_queue_info {
 };
 
 int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int argc, char *argv[]);
+void ublksrv_print_std_opts(void);
 
 #endif

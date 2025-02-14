@@ -566,3 +566,10 @@ int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int argc, char *argv[]
 	return 0;
 }
 
+void ublksrv_print_std_opts(void)
+{
+	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
+	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
+	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
+	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n\n");
+}
