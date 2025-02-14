@@ -197,10 +197,7 @@ static void cmd_dev_add_usage(const char *cmd)
 	data.pos += snprintf(data.names + data.pos, sizeof(data.names) - data.pos, "}");
 
 	printf("%s add -t %s\n", cmd, data.names);
-	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
-	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
-	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
-	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n\n");
+	ublksrv_print_std_opts();
 	printf("\ttarget specific command line:\n");
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
 }
