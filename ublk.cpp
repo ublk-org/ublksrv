@@ -55,32 +55,20 @@ void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
 }
 
 
-static char *pop_cmd(int *argc, char *argv[])
-{
-	char *cmd = argv[1];
-	if (*argc < 2) {
-		return NULL;
-	}
-
-	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
-	(*argc)--;
-
-	return cmd;
-}
-
-static int ublksrv_execve_helper(const char *type, int argc, char *argv[])
+static int ublksrv_execve_helper(const char *op, const char *type, int argc, char *argv[])
 {
 	char *cmd, **nargv;
 	char *nenv[] = { NULL };
 	int i;
 
 	asprintf(&cmd, "ublk.%s", type);
-	nargv = (char **)calloc(argc + 1, sizeof(char *));
+	nargv = (char **)calloc(argc + 2, sizeof(char *));
 	if (!nargv)
 		return -ENOMEM;
 	nargv[0] = cmd;
+	nargv[1] = (char *)op;
 	for (i = 1; i < argc; i++)
-		nargv[i] = argv[i];
+		nargv[i + 1] = argv[i];
 
 	return execve(nargv[0], nargv, nenv);
 }
@@ -101,7 +89,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	}
 	tgt_type = ublksrv_find_tgt_type(data.tgt_type);
 	if (tgt_type == NULL) {
-		ret = ublksrv_execve_helper(data.tgt_type, argc, argv);
+		ret = ublksrv_execve_helper("add", data.tgt_type, argc, argv);
 		if (ret) {
 			fprintf(stderr, "failed to spawn target\n");
 			return ret;
@@ -188,15 +176,7 @@ static void show_tgt_add_usage(unsigned int idx,
 
 static void cmd_dev_add_usage(const char *cmd)
 {
-	struct tgt_types_name data = {
-		.pos = 0,
-	};
-
-	data.pos += snprintf(data.names + data.pos, sizeof(data.names) - data.pos, "{");
-	ublksrv_for_each_tgt_type(collect_tgt_types, &data);
-	data.pos += snprintf(data.names + data.pos, sizeof(data.names) - data.pos, "}");
-
-	printf("%s add -t %s\n", cmd, data.names);
+	printf("%s add -t <type>\n", cmd);
 	ublksrv_print_std_opts();
 	printf("\ttarget specific command line:\n");
 	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
@@ -580,7 +560,6 @@ static void cmd_usage(const char *cmd)
 int main(int argc, char *argv[])
 {
 	const char *prog_name = "ublk";
-
 	char *cmd;
 	int ret;
 	char exe[PATH_MAX];
@@ -589,7 +568,7 @@ int main(int argc, char *argv[])
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
-	cmd = pop_cmd(&argc, argv);
+	cmd = ublksrv_pop_cmd(&argc, argv);
 	if (cmd == NULL) {
 		printf("%s: missing command\n", argv[0]);
 		cmd_usage(prog_name);

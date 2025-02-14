@@ -1005,7 +1005,7 @@ struct ublksrv_tgt_type  nbd_tgt_type = {
 
 static void cmd_usage(const char *name)
 {
-	printf("ublk.%s -t %s\n", name, name);
+	printf("ublk.%s add -t %s\n", name, name);
 	ublksrv_print_std_opts();
 	printf("\t--host=$HOST [--port=$PORT] | --unix=$UNIX_PATH\n");
 }
@@ -1013,13 +1013,25 @@ static void cmd_usage(const char *name)
 int main(int argc, char *argv[])
 {
 	struct ublksrv_tgt_type *tgt_type = &nbd_tgt_type;
-	const char *cmd = "add";
+	const char *cmd;
 	int ret;
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
-	ret = ublksrv_cmd_dev_add(tgt_type, argc, argv);
-	if (ret) {
+	cmd = ublksrv_pop_cmd(&argc, argv);
+	if (cmd == NULL) {
+		printf("%s: missing command\n", argv[0]);
+		cmd_usage(tgt_type->name);
+		return EXIT_FAILURE;
+	}
+
+	if (!strcmp(cmd, "add"))
+		ret = ublksrv_cmd_dev_add(tgt_type, argc, argv);
+	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
+		cmd_usage(tgt_type->name);
+		ret = EXIT_SUCCESS;
+	} else {
+		fprintf(stderr, "unknown command: %s\n", cmd);
 		cmd_usage(tgt_type->name);
 		ret = EXIT_FAILURE;
 	}

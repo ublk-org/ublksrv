@@ -643,3 +643,16 @@ int ublksrv_cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[
 
 	return ret;
 }
+
+char *ublksrv_pop_cmd(int *argc, char *argv[])
+{
+	char *cmd = argv[1];
+	if (*argc < 2) {
+		return NULL;
+	}
+
+	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
+	(*argc)--;
+
+	return cmd;
+}
