@@ -429,3 +429,140 @@ int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 
 	return daemon_pid;
 }
+
+//todo: resolve stack usage warning for mkpath/__mkpath
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+static int __mkpath(char *dir, mode_t mode)
+{
+	struct stat sb;
+	int ret;
+	mode_t mask;
+
+	if (!dir)
+		return -EINVAL;
+
+	if (!stat(dir, &sb))
+		return 0;
+
+	__mkpath(dirname(strdupa(dir)), mode);
+
+	mask = umask(0);
+	ret = mkdir(dir, mode);
+	umask(mask);
+
+	return ret;
+}
+
+static int mkpath(const char *dir)
+{
+	return __mkpath(strdupa(dir), S_IRWXU | S_IRWXG | S_IRWXO);
+}
+#pragma GCC diagnostic pop
+
+/*
+ * This function parses all the standard options that all targets support
+ * and populates ublksrv_dev_data.
+ */
+int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int argc, char *argv[])
+{
+	int opt;
+	int uring_comp = 0;
+	int need_get_data = 0;
+	int user_recovery = 0;
+	int user_recovery_fail_io = 0;
+	int user_recovery_reissue = 0;
+	int unprivileged = 0;
+	int option_index = 0;
+	unsigned int debug_mask = 0;
+	static const struct option longopts[] = {
+		{ "type",		1,	NULL, 't' },
+		{ "number",		1,	NULL, 'n' },
+		{ "queues",		1,	NULL, 'q' },
+		{ "depth",		1,	NULL, 'd' },
+		{ "zero_copy",		1,	NULL, 'z' },
+		{ "uring_comp",		1,	NULL, 'u' },
+		{ "need_get_data",	1,	NULL, 'g' },
+		{ "user_recovery",	1,	NULL, 'r'},
+		{ "user_recovery_fail_io",	1,	NULL, 'e'},
+		{ "user_recovery_reissue",	1,	NULL, 'i'},
+		{ "debug_mask",	1,	NULL, 0},
+		{ "unprivileged",	0,	NULL, 0},
+		{ "usercopy",	0,	NULL, 0},
+		{ NULL }
+	};
+
+	data->queue_depth = DEF_QD;
+	data->nr_hw_queues = DEF_NR_HW_QUEUES;
+	data->dev_id = -1;
+	data->run_dir = ublksrv_get_pid_dir();
+
+	mkpath(data->run_dir);
+
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
+				  longopts, &option_index)) != -1) {
+		switch (opt) {
+		case 'n':
+			data->dev_id = strtol(optarg, NULL, 10);
+			break;
+		case 't':
+			data->tgt_type = optarg;
+			break;
+		case 'z':
+			data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
+			break;
+		case 'q':
+			data->nr_hw_queues = strtol(optarg, NULL, 10);
+			break;
+		case 'd':
+			data->queue_depth = strtol(optarg, NULL, 10);
+			break;
+		case 'u':
+			uring_comp = strtol(optarg, NULL, 10);
+			break;
+		case 'g':
+			need_get_data = strtol(optarg, NULL, 10);
+			break;
+		case 'r':
+			user_recovery = strtol(optarg, NULL, 10);
+			break;
+		case 'e':
+			user_recovery_fail_io = strtol(optarg, NULL, 10);
+			break;
+		case 'i':
+			user_recovery_reissue = strtol(optarg, NULL, 10);
+			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "debug_mask"))
+				debug_mask = strtol(optarg, NULL, 16);
+			if (!strcmp(longopts[option_index].name, "unprivileged"))
+				unprivileged = 1;
+			if (!strcmp(longopts[option_index].name, "usercopy"))
+				data->flags |= UBLK_F_USER_COPY;
+			break;
+		}
+	}
+
+	data->max_io_buf_bytes = DEF_BUF_SIZE;
+	if (data->nr_hw_queues > MAX_NR_HW_QUEUES)
+		data->nr_hw_queues = MAX_NR_HW_QUEUES;
+	if (data->queue_depth > MAX_QD)
+		data->queue_depth = MAX_QD;
+	if (uring_comp)
+		data->flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
+	if (need_get_data)
+		data->flags |= UBLK_F_NEED_GET_DATA;
+	if (user_recovery)
+		data->flags |= UBLK_F_USER_RECOVERY;
+	if (user_recovery_fail_io)
+		data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_FAIL_IO;
+	if (user_recovery_reissue)
+		data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
+	if (unprivileged)
+		data->flags |= UBLK_F_UNPRIVILEGED_DEV;
+
+	ublk_set_debug_mask(debug_mask);
+
+	return 0;
+}
+
