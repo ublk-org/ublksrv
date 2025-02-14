@@ -1010,76 +1010,6 @@ static void cmd_usage(const char *name)
 	printf("\t--host=$HOST [--port=$PORT] | --unix=$UNIX_PATH\n");
 }
 
-static int cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
-{
-	struct ublksrv_dev_data data = {0};
-	struct ublksrv_ctrl_dev *dev;
-	int ret;
-	const char *dump_buf;
-
-	ublksrv_parse_std_opts(&data, argc, argv);
-
-	if (data.tgt_type && strcmp(data.tgt_type, tgt_type->name)) {
-		fprintf(stderr, "Wrong tgt_type specified\n");
-		return -EINVAL;
-	}
-
-	data.tgt_type = tgt_type->name;
-	data.tgt_ops = tgt_type;
-	data.flags |= tgt_type->ublk_flags;
-	data.ublksrv_flags |= tgt_type->ublksrv_flags;
-
-	//optind = 0;	/* so that tgt code can parse their arguments */
-	data.tgt_argc = argc;
-	data.tgt_argv = argv;
-	dev = ublksrv_ctrl_init(&data);
-	if (!dev) {
-		fprintf(stderr, "can't init dev %d\n", data.dev_id);
-		return -EOPNOTSUPP;
-	}
-
-	ret = ublksrv_ctrl_add_dev(dev);
-	if (ret < 0) {
-		fprintf(stderr, "can't add dev %d, ret %d\n", data.dev_id, ret);
-		goto fail;
-	}
-
-	{
-		const struct ublksrv_ctrl_dev_info *info =
-			ublksrv_ctrl_get_dev_info(dev);
-		data.dev_id = info->dev_id;
-	}
-	ret = ublksrv_start_daemon(dev);
-	if (ret <= 0) {
-		fprintf(stderr, "start dev %d daemon failed, ret %d\n",
-				data.dev_id, ret);
-		goto fail_del_dev;
-	}
-
-	dump_buf = ublksrv_tgt_get_dev_data(dev);
-	ublksrv_tgt_set_params(dev, dump_buf);
-
-	ret = ublksrv_ctrl_start_dev(dev, ret);
-	if (ret < 0) {
-		fprintf(stderr, "start dev %d failed, ret %d\n", data.dev_id,
-				ret);
-		goto fail_stop_daemon;
-	}
-	ret = ublksrv_ctrl_get_info(dev);
-	ublksrv_ctrl_dump(dev, dump_buf);
-	ublksrv_ctrl_deinit(dev);
-	return 0;
-
- fail_stop_daemon:
-	ublksrv_stop_io_daemon(dev);
- fail_del_dev:
-	ublksrv_ctrl_del_dev(dev);
- fail:
-	ublksrv_ctrl_deinit(dev);
-
-	return ret;
-}
-
 int main(int argc, char *argv[])
 {
 	struct ublksrv_tgt_type *tgt_type = &nbd_tgt_type;
@@ -1088,7 +1018,7 @@ int main(int argc, char *argv[])
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
-	ret = cmd_dev_add(tgt_type, argc, argv);
+	ret = ublksrv_cmd_dev_add(tgt_type, argc, argv);
 	if (ret) {
 		cmd_usage(tgt_type->name);
 		ret = EXIT_FAILURE;
