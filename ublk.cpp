@@ -5,11 +5,24 @@
 
 static int ublksrv_execve_helper(const char *op, const char *type, int argc, char *argv[])
 {
-	char *cmd, **nargv;
-	char *nenv[] = { NULL };
+	char *cmd, *fp, *ldlp, **nargv;
+	char *nenv[] = { NULL, NULL };
+	char full_path[256];
+	ssize_t fp_len;
 	int i;
 
 	asprintf(&cmd, "ublk.%s", type);
+
+	/*
+	 * Create full path to the ublk.<type> binary. It must be in the
+	 * same directory as the main ublk binary itself.
+	 */
+	memset(full_path, 0, sizeof(full_path));
+	fp_len = readlink("/proc/self/exe", full_path, sizeof(full_path));
+	if (fp_len < 0 || fp_len >= sizeof(full_path))
+		return -EINVAL;
+	asprintf(&fp, "%s.%s", full_path, type);
+
 	nargv = (char **)calloc(argc + 2, sizeof(char *));
 	if (!nargv)
 		return -ENOMEM;
@@ -18,7 +31,19 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 	for (i = 1; i < argc; i++)
 		nargv[i + 1] = argv[i];
 
-	return execve(nargv[0], nargv, nenv);
+	/*
+	 * We need to copy LD_LIBRARY_PATH if we run ublk from the build directory
+	 * as the binary .libs/ublk.<type> might otherwise not find the locally
+	 * built library.
+	 * In this case libtool will set the LD_LIBRARY_PATH env for us before it
+	 * runs the main .libs/ublk binary.
+	 */
+	if (getenv("LD_LIBRARY_PATH")) {
+		asprintf(&ldlp, "LD_LIBRARY_PATH=%s", getenv("LD_LIBRARY_PATH"));
+		nenv[0] = ldlp;
+	}
+
+	return execve(fp, nargv, nenv);
 }
 
 static void cmd_dev_add_usage(const char *cmd)
