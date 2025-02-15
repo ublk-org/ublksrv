@@ -240,7 +240,7 @@ __create_ublk_dev()
 	[ ${id} == "-" ] && echo "no free ublk device nodes" && exit -1
 	eval $UBLK add ${T_TYPE_PARAMS} -n $id > /dev/null 2>&1
 	udevadm settle
-	if [ -b /dev/ublkb0 ]; then
+	if [ -b /dev/ublkb${id} ]; then
 		echo "/dev/ublkb${id}"
 	else
 		echo "/dev/ublkb-unknown"
