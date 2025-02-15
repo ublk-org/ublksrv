@@ -23,21 +23,6 @@ static const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name)
 	return NULL;
 }
 
-static void ublksrv_for_each_tgt_type(void (*handle_tgt_type)(unsigned idx,
-			const struct ublksrv_tgt_type *type, void *data),
-		void *data)
-{
-	int i;
-
-	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
-                const struct ublksrv_tgt_type  *type = tgt_list[i];
-
-		if (!type)
-			continue;
-		handle_tgt_type(i, type, data);
-	}
-}
-
 int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
 {
 	if (type->type < UBLKSRV_TGT_TYPE_MAX && !tgt_list[type->type]) {
@@ -155,31 +140,12 @@ struct tgt_types_name {
 	char names[4096 - sizeof(unsigned)];
 };
 
-static void collect_tgt_types(unsigned int idx,
-		const struct ublksrv_tgt_type *type, void *pdata)
-{
-	struct tgt_types_name *data = (struct tgt_types_name *)pdata;
-
-	if (idx > 0)
-		data->pos += snprintf(data->names + data->pos,
-                  sizeof(data->names) - data->pos, "|");
-	data->pos += snprintf(data->names + data->pos,
-                sizeof(data->names) - data->pos, "%s", type->name);
-}
-
-static void show_tgt_add_usage(unsigned int idx,
-		const struct ublksrv_tgt_type *type, void *data)
-{
-	if (type->usage_for_add)
-		type->usage_for_add();
-}
-
 static void cmd_dev_add_usage(const char *cmd)
 {
 	printf("%s add -t <type>\n", cmd);
 	ublksrv_print_std_opts();
-	printf("\ttarget specific command line:\n");
-	ublksrv_for_each_tgt_type(show_tgt_add_usage, NULL);
+	printf("\tFor type specific options, run:\n");
+	printf("\t\tublk help -t <type>\n");
 }
 
 static int __cmd_dev_del(int number, bool log, bool async)
@@ -553,8 +519,25 @@ static void cmd_usage(const char *cmd)
 	cmd_dev_recover_usage(cmd);
 	cmd_dev_get_features_help(cmd);
 
+	printf("%s help -t <target>\n", cmd);
 	printf("%s -v [--version]\n", cmd);
 	printf("%s -h [--help]\n", cmd);
+}
+
+static int cmd_dev_help(int argc, char *argv[])
+{
+	struct ublksrv_dev_data data = {0};
+
+	ublksrv_parse_std_opts(&data, argc, argv);
+  
+	if (data.tgt_type == NULL) {
+		cmd_usage("ublk");
+		return EXIT_SUCCESS;
+	}
+
+	ublksrv_execve_helper("help", data.tgt_type, argc, argv);
+	fprintf(stderr, "failed to spawn target\n");
+	return EXIT_FAILURE;
 }
 
 int main(int argc, char *argv[])
@@ -579,6 +562,8 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_add(argc, argv);
 	else if (!strcmp(cmd, "del"))
 		ret = cmd_dev_del(argc, argv);
+	else if (!strcmp(cmd, "help"))
+		ret = cmd_dev_help(argc, argv);
 	else if (!strcmp(cmd, "list"))
 		ret = cmd_list_dev_info(argc, argv);
 	else if (!strcmp(cmd, "recover"))
