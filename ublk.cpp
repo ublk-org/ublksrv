@@ -43,7 +43,9 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 		nenv[0] = ldlp;
 	}
 
-	return execve(fp, nargv, nenv);
+	execve(fp, nargv, nenv);
+	printf("Failed to execve() %s. %s\n", fp, strerror(errno));
+	return errno;
 }
 
 static void cmd_dev_add_usage(const char *cmd)
@@ -316,9 +318,7 @@ static int cmd_dev_help(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	ublksrv_execve_helper("help", data.tgt_type, argc, argv);
-	fprintf(stderr, "failed to spawn target\n");
-	return EXIT_FAILURE;
+	return ublksrv_execve_helper("help", data.tgt_type, argc, argv);
 }
 
 static int cmd_dev_recover(int argc, char *argv[])
@@ -354,9 +354,7 @@ static int cmd_dev_recover(int argc, char *argv[])
 
 	free(buf);
 
-	ublksrv_execve_helper("recover", tgt_type, argc, argv);
-	fprintf(stderr, "failed to spawn target\n");
-	return EXIT_FAILURE;
+	return ublksrv_execve_helper("recover", tgt_type, argc, argv);
 }
 
 int main(int argc, char *argv[])
