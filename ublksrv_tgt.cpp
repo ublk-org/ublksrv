@@ -656,3 +656,134 @@ char *ublksrv_pop_cmd(int *argc, char *argv[])
 
 	return cmd;
 }
+
+static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int number, bool verbose)
+{
+	struct ublksrv_dev_data data = {
+		.dev_id = number,
+		.run_dir = ublksrv_get_pid_dir(),
+	};
+	struct ublksrv_ctrl_dev_info  dev_info;
+	struct ublksrv_ctrl_dev *dev;
+	struct ublksrv_tgt_base_json tgt_json = {0};
+	char *buf = NULL;
+	char pid_file[64];
+	int ret;
+	unsigned elapsed = 0;
+
+	dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "ublksrv_ctrl_init failure dev %d\n", number);
+		return -EOPNOTSUPP;
+	}
+
+	ret = ublksrv_ctrl_get_info(dev);
+	if (ret < 0) {
+		fprintf(stderr, "can't get dev info from %d\n", number);
+		goto fail;
+	}
+
+	while (elapsed < 30000000) {
+		unsigned unit = 100000;
+		ret = ublksrv_ctrl_start_recovery(dev);
+		if (ret < 0 && ret != -EBUSY) {
+			fprintf(stderr, "can't start recovery for %d ret %d\n",
+					number, ret);
+			goto fail;
+		}
+		if (ret >= 0)
+			break;
+		usleep(unit);
+		elapsed += unit;
+	}
+
+	buf = ublksrv_tgt_get_dev_data(dev);
+	if (!buf) {
+		fprintf(stderr, "get dev %d data failed\n", number);
+		ret = -1;
+		goto fail;
+	}
+
+	ret = ublksrv_json_read_dev_info(buf, &dev_info);
+	if (ret < 0) {
+		fprintf(stderr, "can't read dev info for %d\n", number);
+		goto fail;
+	}
+
+	if (dev_info.dev_id != number) {
+		fprintf(stderr, "dev id doesn't match read %d for dev %d\n",
+				dev_info.dev_id, number);
+		goto fail;
+	}
+
+	ret = ublksrv_json_read_target_base_info(buf, &tgt_json);
+	if (ret < 0) {
+		fprintf(stderr, "can't read dev info for %d\n", number);
+		goto fail;
+	}
+
+	snprintf(pid_file, 64, "%s/%d.pid", data.run_dir, number);
+	ret = unlink(pid_file);
+	if (ret < 0) {
+		fprintf(stderr, "can't delete old pid_file for %d, error:%s\n",
+				number, strerror(errno));
+		goto fail;
+	}
+
+	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, tgt_type, buf);
+
+	ret = ublksrv_start_daemon(dev);
+	if (ret < 0) {
+		fprintf(stderr, "start daemon %d failed\n", number);
+		goto fail;
+	}
+
+	ret = ublksrv_ctrl_end_recovery(dev, ret);
+	if (ret < 0) {
+		fprintf(stderr, "end recovery for %d failed\n", number);
+		goto fail;
+	}
+
+	ret = ublksrv_ctrl_get_info(dev);
+	if (ret < 0) {
+		fprintf(stderr, "can't get dev info from %d\n", number);
+		goto fail;
+	}
+
+	if (verbose) {
+		free(buf);
+		buf = ublksrv_tgt_get_dev_data(dev);
+		ublksrv_ctrl_dump(dev, buf);
+	}
+
+ fail:
+	free(buf);
+	ublksrv_ctrl_deinit(dev);
+	return ret;
+}
+
+int ublksrv_cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
+{
+	static const struct option longopts[] = {
+		{ "number",		0,	NULL, 'n' },
+		{ "verbose",	0,	NULL, 'v' },
+		{ NULL }
+	};
+	int number = -1;
+	int opt;
+	bool verbose = false;
+
+	while ((opt = getopt_long(argc, argv, "n:v",
+				  longopts, NULL)) != -1) {
+		switch (opt) {
+		case 'n':
+			number = strtol(optarg, NULL, 10);
+			break;
+		case 'v':
+			verbose = true;
+			break;
+		}
+	}
+
+	return __cmd_dev_user_recover(tgt_type, number, verbose);
+}
