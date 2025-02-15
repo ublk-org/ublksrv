@@ -276,7 +276,7 @@ static void cmd_dev_get_features_help(const char *cmd)
 
 static void cmd_dev_recover_usage(const char *cmd)
 {
-	printf("%s recover -t TYPE [-n DEV_ID]\n", cmd);
+	printf("%s recover [-n DEV_ID]\n", cmd);
 }
 
 static void cmd_usage(const char *cmd)
@@ -324,15 +324,37 @@ static int cmd_dev_help(int argc, char *argv[])
 static int cmd_dev_recover(int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
+	struct ublksrv_ctrl_dev *dev;
+	char tgt_type[32] = {0};
+	char *buf = NULL;
+	int ret;
 
 	ublksrv_parse_std_opts(&data, argc, argv);
   
-	if (data.tgt_type == NULL) {
-		cmd_usage("ublk");
-		return EXIT_SUCCESS;
+	if (data.dev_id < 0) {
+		fprintf(stderr, "wrong dev_id provided for recover\n");
+		return EXIT_FAILURE;
+	}
+	dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "initialize ctrl dev %d failed\n", data.dev_id);
+		return EXIT_FAILURE;
+	}
+	buf = ublksrv_tgt_get_dev_data(dev);
+	if (!buf) {
+		fprintf(stderr, "get dev %d data failed\n", data.dev_id);
+		return EXIT_FAILURE;
 	}
 
-	ublksrv_execve_helper("recover", data.tgt_type, argc, argv);
+	ret = ublksrv_json_read_target_str_info(buf, 32, "name", tgt_type);
+	if (ret < 0) {
+		fprintf(stderr, "can't get target type for %d\n", data.dev_id);
+		return EXIT_FAILURE;
+	}
+
+	free(buf);
+
+	ublksrv_execve_helper("recover", tgt_type, argc, argv);
 	fprintf(stderr, "failed to spawn target\n");
 	return EXIT_FAILURE;
 }
