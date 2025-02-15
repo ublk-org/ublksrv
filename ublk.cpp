@@ -3,43 +3,6 @@
 #include "config.h"
 #include "ublksrv_tgt.h"
 
-/********************cmd handling************************/
-static struct ublksrv_tgt_type *tgt_list[UBLKSRV_TGT_TYPE_MAX] = {};
-
-static const struct ublksrv_tgt_type *ublksrv_find_tgt_type(const char *name)
-{
-	int i;
-
-	for (i = 0; i < UBLKSRV_TGT_TYPE_MAX; i++) {
-		const struct ublksrv_tgt_type *type = tgt_list[i];
-
-		if (type == NULL)
-			continue;
-
-		if (!strcmp(type->name, name))
-			return type;
-	}
-
-	return NULL;
-}
-
-int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type)
-{
-	if (type->type < UBLKSRV_TGT_TYPE_MAX && !tgt_list[type->type]) {
-		tgt_list[type->type] = type;
-		return 0;
-	}
-	return -1;
-}
-
-void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type)
-{
-	if (type->type < UBLKSRV_TGT_TYPE_MAX && tgt_list[type->type]) {
-		tgt_list[type->type] = NULL;
-	}
-}
-
-
 static int ublksrv_execve_helper(const char *op, const char *type, int argc, char *argv[])
 {
 	char *cmd, **nargv;
@@ -58,27 +21,9 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 	return execve(nargv[0], nargv, nenv);
 }
 
-static int cmd_dev_add(int argc, char *argv[])
-{
-	struct ublksrv_dev_data data = {0};
-
-	ublksrv_parse_std_opts(&data, argc, argv);
-  
-	if (data.tgt_type == NULL) {
-		fprintf(stderr, "no dev type specified\n");
-		return -EINVAL;
-	}
-	return ublksrv_execve_helper("add", data.tgt_type, argc, argv);
-}
-
-struct tgt_types_name {
-	unsigned pos;
-	char names[4096 - sizeof(unsigned)];
-};
-
 static void cmd_dev_add_usage(const char *cmd)
 {
-	printf("%s add -t <type>\n", cmd);
+	printf("%s add -t TYPE\n", cmd);
 	ublksrv_print_std_opts();
 	printf("\tFor type specific options, run:\n");
 	printf("\t\tublk help -t <type>\n");
@@ -304,147 +249,9 @@ static void cmd_dev_get_features_help(const char *cmd)
 	printf("%s features\n", cmd);
 }
 
-static int __cmd_dev_user_recover(int number, bool verbose)
-{
-	const struct ublksrv_tgt_type *tgt_type;
-	struct ublksrv_dev_data data = {
-		.dev_id = number,
-		.run_dir = ublksrv_get_pid_dir(),
-	};
-	struct ublksrv_ctrl_dev_info  dev_info;
-	struct ublksrv_ctrl_dev *dev;
-	struct ublksrv_tgt_base_json tgt_json = {0};
-	char *buf = NULL;
-	char pid_file[64];
-	int ret;
-	unsigned elapsed = 0;
-
-	dev = ublksrv_ctrl_init(&data);
-	if (!dev) {
-		fprintf(stderr, "ublksrv_ctrl_init failure dev %d\n", number);
-		return -EOPNOTSUPP;
-	}
-
-	ret = ublksrv_ctrl_get_info(dev);
-	if (ret < 0) {
-		fprintf(stderr, "can't get dev info from %d\n", number);
-		goto fail;
-	}
-
-	while (elapsed < 30000000) {
-		unsigned unit = 100000;
-		ret = ublksrv_ctrl_start_recovery(dev);
-		if (ret < 0 && ret != -EBUSY) {
-			fprintf(stderr, "can't start recovery for %d ret %d\n",
-					number, ret);
-			goto fail;
-		}
-		if (ret >= 0)
-			break;
-		usleep(unit);
-		elapsed += unit;
-	}
-
-	buf = ublksrv_tgt_get_dev_data(dev);
-	if (!buf) {
-		fprintf(stderr, "get dev %d data failed\n", number);
-		ret = -1;
-		goto fail;
-	}
-
-	ret = ublksrv_json_read_dev_info(buf, &dev_info);
-	if (ret < 0) {
-		fprintf(stderr, "can't read dev info for %d\n", number);
-		goto fail;
-	}
-
-	if (dev_info.dev_id != number) {
-		fprintf(stderr, "dev id doesn't match read %d for dev %d\n",
-				dev_info.dev_id, number);
-		goto fail;
-	}
-
-	ret = ublksrv_json_read_target_base_info(buf, &tgt_json);
-	if (ret < 0) {
-		fprintf(stderr, "can't read dev info for %d\n", number);
-		goto fail;
-	}
-
-	snprintf(pid_file, 64, "%s/%d.pid", data.run_dir, number);
-	ret = unlink(pid_file);
-	if (ret < 0) {
-		fprintf(stderr, "can't delete old pid_file for %d, error:%s\n",
-				number, strerror(errno));
-		goto fail;
-	}
-
-	tgt_type = ublksrv_find_tgt_type(tgt_json.name);
-	if (!tgt_type) {
-		fprintf(stderr, "can't find target type %s\n", tgt_json.name);
-		goto fail;
-	}
-
-	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, tgt_type, buf);
-
-	ret = ublksrv_start_daemon(dev);
-	if (ret < 0) {
-		fprintf(stderr, "start daemon %d failed\n", number);
-		goto fail;
-	}
-
-	ret = ublksrv_ctrl_end_recovery(dev, ret);
-	if (ret < 0) {
-		fprintf(stderr, "end recovery for %d failed\n", number);
-		goto fail;
-	}
-
-	ret = ublksrv_ctrl_get_info(dev);
-	if (ret < 0) {
-		fprintf(stderr, "can't get dev info from %d\n", number);
-		goto fail;
-	}
-
-	if (verbose) {
-		free(buf);
-		buf = ublksrv_tgt_get_dev_data(dev);
-		ublksrv_ctrl_dump(dev, buf);
-	}
-
- fail:
-	free(buf);
-	ublksrv_ctrl_deinit(dev);
-	return ret;
-}
-
-static int cmd_dev_user_recover(int argc, char *argv[])
-{
-	static const struct option longopts[] = {
-		{ "number",		0,	NULL, 'n' },
-		{ "verbose",	0,	NULL, 'v' },
-		{ NULL }
-	};
-	int number = -1;
-	int opt;
-	bool verbose = false;
-
-	while ((opt = getopt_long(argc, argv, "n:v",
-				  longopts, NULL)) != -1) {
-		switch (opt) {
-		case 'n':
-			number = strtol(optarg, NULL, 10);
-			break;
-		case 'v':
-			verbose = true;
-			break;
-		}
-	}
-
-	return __cmd_dev_user_recover(number, verbose);
-}
-
 static void cmd_dev_recover_usage(const char *cmd)
 {
-	printf("%s recover [-n DEV_ID]\n", cmd);
+	printf("%s recover -t TYPE [-n DEV_ID]\n", cmd);
 }
 
 static void cmd_usage(const char *cmd)
@@ -460,6 +267,19 @@ static void cmd_usage(const char *cmd)
 	printf("%s -h [--help]\n", cmd);
 }
 
+static int cmd_dev_add(int argc, char *argv[])
+{
+	struct ublksrv_dev_data data = {0};
+
+	ublksrv_parse_std_opts(&data, argc, argv);
+  
+	if (data.tgt_type == NULL) {
+		fprintf(stderr, "no dev type specified\n");
+		return -EINVAL;
+	}
+	return ublksrv_execve_helper("add", data.tgt_type, argc, argv);
+}
+
 static int cmd_dev_help(int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
@@ -472,6 +292,22 @@ static int cmd_dev_help(int argc, char *argv[])
 	}
 
 	ublksrv_execve_helper("help", data.tgt_type, argc, argv);
+	fprintf(stderr, "failed to spawn target\n");
+	return EXIT_FAILURE;
+}
+
+static int cmd_dev_recover(int argc, char *argv[])
+{
+	struct ublksrv_dev_data data = {0};
+
+	ublksrv_parse_std_opts(&data, argc, argv);
+  
+	if (data.tgt_type == NULL) {
+		cmd_usage("ublk");
+		return EXIT_SUCCESS;
+	}
+
+	ublksrv_execve_helper("recover", data.tgt_type, argc, argv);
 	fprintf(stderr, "failed to spawn target\n");
 	return EXIT_FAILURE;
 }
@@ -503,7 +339,7 @@ int main(int argc, char *argv[])
 	else if (!strcmp(cmd, "list"))
 		ret = cmd_list_dev_info(argc, argv);
 	else if (!strcmp(cmd, "recover"))
-		ret = cmd_dev_user_recover(argc, argv);
+		ret = cmd_dev_recover(argc, argv);
 	else if (!strcmp(cmd, "features"))
 		ret = cmd_dev_get_features(argc, argv);
 	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {

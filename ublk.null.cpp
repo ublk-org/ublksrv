@@ -106,6 +106,10 @@ static void cmd_usage(const char *name)
 {
 	printf("ublk.%s add -t %s\n", name, name);
 	ublksrv_print_std_opts();
+
+	printf("\n");
+	printf("ublk.%s restore -t %s\n", name, name);
+	printf("\t-n DEV_ID -v\n");
 }
 
 int main(int argc, char *argv[])
@@ -125,6 +129,8 @@ int main(int argc, char *argv[])
 
 	if (!strcmp(cmd, "add"))
 		ret = ublksrv_cmd_dev_add(tgt_type, argc, argv);
+	else if (!strcmp(cmd, "recover"))
+		ret = ublksrv_cmd_dev_user_recover(tgt_type, argc, argv);
 	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
 		cmd_usage(tgt_type->name);
 		ret = EXIT_SUCCESS;
