@@ -2,12 +2,13 @@
 
 #include "config.h"
 #include "ublksrv_tgt.h"
+#include <semaphore.h>
 
-/* per-task variable */
+/* per-device variable */
 static pthread_mutex_t jbuf_lock;
 static int jbuf_size = 0;
-static int queues_stored = 0;
 static char *jbuf = NULL;
+static sem_t queue_sem;
 
 int ublk_json_write_dev_info(struct ublksrv_dev *dev, char **jbuf, int *len)
 {
@@ -193,7 +194,6 @@ static void *ublksrv_io_handler_fn(void *data)
 	int ret;
 	int buf_size;
 	char *buf;
-	const char *jbuf;
 
 	pthread_mutex_lock(&jbuf_lock);
 
@@ -203,19 +203,9 @@ static void *ublksrv_io_handler_fn(void *data)
 			ret = ublksrv_json_write_queue_info(cdev, buf, buf_size,
 					q_id, ublksrv_gettid());
 		} while (ret < 0);
-		jbuf = buf;
-	} else {
-		jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
 	}
-	queues_stored++;
-
-	/*
-	 * A bit ugly to store json buffer to pid file here, but no easy
-	 * way to do it in control task side, so far, so good
-	 */
-	if (queues_stored == dinfo->nr_hw_queues)
-		ublksrv_tgt_store_dev_data(dev, jbuf);
 	pthread_mutex_unlock(&jbuf_lock);
+	sem_post(&queue_sem);
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
@@ -284,12 +274,14 @@ static void ublksrv_io_handler(void *data)
 	char buf[32];
 	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
+	const char *this_jbuf;
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
 
 	ublk_log("start ublksrv io daemon %s\n", buf);
 
+	sem_init(&queue_sem, 0, 0);
 	pthread_mutex_init(&jbuf_lock, NULL);
 
 	dev = ublksrv_dev_init(ctrl_dev);
@@ -314,6 +306,15 @@ static void ublksrv_io_handler(void *data)
 				ublksrv_io_handler_fn,
 				&info_array[i]);
 	}
+
+	for (i = 0; i < dinfo->nr_hw_queues; i++)
+		sem_wait(&queue_sem);
+
+	if (ublksrv_is_recovering(ctrl_dev))
+		this_jbuf = ublksrv_ctrl_get_recovery_jbuf(ctrl_dev);
+	else
+		this_jbuf = jbuf;
+	ublksrv_tgt_store_dev_data(dev, this_jbuf);
 
 	/* wait until we are terminated */
 	ublksrv_drain_fetch_commands(dev, info_array);
