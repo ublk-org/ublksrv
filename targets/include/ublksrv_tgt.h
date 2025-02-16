@@ -169,10 +169,11 @@ static inline void ublk_get_sqe_pair(struct io_uring *r,
 		*sqe2 = io_uring_get_sqe(r);
 }
 
-int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev);
+int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd);
 int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev);
 void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 			    const char *jbuf);
+int ublksrv_tgt_send_dev_event(int evtfd, int dev_id);
 
 struct ublksrv_queue_info {
 	const struct ublksrv_dev *dev;
@@ -180,7 +181,7 @@ struct ublksrv_queue_info {
 	pthread_t thread;
 };
 
-int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int argc, char *argv[]);
+int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[]);
 void ublksrv_print_std_opts(void);
 int ublksrv_cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
