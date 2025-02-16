@@ -667,7 +667,6 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int number,
 	struct ublksrv_ctrl_dev *dev;
 	struct ublksrv_tgt_base_json tgt_json = {0};
 	char *buf = NULL;
-	char pid_file[64];
 	int ret;
 	unsigned elapsed = 0;
 
@@ -719,14 +718,6 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int number,
 	ret = ublksrv_json_read_target_base_info(buf, &tgt_json);
 	if (ret < 0) {
 		fprintf(stderr, "can't read dev info for %d\n", number);
-		goto fail;
-	}
-
-	snprintf(pid_file, 64, "%s/%d.pid", data.run_dir, number);
-	ret = unlink(pid_file);
-	if (ret < 0) {
-		fprintf(stderr, "can't delete old pid_file for %d, error:%s\n",
-				number, strerror(errno));
 		goto fail;
 	}
 
