@@ -115,9 +115,6 @@ static inline void ublksrv_tgt_set_io_data_size(struct ublksrv_tgt_info *tgt)
 
 //static_assert(sizeof(struct ublk_io_tgt) == sizeof(struct ublk_io), "ublk_io is defined as wrong");
 
-extern int ublksrv_register_tgt_type(struct ublksrv_tgt_type *type);
-extern void ublksrv_unregister_tgt_type(struct ublksrv_tgt_type *type);
-
 enum {
 	UBLK_UNIQUE_TAG_BITS = 16,
 	UBLK_UNIQUE_TAG_MASK = (1 << UBLK_UNIQUE_TAG_BITS) - 1,

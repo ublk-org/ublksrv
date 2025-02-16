@@ -16,8 +16,6 @@
 #include "ublksrv.h"
 #include "ublksrv_utils.h"
 
-#define UBLKSRV_TGT_TYPE_DEMO  0
-
 struct demo_queue_info {
 	const struct ublksrv_dev *dev;
 	int qid;
@@ -181,10 +179,6 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	};
         strcpy(tgt_json.name, "null");
 
-
-	if (type != UBLKSRV_TGT_TYPE_DEMO)
-		return -1;
-
 	tgt_json.dev_size = tgt->dev_size = 250UL * 1024 * 1024 * 1024;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
@@ -216,7 +210,6 @@ void null_free_io_buf(const struct ublksrv_queue *q, void *buf, int tag)
 }
 
 static struct ublksrv_tgt_type demo_tgt_type = {
-	.type	= UBLKSRV_TGT_TYPE_DEMO,
 	.name	=  "demo_null",
 	.init_tgt = demo_init_tgt,
 	.handle_io_async = demo_handle_io_async,

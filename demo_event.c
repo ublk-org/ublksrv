@@ -21,8 +21,6 @@
 #include "ublksrv_utils.h"
 #include "ublksrv_aio.h"
 
-#define UBLKSRV_TGT_TYPE_DEMO  0
-
 static bool use_aio = 0;
 static int backing_fd = -1;
 
@@ -473,9 +471,6 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 	strcpy(tgt_json.name, "demo_event");
 
-	if (type != UBLKSRV_TGT_TYPE_DEMO)
-		return -1;
-
 	if (backing_fd > 0) {
 		unsigned long long bytes;
 
@@ -523,7 +518,6 @@ static void demo_handle_event(const struct ublksrv_queue *q)
 }
 
 static const struct ublksrv_tgt_type demo_event_tgt_type = {
-	.type	= UBLKSRV_TGT_TYPE_DEMO,
 	.name	=  "demo_event",
 	.init_tgt = demo_init_tgt,
 	.handle_io_async = demo_handle_io_async,
