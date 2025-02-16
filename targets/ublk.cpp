@@ -2,14 +2,18 @@
 
 #include "config.h"
 #include "ublksrv_tgt.h"
+#include <sys/eventfd.h>
+
+static int list_one_dev(int number, bool log, bool verbose);
 
 static int ublksrv_execve_helper(const char *op, const char *type, int argc, char *argv[])
 {
-	char *cmd, *fp, *ldlp, **nargv;
+	char *cmd, *fp, *ldlp, **nargv, *evtfd_str;
 	char *nenv[] = { NULL, NULL };
 	char full_path[256];
 	ssize_t fp_len;
-	int i;
+	int daemon = strcmp(op, "help");
+	int res, i, evtfd = -1;
 
 	asprintf(&cmd, "ublk.%s", type);
 
@@ -23,13 +27,27 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 		return -EINVAL;
 	asprintf(&fp, "%s.%s", full_path, type);
 
-	nargv = (char **)calloc(argc + 2, sizeof(char *));
+	nargv = (char **)calloc(argc + 4, sizeof(char *));
 	if (!nargv)
 		return -ENOMEM;
 	nargv[0] = cmd;
 	nargv[1] = (char *)op;
-	for (i = 1; i < argc; i++)
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--eventfd"))
+			return -EINVAL;
 		nargv[i + 1] = argv[i];
+	}
+
+	if (daemon) {
+		evtfd = eventfd(0, 0);
+		if (evtfd < 0) {
+			fprintf(stderr, "Failed to create eventfd %s\n", strerror(errno));
+			return errno;
+		}
+		asprintf(&evtfd_str, "%d", evtfd);
+		nargv[argc + 1] = strdup("--eventfd");
+		nargv[argc + 2] = evtfd_str;
+	}
 
 	/*
 	 * We need to copy LD_LIBRARY_PATH if we run ublk from the build directory
@@ -43,9 +61,31 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 		nenv[0] = ldlp;
 	}
 
-	execve(fp, nargv, nenv);
-	printf("Failed to execve() %s. %s\n", fp, strerror(errno));
-	return errno;
+	if (!daemon) {
+exec:
+		if (execve(fp, nargv, nenv) < 0) {
+			fprintf(stderr, "Failed to execve() %s. %s\n", fp, strerror(errno));
+			if (evtfd >= 0)
+				ublksrv_tgt_send_dev_event(evtfd, -1);
+			return errno;
+		}
+	}
+
+	setsid();
+	res = fork();
+	if (res == 0)
+		goto exec;
+	if (res > 0) {
+		uint64_t id;
+
+		res = read(evtfd, &id, sizeof(id));
+		close(evtfd);
+
+		if (res == sizeof(id))
+			return list_one_dev(id - 1, false, false);
+		return res;
+	}
+	return res;
 }
 
 static void cmd_dev_add_usage(const char *cmd)
@@ -298,7 +338,7 @@ static int cmd_dev_add(int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
 
-	ublksrv_parse_std_opts(&data, argc, argv);
+	ublksrv_parse_std_opts(&data, NULL, argc, argv);
   
 	if (data.tgt_type == NULL) {
 		fprintf(stderr, "no dev type specified\n");
@@ -311,7 +351,7 @@ static int cmd_dev_help(int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
 
-	ublksrv_parse_std_opts(&data, argc, argv);
+	ublksrv_parse_std_opts(&data, NULL, argc, argv);
   
 	if (data.tgt_type == NULL) {
 		cmd_usage("ublk");
@@ -329,7 +369,7 @@ static int cmd_dev_recover(int argc, char *argv[])
 	char *buf = NULL;
 	int ret;
 
-	ublksrv_parse_std_opts(&data, argc, argv);
+	ublksrv_parse_std_opts(&data, NULL, argc, argv);
   
 	if (data.dev_id < 0) {
 		fprintf(stderr, "wrong dev_id provided for recover\n");

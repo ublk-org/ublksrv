@@ -4,6 +4,8 @@
 #include "ublksrv_tgt.h"
 #include <semaphore.h>
 
+#define ERROR_EVTFD_DEVID   0xfffffffffffffffe
+
 /* per-device variable */
 static pthread_mutex_t jbuf_lock;
 static int jbuf_size = 0;
@@ -98,41 +100,6 @@ int ublk_json_write_tgt_long(struct ublksrv_dev *dev, char **jbuf,
 	} while (ret < 0);
 
 	return ret;
-}
-
-int start_daemon(void (*child_fn)(void *), void *data)
-{
-	char path[PATH_MAX];
-	int fd;
-	char *res;
-
-	if (setsid() == -1)
-		return -1;
-
-	res = getcwd(path, PATH_MAX);
-	if (!res)
-		ublk_err("%s: %d getcwd failed %m\n", __func__, __LINE__);
-
-	switch (fork()) {
-	case -1: return -1;
-	case 0:  break;
-	default: _exit(EXIT_SUCCESS);
-	}
-
-	if (chdir(path) != 0)
-		ublk_err("%s: %d chdir failed %m\n", __func__, __LINE__);
-
-	close(STDIN_FILENO);
-	fd = open("/dev/null", O_RDWR);
-	if (fd != STDIN_FILENO)
-		return -1;
-	if (dup2(fd, STDOUT_FILENO) != STDOUT_FILENO)
-		return -1;
-	if (dup2(fd, STDERR_FILENO) != STDERR_FILENO)
-		return -1;
-
-	child_fn(data);
-	return 0;
 }
 
 char *__ublksrv_tgt_return_json_buf(struct ublksrv_dev *dev, int *size)
@@ -232,9 +199,13 @@ static void sig_handler(int sig)
 		ublk_log("got TERM signal");
 }
 
-static void setup_pthread_sigmask()
+static void setup_pthread_sigmask(bool fg)
 {
 	sigset_t   signal_mask;
+
+	/* don't setup sigmask in case of foreground task */
+	if (fg)
+		return;
 
 	if (signal(SIGTERM, sig_handler) == SIG_ERR)
 		return;
@@ -263,18 +234,73 @@ static void ublksrv_drain_fetch_commands(const struct ublksrv_dev *dev,
 		pthread_join(info[i].thread, &ret);
 }
 
-
-static void ublksrv_io_handler(void *data)
+int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
 {
-	const struct ublksrv_ctrl_dev *ctrl_dev = (struct ublksrv_ctrl_dev *)data;
+	uint64_t id;
+
+	if (evtfd < 0)
+		return -EBADF;
+
+	if (dev_id >= 0)
+		id = dev_id + 1;
+	else
+		id = ERROR_EVTFD_DEVID;
+
+	if (write(evtfd, &id, sizeof(id)) != sizeof(id))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
+		const char *this_jbuf, int evtfd, bool recover)
+{
+	const struct ublksrv_ctrl_dev_info *dinfo =
+		ublksrv_ctrl_get_dev_info(cdev);
+	int dev_id = dinfo->dev_id;
+	int ret;
+
+	ublksrv_tgt_set_params(cdev, this_jbuf);
+
+	if (recover)
+		ret = ublksrv_ctrl_end_recovery(cdev, getpid());
+	else
+		ret = ublksrv_ctrl_start_dev(cdev, getpid());
+	if (ret < 0) {
+		fprintf(stderr, "fail to start dev %d, ret %d\n", dev_id, ret);
+		return ret;
+	}
+
+	ret = ublksrv_ctrl_get_info(cdev);
+	if (ret < 0) {
+		fprintf(stderr, "fail to get dev %d info, ret %d\n", dev_id, ret);
+		return ret;
+	}
+
+	// dump dev info in case of foreground creation
+	if (evtfd == -1)
+		ublksrv_ctrl_dump(cdev, this_jbuf);
+	else {
+		if (ublksrv_tgt_send_dev_event(evtfd, dev_id)) {
+			ublk_err("fail to write eventfd from target daemon\n");
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
+{
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
 	int dev_id = dinfo->dev_id;
-	int i;
 	char buf[32];
 	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
 	const char *this_jbuf;
+	bool recover = ublksrv_is_recovering(ctrl_dev);
+	int i, ret;
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
@@ -290,7 +316,7 @@ static void ublksrv_io_handler(void *data)
 		goto out;
 	}
 
-	setup_pthread_sigmask();
+	setup_pthread_sigmask(evtfd == -1);
 
 	if (!(dinfo->flags & UBLK_F_UNPRIVILEGED_DEV))
 		ublksrv_apply_oom_protection();
@@ -310,28 +336,31 @@ static void ublksrv_io_handler(void *data)
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
 		sem_wait(&queue_sem);
 
-	if (ublksrv_is_recovering(ctrl_dev))
+	if (recover)
 		this_jbuf = ublksrv_ctrl_get_recovery_jbuf(ctrl_dev);
 	else
 		this_jbuf = jbuf;
 	ublksrv_tgt_store_dev_data(dev, this_jbuf);
 
+	ret = ublksrv_tgt_start_dev(ctrl_dev, this_jbuf, evtfd, recover);
+	if (ret) {
+		fprintf(stderr, "dev-%d start dev failed, ret %d\n", dev_id, ret);
+		goto free;
+	}
+
 	/* wait until we are terminated */
 	ublksrv_drain_fetch_commands(dev, info_array);
+free:
 	free(info_array);
 	free(jbuf);
 
 	ublksrv_dev_deinit(dev);
 out:
+	/* deleting dev can only move on when the ublkc is closed */
+	if (ret)
+		ublksrv_ctrl_del_dev(ctrl_dev);
 	ublk_log("end ublksrv io daemon");
 	closelog();
-}
-
-/* Not called from ublksrv daemon */
-int ublksrv_start_io_daemon(const struct ublksrv_ctrl_dev *dev)
-{
-	start_daemon(ublksrv_io_handler, (void *)dev);
-	return 0;
 }
 
 /* Not called from ublksrv daemon */
@@ -396,11 +425,11 @@ void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 	}
 }
 
-int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
+int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
-	int cnt = 0, daemon_pid, ret;
+	int ret;
 
 	ublksrv_check_dev(dinfo);
 
@@ -408,27 +437,12 @@ int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 	if (ret < 0) {
 		fprintf(stderr, "dev %d get affinity failed %d\n",
 				dinfo->dev_id, ret);
-		return -1;
+		return ret;
 	}
 
-	switch (fork()) {
-	case -1:
-		return -1;
-	case 0:
-		ublksrv_start_io_daemon(ctrl_dev);
-		break;
-	}
+	ublksrv_io_handler(ctrl_dev, evtfd);
 
-	/* wait until daemon is started, or timeout after 3 seconds */
-	do {
-		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev, true);
-		if (daemon_pid < 0) {
-			usleep(100000);
-			cnt++;
-		}
-	} while (daemon_pid < 0 && cnt < 30);
-
-	return daemon_pid;
+	return 0;
 }
 
 //todo: resolve stack usage warning for mkpath/__mkpath
@@ -465,7 +479,7 @@ static int mkpath(const char *dir)
  * This function parses all the standard options that all targets support
  * and populates ublksrv_dev_data.
  */
-int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int argc, char *argv[])
+int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
 {
 	int opt;
 	int uring_comp = 0;
@@ -490,6 +504,7 @@ int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int argc, char *argv[]
 		{ "debug_mask",	1,	NULL, 0},
 		{ "unprivileged",	0,	NULL, 0},
 		{ "usercopy",	0,	NULL, 0},
+		{ "eventfd",	1,	NULL, 0},
 		{ NULL }
 	};
 
@@ -540,6 +555,8 @@ int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int argc, char *argv[]
 				unprivileged = 1;
 			if (!strcmp(longopts[option_index].name, "usercopy"))
 				data->flags |= UBLK_F_USER_COPY;
+			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
+				*efd = strtol(optarg, NULL, 10);
 			break;
 		}
 	}
@@ -579,10 +596,9 @@ int ublksrv_cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[
 {
 	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
-	int ret;
-	const char *dump_buf;
+	int ret, evtfd = -1;
 
-	ublksrv_parse_std_opts(&data, argc, argv);
+	ublksrv_parse_std_opts(&data, &evtfd, argc, argv);
 
 	if (data.tgt_type && strcmp(data.tgt_type, tgt_type->name)) {
 		fprintf(stderr, "Wrong tgt_type specified\n");
@@ -614,33 +630,22 @@ int ublksrv_cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[
 			ublksrv_ctrl_get_dev_info(dev);
 		data.dev_id = info->dev_id;
 	}
-	ret = ublksrv_start_daemon(dev);
-	if (ret <= 0) {
+	ret = ublksrv_start_daemon(dev, evtfd);
+	if (ret < 0) {
 		fprintf(stderr, "start dev %d daemon failed, ret %d\n",
 				data.dev_id, ret);
 		goto fail_del_dev;
 	}
 
-	dump_buf = ublksrv_tgt_get_dev_data(dev);
-	ublksrv_tgt_set_params(dev, dump_buf);
-
-	ret = ublksrv_ctrl_start_dev(dev, ret);
-	if (ret < 0) {
-		fprintf(stderr, "start dev %d failed, ret %d\n", data.dev_id,
-				ret);
-		goto fail_stop_daemon;
-	}
-	ret = ublksrv_ctrl_get_info(dev);
-	ublksrv_ctrl_dump(dev, dump_buf);
 	ublksrv_ctrl_deinit(dev);
 	return 0;
 
- fail_stop_daemon:
-	ublksrv_stop_io_daemon(dev);
  fail_del_dev:
 	ublksrv_ctrl_del_dev(dev);
  fail:
 	ublksrv_ctrl_deinit(dev);
+
+	ublksrv_tgt_send_dev_event(evtfd, -1);
 
 	return ret;
 }
@@ -658,7 +663,8 @@ char *ublksrv_pop_cmd(int *argc, char *argv[])
 	return cmd;
 }
 
-static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int number, bool verbose)
+static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type,
+		int number, bool verbose, int evtfd)
 {
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
@@ -674,7 +680,8 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int number,
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failure dev %d\n", number);
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		goto exit;
 	}
 
 	ret = ublksrv_ctrl_get_info(dev);
@@ -723,34 +730,17 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int number,
 	}
 
 	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, tgt_type, buf);
-
-	ret = ublksrv_start_daemon(dev);
+	ret = ublksrv_start_daemon(dev, evtfd);
 	if (ret < 0) {
 		fprintf(stderr, "start daemon %d failed\n", number);
 		goto fail;
 	}
 
-	ret = ublksrv_ctrl_end_recovery(dev, ret);
-	if (ret < 0) {
-		fprintf(stderr, "end recovery for %d failed\n", number);
-		goto fail;
-	}
-
-	ret = ublksrv_ctrl_get_info(dev);
-	if (ret < 0) {
-		fprintf(stderr, "can't get dev info from %d\n", number);
-		goto fail;
-	}
-
-	if (verbose) {
-		free(buf);
-		buf = ublksrv_tgt_get_dev_data(dev);
-		ublksrv_ctrl_dump(dev, buf);
-	}
-
  fail:
 	free(buf);
 	ublksrv_ctrl_deinit(dev);
+ exit:
+	ublksrv_tgt_send_dev_event(evtfd, -1);
 	return ret;
 }
 
@@ -759,14 +749,17 @@ int ublksrv_cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int argc, ch
 	static const struct option longopts[] = {
 		{ "number",		0,	NULL, 'n' },
 		{ "verbose",	0,	NULL, 'v' },
+		{ "eventfd",	1,	NULL, 0},
 		{ NULL }
 	};
+	int option_index = 0;
 	int number = -1;
 	int opt;
 	bool verbose = false;
+	int evtfd = -1;
 
 	while ((opt = getopt_long(argc, argv, "n:v",
-				  longopts, NULL)) != -1) {
+				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
 			number = strtol(optarg, NULL, 10);
@@ -774,8 +767,11 @@ int ublksrv_cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int argc, ch
 		case 'v':
 			verbose = true;
 			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "eventfd"))
+				evtfd = strtol(optarg, NULL, 10);
 		}
 	}
 
-	return __cmd_dev_user_recover(tgt_type, number, verbose);
+	return __cmd_dev_user_recover(tgt_type, number, verbose, evtfd);
 }
