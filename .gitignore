@@ -43,5 +43,6 @@ Makefile.in
 /tests/.fio_perf
 /tests/tmp/
 /ublk
+/ublk.*
 /ublksrv.pc
 /doc/html
