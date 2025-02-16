@@ -802,7 +802,6 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 		return -EINVAL;
 
 	ublk_assert(jbuf);
-	ublk_assert(type == UBLKSRV_TGT_TYPE_NBD);
 
 	ublksrv_json_read_target_str_info(jbuf, NBD_MAX_NAME, "host",
 			host_name);
@@ -904,9 +903,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
-	struct ublksrv_tgt_base_json tgt_json = {
-		.type = type,
-	};
+	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	int opt;
 	int option_index = 0;
 	unsigned char bs_shift = 9;
@@ -921,9 +918,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		attrs |= UBLK_ATTR_READ_ONLY;
 
 	strcpy(tgt_json.name, "nbd");
-
-	if (type != UBLKSRV_TGT_TYPE_NBD)
-		return -1;
 
 	while ((opt = getopt_long(argc, argv, "-:f:",
 				  nbd_longopts, &option_index)) != -1) {
@@ -996,7 +990,6 @@ struct ublksrv_tgt_type  nbd_tgt_type = {
 	.handle_io_background = nbd_handle_io_bg,
 	.init_tgt = nbd_init_tgt,
 	.deinit_tgt = nbd_deinit_tgt,
-	.type	= UBLKSRV_TGT_TYPE_NBD,
 	.name	=  "nbd",
 	.recovery_tgt = nbd_recovery_tgt,
 	.init_queue = nbd_init_queue,
