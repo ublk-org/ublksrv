@@ -118,8 +118,6 @@ static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
 
-	ublk_assert(type == UBLKSRV_TGT_TYPE_LOOP);
-
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
 	return loop_setup_tgt(dev, type, true, jbuf);
@@ -143,9 +141,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	char *file = NULL;
 	int jbuf_size;
 	char *jbuf;
-	struct ublksrv_tgt_base_json tgt_json = {
-		.type = type,
-	};
+	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD,
 		.basic = {
@@ -165,9 +161,6 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	unsigned long offset = 0;
 
 	strcpy(tgt_json.name, "loop");
-
-	if (type != UBLKSRV_TGT_TYPE_LOOP)
-		return -1;
 
 	while ((opt = getopt_long(argc, argv, "-:f:o:",
 				  lo_longopts, NULL)) != -1) {
@@ -487,7 +480,6 @@ struct ublksrv_tgt_type  loop_tgt_type = {
 	.tgt_io_done = loop_tgt_io_done,
 	.init_tgt = loop_init_tgt,
 	.deinit_tgt	=  loop_deinit_tgt,
-	.type	= UBLKSRV_TGT_TYPE_LOOP,
 	.name	=  "loop",
 	.recovery_tgt = loop_recovery_tgt,
 };

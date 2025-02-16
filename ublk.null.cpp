@@ -12,9 +12,7 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	int jbuf_size;
 	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
-	struct ublksrv_tgt_base_json tgt_json = {
-		.type = type,
-	};
+	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	unsigned long long dev_size = 250UL * 1024 * 1024 * 1024;
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
@@ -29,9 +27,6 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	};
 
 	strcpy(tgt_json.name, "null");
-
-	if (type != UBLKSRV_TGT_TYPE_NULL)
-		return -1;
 
 	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
 		return -1;
@@ -59,7 +54,6 @@ static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 	struct ublk_params p;
 
 	ublk_assert(jbuf);
-	ublk_assert(type == UBLKSRV_TGT_TYPE_NULL);
 
 	ret = ublksrv_json_read_params(&p, jbuf);
 	if (ret) {
@@ -96,7 +90,6 @@ static int null_handle_io_async(const struct ublksrv_queue *q,
 struct ublksrv_tgt_type  null_tgt_type = {
 	.handle_io_async = null_handle_io_async,
 	.init_tgt = null_init_tgt,
-	.type	= UBLKSRV_TGT_TYPE_NULL,
 	.name	=  "null",
 	.recovery_tgt = null_recovery_tgt,
 };

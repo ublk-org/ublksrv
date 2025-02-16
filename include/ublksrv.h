@@ -292,7 +292,7 @@ struct ublksrv_tgt_type {
 	 */
 	void (*idle_fn)(const struct ublksrv_queue *q, bool enter);
 
-	/** target type */
+	/** Deprecated */
 	int  type;
 
 	/** flags required for ublk driver */
