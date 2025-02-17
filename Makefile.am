@@ -9,7 +9,7 @@ EXTRA_DIST = \
 
 SUBDIRS = include lib tests
 
-AM_CXXFLAGS = -std=c++20
+AM_CXXFLAGS = -std=c++20 -Wunused
 
 TGT_DIR = targets
 TGT_INC = $(top_srcdir)/$(TGT_DIR)/include
