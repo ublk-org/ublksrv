@@ -4,6 +4,8 @@
 
 #include "ublksrv_tgt.h"
 
+static int null_recover_tgt(struct ublksrv_dev *dev, int type);
+
 static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
@@ -24,6 +26,9 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		},
 	};
 
+	if (ublksrv_tgt_is_recovering(cdev))
+		return null_recover_tgt(dev, 0);
+
 	strcpy(tgt_json.name, "null");
 
 	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
@@ -41,7 +46,7 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	return 0;
 }
 
-static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
+static int null_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
@@ -92,7 +97,6 @@ struct ublksrv_tgt_type  null_tgt_type = {
 	.handle_io_async = null_handle_io_async,
 	.init_tgt = null_init_tgt,
 	.name	=  "null",
-	.recovery_tgt = null_recovery_tgt,
 };
 
 

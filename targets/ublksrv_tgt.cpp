@@ -668,6 +668,8 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type,
 {
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
+		.tgt_type = tgt_type->name,
+		.tgt_ops = tgt_type,
 		.run_dir = ublksrv_get_pid_dir(),
 	};
 	struct ublksrv_ctrl_dev_info  dev_info;
@@ -729,7 +731,6 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type,
 		goto fail;
 	}
 
-	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, tgt_type, NULL);
 	ret = ublksrv_start_daemon(dev, evtfd, true);
 	if (ret < 0) {
 		fprintf(stderr, "start daemon %d failed\n", number);

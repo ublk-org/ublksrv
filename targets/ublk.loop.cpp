@@ -113,7 +113,7 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	return 0;
 }
 
-static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
+static int loop_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
@@ -162,6 +162,9 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	};
 	bool can_discard = false;
 	unsigned long offset = 0;
+
+	if (ublksrv_tgt_is_recovering(cdev))
+		return loop_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "loop");
 
@@ -483,7 +486,6 @@ struct ublksrv_tgt_type  loop_tgt_type = {
 	.init_tgt = loop_init_tgt,
 	.deinit_tgt	=  loop_deinit_tgt,
 	.name	=  "loop",
-	.recovery_tgt = loop_recovery_tgt,
 };
 
 
