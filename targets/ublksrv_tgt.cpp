@@ -284,7 +284,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 	return 0;
 }
 
-static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
+static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
@@ -292,7 +292,6 @@ static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	char buf[32];
 	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
-	bool recover = ublksrv_is_recovering(ctrl_dev);
 	int i, ret;
 
 	ublksrv_tgt_jbuf_init(ctrl_dev, &jbuf, recover);
@@ -413,7 +412,7 @@ void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 	}
 }
 
-int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
+int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
@@ -428,7 +427,7 @@ int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 		return ret;
 	}
 
-	ublksrv_io_handler(ctrl_dev, evtfd);
+	ublksrv_io_handler(ctrl_dev, evtfd, recover);
 
 	return 0;
 }
@@ -618,7 +617,7 @@ int ublksrv_cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[
 			ublksrv_ctrl_get_dev_info(dev);
 		data.dev_id = info->dev_id;
 	}
-	ret = ublksrv_start_daemon(dev, evtfd);
+	ret = ublksrv_start_daemon(dev, evtfd, false);
 	if (ret < 0) {
 		fprintf(stderr, "start dev %d daemon failed, ret %d\n",
 				data.dev_id, ret);
@@ -718,7 +717,7 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type,
 	}
 
 	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, tgt_type, NULL);
-	ret = ublksrv_start_daemon(dev, evtfd);
+	ret = ublksrv_start_daemon(dev, evtfd, true);
 	if (ret < 0) {
 		fprintf(stderr, "start daemon %d failed\n", number);
 		goto fail;
