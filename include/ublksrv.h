@@ -557,6 +557,20 @@ extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev 
 extern bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev);
 
 /**
+ * Return private data
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern void *ublksrv_ctrl_get_priv_data(const struct ublksrv_ctrl_dev *ctrl_dev);
+
+/**
+ * Store private data
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern void ublksrv_ctrl_set_priv_data(struct ublksrv_ctrl_dev *dev, void *data);
+
+/**
  *
  * Store the device json in the pidfile
  */

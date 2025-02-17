@@ -68,7 +68,8 @@ struct ublksrv_ctrl_dev {
 
 	cpu_set_t *queues_cpuset;
 
-	unsigned long reserved[4];
+	void *private_data;
+	unsigned long reserved[3];
 };
 
 struct ublk_io {
