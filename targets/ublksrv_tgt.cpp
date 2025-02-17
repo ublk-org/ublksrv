@@ -7,10 +7,13 @@
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
 /* per-device variable */
-static pthread_mutex_t jbuf_lock;
-static int jbuf_size = 0;
-static char *jbuf = NULL;
+static struct ublksrv_tgt_jbuf jbuf;
 static sem_t queue_sem;
+
+struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
+{
+	return &jbuf;
+}
 
 int ublk_json_write_dev_info(struct ublksrv_dev *dev, char **jbuf, int *len)
 {
@@ -104,46 +107,46 @@ int ublk_json_write_tgt_long(struct ublksrv_dev *dev, char **jbuf,
 
 char *__ublksrv_tgt_return_json_buf(struct ublksrv_dev *dev, int *size)
 {
-	if (jbuf == NULL) {
-		jbuf_size = 1024;
-		jbuf = (char *)realloc((void *)jbuf, jbuf_size);
+	if (jbuf.jbuf == NULL) {
+		jbuf.jbuf_size = 1024;
+		jbuf.jbuf = (char *)realloc((void *)jbuf.jbuf, jbuf.jbuf_size);
 	}
-	*size = jbuf_size;
+	*size = jbuf.jbuf_size;
 
-	return jbuf;
+	return jbuf.jbuf;
 }
 
 char *ublksrv_tgt_return_json_buf(struct ublksrv_dev *dev, int *size)
 {
 	char *buf;
 
-	pthread_mutex_lock(&jbuf_lock);
+	pthread_mutex_lock(&jbuf.lock);
 	buf = __ublksrv_tgt_return_json_buf(dev, size);
-	pthread_mutex_unlock(&jbuf_lock);
+	pthread_mutex_unlock(&jbuf.lock);
 
 	return buf;
 }
 
 static char *__ublksrv_tgt_realloc_json_buf(const struct ublksrv_dev *dev, int *size)
 {
-	if (jbuf == NULL)
-		jbuf_size = 1024;
+	if (jbuf.jbuf == NULL)
+		jbuf.jbuf_size = 1024;
 	else
-		jbuf_size += 1024;
+		jbuf.jbuf_size += 1024;
 
-	jbuf = (char *)realloc((void *)jbuf, jbuf_size);
-	*size = jbuf_size;
+	jbuf.jbuf = (char *)realloc((void *)jbuf.jbuf, jbuf.jbuf_size);
+	*size = jbuf.jbuf_size;
 
-	return jbuf;
+	return jbuf.jbuf;
 }
 
 char *ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size)
 {
 	char *buf;
 
-	pthread_mutex_lock(&jbuf_lock);
+	pthread_mutex_lock(&jbuf.lock);
 	buf = __ublksrv_tgt_realloc_json_buf(dev, size);
-	pthread_mutex_unlock(&jbuf_lock);
+	pthread_mutex_unlock(&jbuf.lock);
 
 	return buf;
 }
@@ -162,16 +165,14 @@ static void *ublksrv_io_handler_fn(void *data)
 	int buf_size;
 	char *buf;
 
-	pthread_mutex_lock(&jbuf_lock);
+	pthread_mutex_lock(&jbuf.lock);
+	do {
+		buf = __ublksrv_tgt_realloc_json_buf(dev, &buf_size);
+		ret = ublksrv_json_write_queue_info(cdev, buf, buf_size,
+				q_id, ublksrv_gettid());
+	} while (ret < 0);
+	pthread_mutex_unlock(&jbuf.lock);
 
-	if (!ublksrv_is_recovering(cdev)) {
-		do {
-			buf = __ublksrv_tgt_realloc_json_buf(dev, &buf_size);
-			ret = ublksrv_json_write_queue_info(cdev, buf, buf_size,
-					q_id, ublksrv_gettid());
-		} while (ret < 0);
-	}
-	pthread_mutex_unlock(&jbuf_lock);
 	sem_post(&queue_sem);
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
@@ -253,14 +254,23 @@ int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
 }
 
 static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
-		const char *this_jbuf, int evtfd, bool recover)
+		const struct ublksrv_dev *dev, int evtfd, bool recover)
 {
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(cdev);
 	int dev_id = dinfo->dev_id;
 	int ret;
 
-	ublksrv_tgt_set_params(cdev, this_jbuf);
+	if (!j || !j->jbuf) {
+		fprintf(stderr, "json buffer is NULL, dev %d\n", dev_id);
+		return -EINVAL;
+	}
+
+	pthread_mutex_lock(&j->lock);
+	ublksrv_tgt_set_params(cdev, j->jbuf);
+	ublksrv_tgt_store_dev_data(dev, j->jbuf);
+	pthread_mutex_unlock(&j->lock);
 
 	if (recover)
 		ret = ublksrv_ctrl_end_recovery(cdev, getpid());
@@ -279,7 +289,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 
 	// dump dev info in case of foreground creation
 	if (evtfd == -1)
-		ublksrv_ctrl_dump(cdev, this_jbuf);
+		ublksrv_ctrl_dump(cdev, j->jbuf);
 	else {
 		if (ublksrv_tgt_send_dev_event(evtfd, dev_id)) {
 			ublk_err("fail to write eventfd from target daemon\n");
@@ -298,9 +308,10 @@ static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	char buf[32];
 	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
-	const char *this_jbuf;
 	bool recover = ublksrv_is_recovering(ctrl_dev);
 	int i, ret;
+
+	ublksrv_tgt_jbuf_init(ctrl_dev, &jbuf, recover);
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
@@ -308,7 +319,6 @@ static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	ublk_log("start ublksrv io daemon %s\n", buf);
 
 	sem_init(&queue_sem, 0, 0);
-	pthread_mutex_init(&jbuf_lock, NULL);
 
 	dev = ublksrv_dev_init(ctrl_dev);
 	if (!dev) {
@@ -336,13 +346,7 @@ static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
 		sem_wait(&queue_sem);
 
-	if (recover)
-		this_jbuf = ublksrv_ctrl_get_recovery_jbuf(ctrl_dev);
-	else
-		this_jbuf = jbuf;
-	ublksrv_tgt_store_dev_data(dev, this_jbuf);
-
-	ret = ublksrv_tgt_start_dev(ctrl_dev, this_jbuf, evtfd, recover);
+	ret = ublksrv_tgt_start_dev(ctrl_dev, dev, evtfd, recover);
 	if (ret) {
 		fprintf(stderr, "dev-%d start dev failed, ret %d\n", dev_id, ret);
 		goto free;
@@ -352,7 +356,6 @@ static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	ublksrv_drain_fetch_commands(dev, info_array);
 free:
 	free(info_array);
-	free(jbuf);
 
 	ublksrv_dev_deinit(dev);
 out:
@@ -360,6 +363,7 @@ out:
 	if (ret)
 		ublksrv_ctrl_del_dev(ctrl_dev);
 	ublk_log("end ublksrv io daemon");
+	ublksrv_tgt_jbuf_exit(&jbuf);
 	closelog();
 }
 
@@ -729,7 +733,7 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type,
 		goto fail;
 	}
 
-	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, tgt_type, buf);
+	ublksrv_ctrl_prep_recovery(dev, tgt_json.name, tgt_type, NULL);
 	ret = ublksrv_start_daemon(dev, evtfd);
 	if (ret < 0) {
 		fprintf(stderr, "start daemon %d failed\n", number);

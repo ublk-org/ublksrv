@@ -7,11 +7,10 @@
 static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const struct ublksrv_ctrl_dev_info *info = ublksrv_ctrl_get_dev_info(cdev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
-	int jbuf_size;
-	char *jbuf = ublksrv_tgt_return_json_buf(dev, &jbuf_size);
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	unsigned long long dev_size = 250UL * 1024 * 1024 * 1024;
 	struct ublk_params p = {
@@ -36,9 +35,9 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt->nr_fds = 0;
 	ublksrv_tgt_set_io_data_size(tgt);
 
-	ublk_json_write_dev_info(dev, &jbuf, &jbuf_size);
-	ublk_json_write_target_base(dev, &jbuf, &jbuf_size, &tgt_json);
-	ublk_json_write_params(dev, &jbuf, &jbuf_size, &p);
+	ublk_json_write_dev_info(dev, &j->jbuf, &j->jbuf_size);
+	ublk_json_write_target_base(dev, &j->jbuf, &j->jbuf_size, &tgt_json);
+	ublk_json_write_params(dev, &j->jbuf, &j->jbuf_size, &p);
 
 	return 0;
 }
@@ -46,16 +45,19 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 static int null_recovery_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(cdev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	int ret;
 	struct ublk_params p;
 
-	ublk_assert(jbuf);
+	if (!j)
+		return -EINVAL;
 
-	ret = ublksrv_json_read_params(&p, jbuf);
+	ublk_assert(j->jbuf);
+
+	ret = ublksrv_json_read_params(&p, j->jbuf);
 	if (ret) {
 		ublk_err( "%s: read ublk params failed %d\n",
 				__func__, ret);

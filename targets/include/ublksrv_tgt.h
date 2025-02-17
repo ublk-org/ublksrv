@@ -187,4 +187,31 @@ int ublksrv_cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
+struct ublksrv_tgt_jbuf {
+	pthread_mutex_t lock;
+	int jbuf_size;
+	char *jbuf;
+};
+
+static inline void ublksrv_tgt_jbuf_exit(struct ublksrv_tgt_jbuf *jbuf)
+{
+	free(jbuf->jbuf);
+}
+
+static inline void ublksrv_tgt_jbuf_init(struct ublksrv_ctrl_dev *cdev,
+		struct ublksrv_tgt_jbuf *jbuf, bool recover)
+{
+	pthread_mutex_init(&jbuf->lock, NULL);
+	if (recover) {
+		jbuf->jbuf = ublksrv_tgt_get_dev_data(cdev);
+		if (jbuf->jbuf)
+			jbuf->jbuf_size = ublksrv_json_get_length(jbuf->jbuf);
+	} else {
+		jbuf->jbuf_size = 0;
+		jbuf->jbuf = NULL;
+	}
+}
+
+struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
+
 #endif
