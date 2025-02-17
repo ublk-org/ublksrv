@@ -308,7 +308,9 @@ struct ublksrv_tgt_type {
 	/**
 	 * recovery callback for this target
 	 *
-	 * Required.
+	 * Obsolete!!!
+	 *
+	 * ->init_tgt() is preferred
 	 */
 	int (*recovery_tgt)(struct ublksrv_dev *, int type);
 
@@ -535,6 +537,11 @@ extern const char *ublksrv_ctrl_get_run_dir(const struct ublksrv_ctrl_dev *dev);
  * @param tgt_type target type name of this device
  * @param tgt_ops target type of this devie
  * @param recovery_jbuf points to device json buffer
+ *
+ * Obsolete!!!
+ *
+ * Recover status can be maintained by target code, `ublksrv_ctrl_dev`
+ * instance can be setup correctly via ublksrv_ctrl_init().
  */
 extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 		const char *tgt_type, const struct ublksrv_tgt_type *tgt_ops,
@@ -546,6 +553,11 @@ extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
  * Setup target type, run_dir and json buffer before starting to recovery device.
  *
  * @param dev the ublksrv control device instance
+ *
+ * Obsolete!!!
+ *
+ * Target code can maintain json buffer by its private data via
+ * ublksrv_ctrl_get_priv_data() and ublksrv_ctrl_set_priv_data()
  */
 extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev);
 
@@ -553,6 +565,11 @@ extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev 
  * Return true if this control device is for recovering
  *
  * @param dev the ublksrv control device instance
+ *
+ * Obsolete!!!
+ *
+ * Target code can maintain recovering status by its private data via
+ * ublksrv_ctrl_get_priv_data() and ublksrv_ctrl_set_priv_data()
  */
 extern bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev);
 
