@@ -16,32 +16,27 @@ NEED_GET_DATA=1
 
 ublk_run_abort_test()
 {
-	for CNT in `seq $LOOPS`; do
-		export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA"
-		DEV=`__create_ublk_dev`
-		echo -e "\trun fio with killing $DEV(ublk add $T_TYPE_PARAMS) queue daemon $CNT"
-		__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
-		sleep 2
-		queue_tid=`__ublk_get_queue_tid $DEV 0`
-		kill -9 $queue_tid
-		sleep 2
-		secs=0
-		while [ $secs -lt 30 ]; do
-			state=`__ublk_get_dev_state $DEV`
-			[ "$state" == "DEAD" ] && break
-			sleep 1
-			let secs++
-		done
-		[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
-		RES=`__remove_ublk_dev_return $DEV`
-		if [ $RES -ne 0 ]; then
-				echo -e "\tdelete $DEV failed"
-				exit -1
-		fi
-		wait
-	done
+	local cnt=$1
+	local state=""
+
+	export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA"
+	local dev=`__create_ublk_dev`
+
+	echo -e "\trun fio with killing $dev(ublk add $T_TYPE_PARAMS) queue daemon $cnt"
+	__run_fio_libaio $dev $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+	sleep 2
+	state=`__ublk_kill_daemon $dev "DEAD"`
+	[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
+	RES=`__remove_ublk_dev_return $dev`
+	if [ $RES -ne 0 ]; then
+		echo -e "\tdelete $dev failed"
+		exit -1
+	fi
+	wait
 }
 
 for NEED_GET_DATA in `seq 0 1`; do
-	ublk_run_abort_test
+	for CNT in `seq $LOOPS`; do
+		ublk_run_abort_test $CNT
+	done
 done

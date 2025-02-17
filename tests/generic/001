@@ -17,28 +17,30 @@ NEED_GET_DATA=1
 
 ublk_run_delete_test()
 {
-	for CNT in `seq $LOOPS`; do
-		export T_TYPE_PARAMS="-t loop -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -f $file"
+	local cnt=$1
 
-		DEV=`__create_ublk_dev`
-		echo -e "\trun fio on $DEV(ublk add $T_TYPE_PARAMS) with deleting dev $CNT"
-		__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
-		sleep 4
-		RES=`__remove_ublk_dev_return $DEV`
-		if [ $RES -ne 0 ]; then
-				echo -e "\tdelete $DEV failed"
-				ps -eLf | grep ublk
-				(cd /sys/kernel/debug/block/`basename $DEV` && find . -type f -exec grep -aH . {} \;)
-				break
-		fi
-		wait
-	done
+	export T_TYPE_PARAMS="-t loop -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -f $file"
+
+	local dev=`__create_ublk_dev`
+	echo -e "\trun fio on $dev(ublk add $T_TYPE_PARAMS) with deleting dev $cnt"
+	__run_fio_libaio $dev $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+	sleep 4
+	RES=`__remove_ublk_dev_return $dev`
+	if [ $RES -ne 0 ]; then
+		echo -e "\tdelete $dev failed"
+		ps -eLf | grep ublk
+		(cd /sys/kernel/debug/block/`basename $dev` && find . -type f -exec grep -aH . {} \;)
+		break
+	fi
+	wait
 }
 
 file=`_create_loop_image "data" 1G`
 
 for NEED_GET_DATA in `seq 0 1`; do
-	ublk_run_delete_test
+	for CNT in `seq $LOOPS`; do
+		ublk_run_delete_test $CNT
+	done
 done
 
 _remove_loop_image $file
