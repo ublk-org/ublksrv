@@ -22,58 +22,49 @@ RECOVERY_REISSUE=0
 ublk_run_recover_test()
 {
 	local type=$1
-	local file=`_create_image $type "null" 256M`
+	local file=$2
+	local cnt=$3
+	local state=""
 
 	if [ "$type" == "null" ]; then
 		local backing=""
-    elif [ "$type" == "nbd" ]; then
+	elif [ "$type" == "nbd" ]; then
 		local backing="--host 127.0.0.1"
 	else
 		local backing="-f $file"
 	fi
 
-	QUEUES=2
+	export T_TYPE_PARAMS="-t $type -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -r $RECOVERY -i $RECOVERY_REISSUE $backing"
+	local dev=`__create_ublk_dev`
+	echo -e "\trun fio with killing $dev(ublk add $T_TYPE_PARAMS) queue daemon $cnt"
 
-	for CNT in `seq $LOOPS`; do
-		export T_TYPE_PARAMS="-t $type -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -r $RECOVERY -i $RECOVERY_REISSUE $backing"
-		DEV=`__create_ublk_dev`
-		echo -e "\trun fio with killing $DEV(ublk add $T_TYPE_PARAMS) queue daemon $CNT"
-		__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
-		sleep 2
-		pid=`__ublk_get_pid $DEV`
-		kill -9 $pid
-		sleep 2
-		secs=0
-		while [ $secs -lt 10 ]; do
-			state=`__ublk_get_dev_state $DEV 0`
-			[ "$state" == "QUIESCED" ] && break
-			sleep 1
-			let secs++
-		done
-		secs=0
-		while [ $secs -lt 10 ]; do
-			RES=`__recover_ublk_dev $DEV`
-			[ $RES -eq 0 ] && break
-			sleep 1
-			let secs++
-		done
-		if [ $RES -ne 0 ]; then
-			echo -e "\trecover $DEV failed"
+	__run_fio_libaio $dev $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+	sleep 2
+
+	state=`__ublk_kill_daemon $dev "QUIESCED"`
+	if [ "$state" == "QUIESCED" ]; then
+		state=`recover_ublk_dev_and_wait $dev`
+		if [ "$state" != "LIVE" ]; then
+			echo "device isn't recovered to $state"
 		fi
-		sleep 2
-		RES=`__remove_ublk_dev_return $DEV`
-		if [ $RES -ne 0 ]; then
-			echo -e "\tdelete $DEV failed"
-			break
-		fi
-		wait
-		sleep 3
-	done
-	_remove_image ${type} $file
+	else
+		echo "device isn't changed to quiesced state"
+	fi
+
+	RES=`__remove_ublk_dev_return $dev`
+	if [ $RES -ne 0 ]; then
+		echo -e "\tdelete $dev failed"
+		break
+	fi
+	wait
 }
 
 for TGT in $ALL_TGTS; do
 	for RECOVERY_REISSUE in `seq 0 1`; do
-		ublk_run_recover_test $TGT
+		TESTF=`_create_image $TGT "null" 256M`
+		for CNT in `seq $LOOPS`; do
+			ublk_run_recover_test $TGT $TESTF $CNT
+		done
+		_remove_image $TGT $TESTF
 	done
 done

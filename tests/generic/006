@@ -11,7 +11,7 @@ RW=rw
 JOBS=4
 QUEUES=2
 RT=$TRUNTIME*2
-LOOPS=4
+LOOPS=2
 URING_COMP=1
 NEED_GET_DATA=1
 RECOVERY=1
@@ -19,46 +19,39 @@ RECOVERY_REISSUE=0
 
 ublk_run_recover_kill_test()
 {
-	for CNT in `seq $LOOPS`; do
-		export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -r $RECOVERY -i $RECOVERY_REISSUE"
-		DEV=`__create_ublk_dev`
-		echo -e "\trun fio with killing $DEV(ublk add $T_TYPE_PARAMS) queue daemon $CNT"
-		__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
-		sleep 2
-		pid1=`__ublk_get_pid $DEV`
-		kill -9 $pid1
-		sleep 2
-		secs=0
-		while [ $secs -lt 10 ]; do
-			state=`__ublk_get_dev_state $DEV`
-			[ "$state" == "QUIESCED" ] && break
-			sleep 1
-			let secs++
-		done
-		secs=0
-		while [ $secs -lt 10 ]; do
-			RES=`__recover_ublk_dev $DEV`
-			[ $RES -eq 0 ] && break
-			sleep 1
-			let secs++
-		done
-		if [ $RES -ne 0 ]; then
-			echo -e "\trecover $DEV failed"
+	local state=""
+	local cnt=$1
+
+	export T_TYPE_PARAMS="-t null -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -r $RECOVERY -i $RECOVERY_REISSUE"
+	local dev=`__create_ublk_dev`
+
+	echo -e "\trun fio with killing $dev(ublk add $T_TYPE_PARAMS) queue daemon $cnt"
+	__run_fio_libaio $dev $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
+	sleep 2
+
+	state=`__ublk_kill_daemon $dev "QUIESCED"`
+	if [ "$state" == "QUIESCED" ]; then
+		state=`recover_ublk_dev_and_wait $dev`
+		if [ "$state" != "LIVE" ]; then
+			echo "device isn't recovered to $state"
 		fi
-		sleep 2
-        pid2=`__ublk_get_pid $DEV`
-		kill -9 $pid2
-		sleep 2
-		RES=`__remove_ublk_dev_return $DEV`
-		if [ $RES -ne 0 ]; then
-				echo -e "\tdelete $DEV failed"
-				break
-		fi
-		wait
-		sleep 3
-	done
+	else
+		echo "device isn't changed to quiesced state"
+	fi
+
+	pid2=`__ublk_get_pid $dev`
+	kill -9 $pid2 > /dev/null 2>&1
+	sleep 2
+	RES=`__remove_ublk_dev_return $dev`
+	if [ $RES -ne 0 ]; then
+		echo -e "\tdelete $dev failed"
+		break
+	fi
+	wait
 }
 
 for RECOVERY_REISSUE in `seq 0 1`; do
-	ublk_run_recover_kill_test
+	for CNT in `seq $LOOPS`; do
+		ublk_run_recover_kill_test $CNT
+	done
 done
