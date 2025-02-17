@@ -252,7 +252,7 @@ __recover_ublk_dev()
 	local dev=$1
 	local dev_id=`__ublk_dev_id $dev`
 
-	eval $UBLK recover -n $dev_id
+	eval $UBLK recover -n $dev_id > /dev/null 2>&1
 	RES=$?
 	echo $RES
 }
