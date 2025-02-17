@@ -241,12 +241,12 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	else
 		p.types &= ~UBLK_PARAM_TYPE_DISCARD;
 
-	ublk_json_write_dev_info(dev, &j->jbuf, &j->jbuf_size);
-	ublk_json_write_target_base(dev, &j->jbuf, &j->jbuf_size, &tgt_json);
-	ublk_json_write_tgt_str(dev, &j->jbuf, &j->jbuf_size, "backing_file", file);
-	ublk_json_write_tgt_long(dev, &j->jbuf, &j->jbuf_size, "direct_io", !buffered_io);
-	ublk_json_write_tgt_ulong(dev, &j->jbuf, &j->jbuf_size, "offset", offset);
-	ublk_json_write_params(dev, &j->jbuf, &j->jbuf_size, &p);
+	ublk_json_write_dev_info(cdev);
+	ublk_json_write_target_base(cdev, &tgt_json);
+	ublk_json_write_tgt_str(cdev, "backing_file", file);
+	ublk_json_write_tgt_long(cdev, "direct_io", !buffered_io);
+	ublk_json_write_tgt_ulong(cdev, "offset", offset);
+	ublk_json_write_params(cdev, &p);
 
 	close(fd);
 
