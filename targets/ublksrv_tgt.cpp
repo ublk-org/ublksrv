@@ -127,25 +127,51 @@ char *ublksrv_tgt_return_json_buf(struct ublksrv_dev *dev, int *size)
 	return buf;
 }
 
-static char *__ublksrv_tgt_realloc_json_buf(const struct ublksrv_dev *dev, int *size)
+static char *__ublksrv_tgt_realloc_json_buf(struct ublksrv_tgt_jbuf *j)
 {
-	if (jbuf.jbuf == NULL)
-		jbuf.jbuf_size = 1024;
+	if (j->jbuf == NULL)
+		j->jbuf_size = 1024;
 	else
-		jbuf.jbuf_size += 1024;
+		j->jbuf_size += 1024;
 
-	jbuf.jbuf = (char *)realloc((void *)jbuf.jbuf, jbuf.jbuf_size);
-	*size = jbuf.jbuf_size;
+	j->jbuf = (char *)realloc((void *)j->jbuf, j->jbuf_size);
 
-	return jbuf.jbuf;
+	return j->jbuf;
 }
+
+static int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
+		unsigned int qid, int tid)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	if (!j->jbuf)
+		__ublksrv_tgt_realloc_json_buf(j);
+	do {
+		ret = ublksrv_json_write_queue_info(cdev, j->jbuf, j->jbuf_size,
+				qid, tid);
+		if (ret < 0)
+			__ublksrv_tgt_realloc_json_buf(j);
+	} while (ret < 0);
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
+}
+
 
 char *ublksrv_tgt_realloc_json_buf(struct ublksrv_dev *dev, int *size)
 {
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	char *buf;
 
 	pthread_mutex_lock(&jbuf.lock);
-	buf = __ublksrv_tgt_realloc_json_buf(dev, size);
+	buf = __ublksrv_tgt_realloc_json_buf(j);
+	*size = j->jbuf_size;
 	pthread_mutex_unlock(&jbuf.lock);
 
 	return buf;
@@ -161,17 +187,8 @@ static void *ublksrv_io_handler_fn(void *data)
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
 	const struct ublksrv_queue *q;
-	int ret;
-	int buf_size;
-	char *buf;
 
-	pthread_mutex_lock(&jbuf.lock);
-	do {
-		buf = __ublksrv_tgt_realloc_json_buf(dev, &buf_size);
-		ret = ublksrv_json_write_queue_info(cdev, buf, buf_size,
-				q_id, ublksrv_gettid());
-	} while (ret < 0);
-	pthread_mutex_unlock(&jbuf.lock);
+	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
 
 	sem_post(&queue_sem);
 
