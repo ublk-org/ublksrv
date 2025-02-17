@@ -27,7 +27,7 @@ ublk_run_delete_test()
 	sleep 4
 	RES=`__remove_ublk_dev_return $dev`
 	if [ $RES -ne 0 ]; then
-		echo -e "\tdelete $dev failed"
+		echo -e "\tdelete $dev failed($RES)"
 		ps -eLf | grep ublk
 		(cd /sys/kernel/debug/block/`basename $dev` && find . -type f -exec grep -aH . {} \;)
 		break

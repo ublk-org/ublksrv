@@ -33,10 +33,10 @@ ublk_run_recover_kill_test()
 	if [ "$state" == "QUIESCED" ]; then
 		state=`recover_ublk_dev_and_wait $dev`
 		if [ "$state" != "LIVE" ]; then
-			echo "device isn't recovered to $state"
+			echo "device isn't recovered($state)"
 		fi
 	else
-		echo "device isn't changed to quiesced state"
+		echo "device isn't changed to quiesced state($state)"
 	fi
 
 	pid2=`__ublk_get_pid $dev`
@@ -44,7 +44,7 @@ ublk_run_recover_kill_test()
 	sleep 2
 	RES=`__remove_ublk_dev_return $dev`
 	if [ $RES -ne 0 ]; then
-		echo -e "\tdelete $dev failed"
+		echo -e "\tdelete $dev failed($RES)"
 		break
 	fi
 	wait

@@ -26,7 +26,7 @@ ublk_run_abort_test()
 	__run_fio_libaio $dev $BS $RW $JOBS $RT > /dev/null 2 >& 1 &
 	sleep 2
 	state=`__ublk_kill_daemon $dev "DEAD"`
-	[ "$state" != "DEAD" ] && echo "device isn't dead after killing queue daemon" && exit -1
+	[ "$state" != "DEAD" ] && echo "device isn't dead($state) after killing daemon" && exit -1
 	RES=`__remove_ublk_dev_return $dev`
 	if [ $RES -ne 0 ]; then
 		echo -e "\tdelete $dev failed"
