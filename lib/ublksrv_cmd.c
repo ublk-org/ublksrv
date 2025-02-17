@@ -619,3 +619,13 @@ const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev)
 {
 	return dev->recovery_jbuf;
 }
+
+void *ublksrv_ctrl_get_priv_data(const struct ublksrv_ctrl_dev *dev)
+{
+	return dev->private_data;
+}
+
+void ublksrv_ctrl_set_priv_data(struct ublksrv_ctrl_dev *dev, void *data)
+{
+	dev->private_data = data;
+}
