@@ -145,16 +145,12 @@ static inline bool ublk_param_is_valid(const struct ublk_params *p)
 	return true;
 }
 
-int ublk_json_write_tgt_str(struct ublksrv_dev *dev, char **jbuf,
-		int *len, const char *name, const char *val);
-int ublk_json_write_tgt_long(struct ublksrv_dev *dev, char **jbuf,
-		int *len, const char *name, long val);
-int ublk_json_write_tgt_ulong(struct ublksrv_dev *dev, char **jbuf,
-		int *len, const char *name, unsigned long val);
-int ublk_json_write_dev_info(struct ublksrv_dev *dev, char **jbuf, int *len);
-int ublk_json_write_params(struct ublksrv_dev *dev, char **jbuf, int *len,
-		const struct ublk_params *p);
-int ublk_json_write_target_base(struct ublksrv_dev *dev, char **jbuf, int *len,
+int ublk_json_write_tgt_str(const struct ublksrv_ctrl_dev *dev, const char *name, const char *val);
+int ublk_json_write_tgt_long(const struct ublksrv_ctrl_dev *dev, const char *name, long val);
+int ublk_json_write_tgt_ulong(const struct ublksrv_ctrl_dev *dev, const char *name, unsigned long val);
+int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *dev);
+int ublk_json_write_params(const struct ublksrv_ctrl_dev *dev, const struct ublk_params *p);
+int ublk_json_write_target_base(const struct ublksrv_ctrl_dev *dev,
 		const struct ublksrv_tgt_base_json *tgt);
 
 static inline void ublk_get_sqe_pair(struct io_uring *r,
@@ -187,11 +183,27 @@ int ublksrv_cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
+
+#define UBLK_TGT_MAX_JBUF_SZ 8192
 struct ublksrv_tgt_jbuf {
 	pthread_mutex_t lock;
 	int jbuf_size;
 	char *jbuf;
 };
+
+static inline bool tgt_realloc_jbuf(struct ublksrv_tgt_jbuf *j)
+{
+	if (j->jbuf == NULL)
+		j->jbuf_size = 512;
+	else
+		j->jbuf_size += 512;
+
+	if (j->jbuf_size < UBLK_TGT_MAX_JBUF_SZ) {
+		j->jbuf = (char *)realloc((void *)j->jbuf, j->jbuf_size);
+		return true;
+	}
+	return false;
+}
 
 static inline void ublksrv_tgt_jbuf_exit(struct ublksrv_tgt_jbuf *jbuf)
 {
@@ -199,16 +211,15 @@ static inline void ublksrv_tgt_jbuf_exit(struct ublksrv_tgt_jbuf *jbuf)
 }
 
 static inline void ublksrv_tgt_jbuf_init(struct ublksrv_ctrl_dev *cdev,
-		struct ublksrv_tgt_jbuf *jbuf, bool recover)
+		struct ublksrv_tgt_jbuf *j, bool recover)
 {
-	pthread_mutex_init(&jbuf->lock, NULL);
+	pthread_mutex_init(&j->lock, NULL);
 	if (recover) {
-		jbuf->jbuf = ublksrv_tgt_get_dev_data(cdev);
-		if (jbuf->jbuf)
-			jbuf->jbuf_size = ublksrv_json_get_length(jbuf->jbuf);
+		j->jbuf = ublksrv_tgt_get_dev_data(cdev);
+		if (j->jbuf)
+			j->jbuf_size = ublksrv_json_get_length(j->jbuf);
 	} else {
-		jbuf->jbuf_size = 0;
-		jbuf->jbuf = NULL;
+		tgt_realloc_jbuf(j);
 	}
 }
 

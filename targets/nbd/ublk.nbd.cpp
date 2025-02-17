@@ -939,11 +939,11 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		return -EINVAL;
 #endif
 
-	ublk_json_write_dev_info(dev, &j->jbuf, &j->jbuf_size);
-	ublk_json_write_tgt_str(dev, &j->jbuf, &j->jbuf_size, "host", host_name);
-	ublk_json_write_tgt_str(dev, &j->jbuf, &j->jbuf_size, "unix", unix_path);
-	ublk_json_write_tgt_str(dev, &j->jbuf, &j->jbuf_size, "export_name", exp_name);
-	ublk_json_write_tgt_long(dev, &j->jbuf, &j->jbuf_size, "send_zc", send_zc);
+	ublk_json_write_dev_info(cdev);
+	ublk_json_write_tgt_str(cdev, "host", host_name);
+	ublk_json_write_tgt_str(cdev, "unix", unix_path);
+	ublk_json_write_tgt_str(cdev, "export_name", exp_name);
+	ublk_json_write_tgt_long(cdev, "send_zc", send_zc);
 
 	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
@@ -952,7 +952,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		return ret;
 
 	tgt_json.dev_size = tgt->dev_size;
-	ublk_json_write_target_base(dev, &j->jbuf, &j->jbuf_size, &tgt_json);
+	ublk_json_write_target_base(cdev, &tgt_json);
 
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
@@ -968,7 +968,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	};
 
 	nbd_parse_flags(&p, flags, 1U << bs_shift);
-	ublk_json_write_params(dev, &j->jbuf, &j->jbuf_size, &p);
+	ublk_json_write_params(cdev, &p);
 
 	return 0;
 }
