@@ -116,19 +116,24 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 static int loop_recovery_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	const char *jbuf = ublksrv_ctrl_get_recovery_jbuf(cdev);
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+
+	if (!j)
+		return -EINVAL;
 
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
-	return loop_setup_tgt(dev, type, true, jbuf);
+	return loop_setup_tgt(dev, type, true, j->jbuf);
 }
 
 static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
-	int buffered_io = 0;
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+		ublksrv_ctrl_get_dev_info(cdev);
+	int buffered_io = 0;
 	static const struct option lo_longopts[] = {
 		{ "file",		1,	NULL, 'f' },
 		{ "buffered_io",	no_argument, &buffered_io, 1},
@@ -139,8 +144,6 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	struct stat st;
 	int fd, opt;
 	char *file = NULL;
-	int jbuf_size;
-	char *jbuf;
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD,
@@ -238,19 +241,18 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	else
 		p.types &= ~UBLK_PARAM_TYPE_DISCARD;
 
-	jbuf = ublksrv_tgt_realloc_json_buf(dev, &jbuf_size);
-	ublk_json_write_dev_info(dev, &jbuf, &jbuf_size);
-	ublk_json_write_target_base(dev, &jbuf, &jbuf_size, &tgt_json);
-	ublk_json_write_tgt_str(dev, &jbuf, &jbuf_size, "backing_file", file);
-	ublk_json_write_tgt_long(dev, &jbuf, &jbuf_size, "direct_io", !buffered_io);
-	ublk_json_write_tgt_ulong(dev, &jbuf, &jbuf_size, "offset", offset);
-	ublk_json_write_params(dev, &jbuf, &jbuf_size, &p);
+	ublk_json_write_dev_info(dev, &j->jbuf, &j->jbuf_size);
+	ublk_json_write_target_base(dev, &j->jbuf, &j->jbuf_size, &tgt_json);
+	ublk_json_write_tgt_str(dev, &j->jbuf, &j->jbuf_size, "backing_file", file);
+	ublk_json_write_tgt_long(dev, &j->jbuf, &j->jbuf_size, "direct_io", !buffered_io);
+	ublk_json_write_tgt_ulong(dev, &j->jbuf, &j->jbuf_size, "offset", offset);
+	ublk_json_write_params(dev, &j->jbuf, &j->jbuf_size, &p);
 
 	close(fd);
 
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
-	return loop_setup_tgt(dev, type, false, jbuf);
+	return loop_setup_tgt(dev, type, false, j->jbuf);
 }
 
 static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
