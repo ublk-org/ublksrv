@@ -241,5 +241,11 @@ static inline struct ublksrv_ctrl_data *ublksrv_get_ctrl_data(const struct ublks
 	return (struct ublksrv_ctrl_data *)data;
 }
 
+static inline bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev)
+{
+	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
+
+	return data->recover;
+}
 
 #endif

@@ -885,6 +885,20 @@ static void nbd_parse_flags(struct ublk_params *p, uint16_t flags, uint32_t bs)
         }
 }
 
+static int nbd_recover_tgt(struct ublksrv_dev *dev, int type)
+{
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	uint16_t flags = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	dev->tgt.tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
+
+	return nbd_setup_tgt(dev, type, true, j->jbuf, &flags);
+}
+
 static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
@@ -913,6 +927,9 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	uint16_t flags = 0;
 	int ret;
 	unsigned int attrs = UBLK_ATTR_VOLATILE_CACHE;
+
+	if (ublksrv_tgt_is_recovering(cdev))
+		return nbd_recover_tgt(dev, 0);
 
 	if (read_only)
 		attrs |= UBLK_ATTR_READ_ONLY;
@@ -973,20 +990,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	return 0;
 }
 
-static int nbd_recovery_tgt(struct ublksrv_dev *dev, int type)
-{
-	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	uint16_t flags = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	dev->tgt.tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
-
-	return nbd_setup_tgt(dev, type, true, j->jbuf, &flags);
-}
-
 struct ublksrv_tgt_type  nbd_tgt_type = {
 	.handle_io_async = nbd_handle_io_async,
 	.tgt_io_done = nbd_tgt_io_done,
@@ -994,7 +997,6 @@ struct ublksrv_tgt_type  nbd_tgt_type = {
 	.init_tgt = nbd_init_tgt,
 	.deinit_tgt = nbd_deinit_tgt,
 	.name	=  "nbd",
-	.recovery_tgt = nbd_recovery_tgt,
 	.init_queue = nbd_init_queue,
 	.deinit_queue = nbd_deinit_queue,
 };
