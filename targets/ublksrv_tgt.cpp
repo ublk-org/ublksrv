@@ -2,17 +2,30 @@
 
 #include "config.h"
 #include "ublksrv_tgt.h"
-#include <semaphore.h>
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
-/* per-device variable */
-static struct ublksrv_tgt_jbuf jbuf;
-static sem_t queue_sem;
+static void ublksrv_ctrl_data_init(struct ublksrv_ctrl_dev *cdev,
+		struct ublksrv_ctrl_data *data, bool recover)
+{
+	ublksrv_tgt_jbuf_init(cdev, &data->jbuf, recover);
+	sem_init(&data->queue_sem, 0, 0);
+	data->recover = recover;
+	ublksrv_ctrl_set_priv_data(cdev, data);
+}
+
+static void ublksrv_ctrl_data_exit(struct ublksrv_ctrl_dev *cdev,
+		struct ublksrv_ctrl_data *data)
+{
+	ublksrv_ctrl_set_priv_data(cdev, NULL);
+	ublksrv_tgt_jbuf_exit(&data->jbuf);
+}
 
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
 {
-	return &jbuf;
+	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
+
+	return &data->jbuf;
 }
 
 int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *cdev)
@@ -149,6 +162,7 @@ static void *ublksrv_io_handler_fn(void *data)
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
 	const struct ublksrv_dev *dev = info->dev;
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	struct ublksrv_ctrl_data *cdata = ublksrv_get_ctrl_data(cdev);
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(cdev);
 	unsigned dev_id = dinfo->dev_id;
@@ -157,7 +171,7 @@ static void *ublksrv_io_handler_fn(void *data)
 
 	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
 
-	sem_post(&queue_sem);
+	sem_post(&cdata->queue_sem);
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
@@ -286,6 +300,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 
 static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
 {
+	struct ublksrv_ctrl_data cdata;
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
 	int dev_id = dinfo->dev_id;
@@ -294,14 +309,12 @@ static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, boo
 	struct ublksrv_queue_info *info_array;
 	int i, ret;
 
-	ublksrv_tgt_jbuf_init(ctrl_dev, &jbuf, recover);
+	ublksrv_ctrl_data_init(ctrl_dev, &cdata, recover);
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
 
 	ublk_log("start ublksrv io daemon %s\n", buf);
-
-	sem_init(&queue_sem, 0, 0);
 
 	dev = ublksrv_dev_init(ctrl_dev);
 	if (!dev) {
@@ -327,7 +340,7 @@ static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, boo
 	}
 
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
-		sem_wait(&queue_sem);
+		sem_wait(&cdata.queue_sem);
 
 	ret = ublksrv_tgt_start_dev(ctrl_dev, dev, evtfd, recover);
 	if (ret) {
@@ -346,7 +359,7 @@ out:
 	if (ret)
 		ublksrv_ctrl_del_dev(ctrl_dev);
 	ublk_log("end ublksrv io daemon");
-	ublksrv_tgt_jbuf_exit(&jbuf);
+	ublksrv_ctrl_data_exit(ctrl_dev, &cdata);
 	closelog();
 }
 

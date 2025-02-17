@@ -18,6 +18,7 @@
 #include <coroutine>
 #include <iostream>
 #include <type_traits>
+#include <semaphore.h>
 
 #include "ublksrv_utils.h"
 #include "ublksrv.h"
@@ -219,10 +220,26 @@ static inline void ublksrv_tgt_jbuf_init(struct ublksrv_ctrl_dev *cdev,
 		if (j->jbuf)
 			j->jbuf_size = ublksrv_json_get_length(j->jbuf);
 	} else {
+		j->jbuf = NULL;
+		j->jbuf_size = 0;
 		tgt_realloc_jbuf(j);
 	}
 }
 
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
+
+struct ublksrv_ctrl_data {
+	struct ublksrv_tgt_jbuf jbuf;
+	sem_t queue_sem;
+	bool recover;
+};
+
+static inline struct ublksrv_ctrl_data *ublksrv_get_ctrl_data(const struct ublksrv_ctrl_dev *cdev)
+{
+	void *data = ublksrv_ctrl_get_priv_data(cdev);
+
+	return (struct ublksrv_ctrl_data *)data;
+}
+
 
 #endif
