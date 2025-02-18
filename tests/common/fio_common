@@ -264,13 +264,12 @@ __ublk_kill_daemon()
 	local exp_state=$2
 	local secs=0
 	local daemon_pid=`__ublk_get_pid $dev`
-	local state=""
+	local state=`__ublk_get_dev_state $dev 0`
 
-	while [ $secs -lt 10 ]; do
+	while [ $secs -lt 30 ] && [ "$state" != "$exp_state" ]; do
 		kill -9 $daemon_pid > /dev/null 2>&1
 		sleep 1
 		state=`__ublk_get_dev_state $dev 0`
-		[ "$state" == "$exp_state" ] && break
 		let secs++
 	done
 	echo $state
@@ -282,7 +281,7 @@ recover_ublk_dev_and_wait()
 	local secs=0
 	local state=""
 
-	while [ $secs -lt 10 ]; do
+	while [ $secs -lt 15 ]; do
 		__recover_ublk_dev $dev > /dev/null 2>&1
 		state=`__ublk_get_dev_state $dev 0`
 		[ "$state" == "LIVE" ] && break
