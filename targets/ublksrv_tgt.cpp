@@ -592,7 +592,7 @@ void ublksrv_print_std_opts(void)
 	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n\n");
 }
 
-int ublksrv_cmd_dev_add(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
+int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
@@ -663,7 +663,7 @@ char *ublksrv_pop_cmd(int *argc, char *argv[])
 	return cmd;
 }
 
-static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type,
+static int __cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 		int number, bool verbose, int evtfd)
 {
 	struct ublksrv_dev_data data = {
@@ -745,7 +745,7 @@ static int __cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type,
 	return ret;
 }
 
-int ublksrv_cmd_dev_user_recover(struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
+int ublksrv_cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
 {
 	static const struct option longopts[] = {
 		{ "number",		0,	NULL, 'n' },
