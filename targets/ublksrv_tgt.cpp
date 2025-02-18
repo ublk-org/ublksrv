@@ -298,7 +298,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 	return 0;
 }
 
-static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
+static int ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
 {
 	struct ublksrv_ctrl_data cdata;
 	const struct ublksrv_ctrl_dev_info *dinfo =
@@ -307,7 +307,7 @@ static void ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, boo
 	char buf[32];
 	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
-	int i, ret;
+	int i, ret = -EINVAL;
 
 	ublksrv_ctrl_data_init(ctrl_dev, &cdata, recover);
 
@@ -361,6 +361,8 @@ out:
 	ublk_log("end ublksrv io daemon");
 	ublksrv_ctrl_data_exit(ctrl_dev, &cdata);
 	closelog();
+
+	return ret;
 }
 
 /* Not called from ublksrv daemon */
@@ -440,9 +442,7 @@ int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool reco
 		return ret;
 	}
 
-	ublksrv_io_handler(ctrl_dev, evtfd, recover);
-
-	return 0;
+	return ublksrv_io_handler(ctrl_dev, evtfd, recover);
 }
 
 //todo: resolve stack usage warning for mkpath/__mkpath
