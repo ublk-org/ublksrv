@@ -480,17 +480,10 @@ static void loop_deinit_tgt(const struct ublksrv_dev *dev)
 	free(dev->tgt.tgt_data);
 }
 
-struct ublksrv_tgt_type  loop_tgt_type = {
-	.handle_io_async = loop_handle_io_async,
-	.tgt_io_done = loop_tgt_io_done,
-	.init_tgt = loop_init_tgt,
-	.deinit_tgt	=  loop_deinit_tgt,
-	.name	=  "loop",
-};
-
-
-static void cmd_usage(const char *name)
+static void loop_cmd_usage()
 {
+	const char *name = "loop";
+
 	printf("ublk.%s add -t %s\n", name, name);
 	ublksrv_print_std_opts();
 	printf("\t-f backing_file [--buffered_io] [--offset NUM]\n");
@@ -498,35 +491,16 @@ static void cmd_usage(const char *name)
 	printf("\t\toffset skips first NUM sectors on backing file\n");
 }
 
+struct ublksrv_tgt_type  loop_tgt_type = {
+	.handle_io_async = loop_handle_io_async,
+	.tgt_io_done = loop_tgt_io_done,
+	.usage_for_add = loop_cmd_usage,
+	.init_tgt = loop_init_tgt,
+	.deinit_tgt	=  loop_deinit_tgt,
+	.name	=  "loop",
+};
+
 int main(int argc, char *argv[])
 {
-	struct ublksrv_tgt_type *tgt_type = &loop_tgt_type;
-	const char *cmd;
-	int ret;
-
-	setvbuf(stdout, NULL, _IOLBF, 0);
-
-	cmd = ublksrv_pop_cmd(&argc, argv);
-	if (cmd == NULL) {
-		printf("%s: missing command\n", argv[0]);
-		cmd_usage(tgt_type->name);
-		return EXIT_FAILURE;
-	}
-
-	if (!strcmp(cmd, "add"))
-		ret = ublksrv_cmd_dev_add(tgt_type, argc, argv);
-	else if (!strcmp(cmd, "recover"))
-		ret = ublksrv_cmd_dev_user_recover(tgt_type, argc, argv);
-	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
-		cmd_usage(tgt_type->name);
-		ret = EXIT_SUCCESS;
-	} else {
-		fprintf(stderr, "unknown command: %s\n", cmd);
-		cmd_usage(tgt_type->name);
-		ret = EXIT_FAILURE;
-	}
-
-	ublk_ctrl_dbg(UBLK_DBG_CTRL_CMD, "cmd %s: result %d\n", cmd, ret);
-
-	return ret;
+	return ublksrv_tgt_cmd_main(&loop_tgt_type, argc, argv);
 }
