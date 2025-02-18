@@ -157,7 +157,7 @@ static int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
 	return ret;
 }
 
-static void *ublksrv_io_handler_fn(void *data)
+static void *ublksrv_queue_handler(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
 	const struct ublksrv_dev *dev = info->dev;
@@ -298,7 +298,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 	return 0;
 }
 
-static int ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
+static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
 {
 	struct ublksrv_ctrl_data cdata;
 	const struct ublksrv_ctrl_dev_info *dinfo =
@@ -335,7 +335,7 @@ static int ublksrv_io_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool
 		info_array[i].dev = dev;
 		info_array[i].qid = i;
 		pthread_create(&info_array[i].thread, NULL,
-				ublksrv_io_handler_fn,
+				ublksrv_queue_handler,
 				&info_array[i]);
 	}
 
@@ -442,7 +442,7 @@ int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool reco
 		return ret;
 	}
 
-	return ublksrv_io_handler(ctrl_dev, evtfd, recover);
+	return ublksrv_device_handler(ctrl_dev, evtfd, recover);
 }
 
 //todo: resolve stack usage warning for mkpath/__mkpath
