@@ -776,3 +776,41 @@ int ublksrv_cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type, int ar
 
 	return __cmd_dev_user_recover(tgt_type, number, verbose, evtfd);
 }
+
+static void cmd_usage(const struct ublksrv_tgt_type *tgt_type)
+{
+	if (tgt_type->usage_for_add)
+		tgt_type->usage_for_add();
+}
+
+int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
+{
+	const char *cmd;
+	int ret;
+
+	setvbuf(stdout, NULL, _IOLBF, 0);
+
+	cmd = ublksrv_pop_cmd(&argc, argv);
+	if (cmd == NULL) {
+		printf("%s: missing command\n", argv[0]);
+		cmd_usage(tgt_type);
+		return EXIT_FAILURE;
+	}
+
+	if (!strcmp(cmd, "add"))
+		ret = ublksrv_cmd_dev_add(tgt_type, argc, argv);
+	else if (!strcmp(cmd, "recover"))
+		ret = ublksrv_cmd_dev_user_recover(tgt_type, argc, argv);
+	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
+		cmd_usage(tgt_type);
+		ret = EXIT_SUCCESS;
+	} else {
+		fprintf(stderr, "unknown command: %s\n", cmd);
+		cmd_usage(tgt_type);
+		ret = EXIT_FAILURE;
+	}
+
+	ublk_ctrl_dbg(UBLK_DBG_CTRL_CMD, "cmd %s: result %d\n", cmd, ret);
+
+	return ret;
+}

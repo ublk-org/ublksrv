@@ -183,7 +183,7 @@ void ublksrv_print_std_opts(void);
 int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
-
+int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
 #define UBLK_TGT_MAX_JBUF_SZ 8192
 struct ublksrv_tgt_jbuf {
