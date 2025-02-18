@@ -491,7 +491,7 @@ static void loop_cmd_usage()
 	printf("\t\toffset skips first NUM sectors on backing file\n");
 }
 
-struct ublksrv_tgt_type  loop_tgt_type = {
+static const struct ublksrv_tgt_type  loop_tgt_type = {
 	.handle_io_async = loop_handle_io_async,
 	.tgt_io_done = loop_tgt_io_done,
 	.usage_for_add = loop_cmd_usage,

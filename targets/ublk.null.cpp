@@ -101,7 +101,7 @@ static void null_cmd_usage()
 	ublksrv_print_std_opts();
 }
 
-struct ublksrv_tgt_type  null_tgt_type = {
+static const struct ublksrv_tgt_type  null_tgt_type = {
 	.handle_io_async = null_handle_io_async,
 	.usage_for_add = null_cmd_usage,
 	.init_tgt = null_init_tgt,

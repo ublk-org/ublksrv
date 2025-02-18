@@ -999,7 +999,7 @@ static void nbd_cmd_usage()
 	printf("\t--host=$HOST [--port=$PORT] | --unix=$UNIX_PATH\n");
 }
 
-struct ublksrv_tgt_type  nbd_tgt_type = {
+static const struct ublksrv_tgt_type  nbd_tgt_type = {
 	.handle_io_async = nbd_handle_io_async,
 	.tgt_io_done = nbd_tgt_io_done,
 	.handle_io_background = nbd_handle_io_bg,
