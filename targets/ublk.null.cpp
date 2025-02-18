@@ -104,10 +104,6 @@ static void cmd_usage(const char *name)
 {
 	printf("ublk.%s add -t %s\n", name, name);
 	ublksrv_print_std_opts();
-
-	printf("\n");
-	printf("ublk.%s restore -t %s\n", name, name);
-	printf("\t-n DEV_ID -v\n");
 }
 
 int main(int argc, char *argv[])

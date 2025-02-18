@@ -496,10 +496,6 @@ static void cmd_usage(const char *name)
 	printf("\t-f backing_file [--buffered_io] [--offset NUM]\n");
 	printf("\t\tdefault is direct IO to backing file\n");
 	printf("\t\toffset skips first NUM sectors on backing file\n");
-
-	printf("\n");
-	printf("ublk.%s restore -t %s\n", name, name);
-	printf("\t-n DEV_ID -v\n");
 }
 
 int main(int argc, char *argv[])
