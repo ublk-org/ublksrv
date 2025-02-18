@@ -18,6 +18,7 @@ NEED_GET_DATA=1
 ublk_run_delete_test()
 {
 	local cnt=$1
+	local file=$2
 
 	export T_TYPE_PARAMS="-t loop -q $QUEUES -u $URING_COMP -g $NEED_GET_DATA -f $file"
 
@@ -35,12 +36,12 @@ ublk_run_delete_test()
 	wait
 }
 
-file=`_create_loop_image "data" 1G`
+TESTF=`_create_loop_image "data" 1G`
 
 for NEED_GET_DATA in `seq 0 1`; do
 	for CNT in `seq $LOOPS`; do
-		ublk_run_delete_test $CNT
+		ublk_run_delete_test $CNT $TESTF
 	done
 done
 
-_remove_loop_image $file
+_remove_loop_image $TESTF
