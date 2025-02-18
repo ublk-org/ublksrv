@@ -93,48 +93,23 @@ static int null_handle_io_async(const struct ublksrv_queue *q,
 	return 0;
 }
 
+static void null_cmd_usage()
+{
+	const char *name = "null";
+
+	printf("ublk.%s add -t %s\n", name, name);
+	ublksrv_print_std_opts();
+}
+
 struct ublksrv_tgt_type  null_tgt_type = {
 	.handle_io_async = null_handle_io_async,
+	.usage_for_add = null_cmd_usage,
 	.init_tgt = null_init_tgt,
 	.name	=  "null",
 };
 
 
-static void cmd_usage(const char *name)
-{
-	printf("ublk.%s add -t %s\n", name, name);
-	ublksrv_print_std_opts();
-}
-
 int main(int argc, char *argv[])
 {
-	struct ublksrv_tgt_type *tgt_type = &null_tgt_type;
-	const char *cmd;
-	int ret;
-
-	setvbuf(stdout, NULL, _IOLBF, 0);
-
-	cmd = ublksrv_pop_cmd(&argc, argv);
-	if (cmd == NULL) {
-		printf("%s: missing command\n", argv[0]);
-		cmd_usage(tgt_type->name);
-		return EXIT_FAILURE;
-	}
-
-	if (!strcmp(cmd, "add"))
-		ret = ublksrv_cmd_dev_add(tgt_type, argc, argv);
-	else if (!strcmp(cmd, "recover"))
-		ret = ublksrv_cmd_dev_user_recover(tgt_type, argc, argv);
-	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
-		cmd_usage(tgt_type->name);
-		ret = EXIT_SUCCESS;
-	} else {
-		fprintf(stderr, "unknown command: %s\n", cmd);
-		cmd_usage(tgt_type->name);
-		ret = EXIT_FAILURE;
-	}
-
-	ublk_ctrl_dbg(UBLK_DBG_CTRL_CMD, "cmd %s: result %d\n", cmd, ret);
-
-	return ret;
+	return ublksrv_tgt_cmd_main(&null_tgt_type, argc, argv);
 }
