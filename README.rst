@@ -274,17 +274,10 @@ Any kind of contribution is welcome!
 
 Development is done over github.
 
+Maillist
+========
 
-Todo:
-====
-
-libublk
-------
-
-Move libublksrv out of ublksrv project, and make it as one standalone repo
-and name it as libublk.
-
-It is planned to do it when ublk driver UAPI changes(feature addition) is slow down.
+A ublk mailing list is available at http://groups.google.com/group/ublk.
 
 License
 =======
