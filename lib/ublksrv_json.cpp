@@ -9,7 +9,7 @@
 /* json device data is stored at this offset of pid file */
 #define JSON_OFFSET   32
 
-#define UBLKSRV_PID_DIR  "/tmp/ublksrvd"
+#define UBLKSRV_PID_DIR  "/run/ublksrvd"
 
 #define  parse_json(j, jbuf)	\
 	try {						\
