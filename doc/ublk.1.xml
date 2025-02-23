@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<refentry id="ublk.1">
+
+<refmeta>
+  <refentrytitle>ublk</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo class="source">ublk</refmiscinfo>
+  <refmiscinfo class="manual">ublk: manage ublk devices</refmiscinfo>
+</refmeta>
+
+
+<refnamediv>
+  <refname>ublk</refname>
+  <refpurpose>Utility to manage ublk devices</refpurpose>
+</refnamediv>
+
+<refsynopsisdiv>
+  <cmdsynopsis>
+    <command>ublk &lt;command&gt; [&lt;command options&gt;] [&lt;type specific options&gt;]</command>
+  </cmdsynopsis>	
+</refsynopsisdiv>
+
+<refsect1><title>DESCRIPTION</title>
+<para>
+  ublk is a utility that allows you to create, recover, view or delete user-space block devices.
+</para>
+<para>
+  ublk by default comes with three different types of devices, null, loop and nbd.
+</para>
+<para>
+  The following commands are supported:
+</para>
+</refsect1>
+
+<refsect1><title>ADD COMMAND</title>
+<para>
+  Command to add a ublk device.
+</para>
+<para>
+  <command>
+    add {-t, --type} TYPE [{-n, --number} DEV_ID] [{-q, --queues} NR_HW_QUEUES]
+    [{-d, --depth} QUEUE_DEPTH]
+    [{-u, --uring_comp} URING_COMP] [{-g, --need-get-data} NEED_GET_DATA]
+    [{-r, --user_recovery} USER_RECOVERY]
+    [{-i, --user_recovery_reissue} USER_RECOVERY_REISSUE]
+    [{-e, --user_recovery_fail_io} USER_RECOVERY_FAIL_IO]
+    [--debug_mask=0x{DBG_MASK}] [--unprivileged]
+    [--usercopy]
+    [&lt;type specific options&gt;]
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>-t, --type</option></term>
+  <listitem>
+    <para>
+      Specifies the type of device to create. The three types of supported
+      devices are null, loop and bnd.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-n, --number</option></term>
+  <listitem>
+    <para>
+      Create a device with this id. The device node will be /dev/ublkb_n_.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-q, --queue</option></term>
+  <listitem>
+    <para>
+      Number of queues to create. Each queue is services by a dedicated child process. Default is 1.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-d, --depth</option></term>
+  <listitem>
+    <para>
+      Maximum queue-depthfor each queue. Default is 4096.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-u, --uring_comp</option></term>
+  <listitem>
+    <para>
+      Force to complete io cmd via io_uring_cmd_complete_in_task so that
+      performance comparison is done easily with using task_work_add.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-g, --need_get_data</option></term>
+  <listitem>
+    <para>
+      User should issue io cmd again for write requests to
+      set io buffer address and copy data from bio vectors
+      to the userspace io buffer.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-r, --user_recovey</option></term>
+  <listitem>
+    <para>
+      Block devices are recoverable if ublk server exits and restarts.
+      Outstanding I/O when ublk server exits is met with errors.
+      I/O issued while there is no ublk server queues.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-i, --user_recovey_reissue</option></term>
+  <listitem>
+    <para>
+      Block devices are recoverable if ublk server exits and restarts
+      Outstanding I/O when ublk server exits is reissued
+      I/O issued while there is no ublk server queues 
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-e, --user_recovey_fail_io</option></term>
+  <listitem>
+    <para>
+      Block devices are recoverable if ublk server exits and restarts
+      Outstanding I/O when ublk server exits is met with errors
+      I/O issued while there is no ublk server is met with errors 
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--debug_mask</option></term>
+  <listitem>
+    <para>
+      Bitmask specifying which debug features to enable.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--unprivileged</option></term>
+  <listitem>
+    <para>
+      Unprivileged user can create /dev/ublkcN and /dev/ublkbN.
+    </para>
+    <para>
+      /dev/ublk-control needs to be available for unprivileged user, and it
+      can be done via udev rule to make all control commands available to
+      unprivileged user. Except for the command of UBLK_CMD_ADD_DEV, all
+      other commands are only allowed for the owner of the specified device.
+    </para>
+    <para>      
+      When userspace sends UBLK_CMD_ADD_DEV, the device pair's owner_uid and
+      owner_gid are stored to ublksrv_ctrl_dev_info by kernel, so far only
+      the current user's uid/gid is stored, that said owner of the created
+      device is always the current user.
+    </para>
+    <para>      
+      We still need udev rule to apply OWNER/GROUP with the stored owner_uid
+      and owner_gid.
+    </para>
+    <para>      
+      Then ublk server can be run as unprivileged user, and /dev/ublkbN can
+      be accessed and managed by its owner represented by owner_uid/owner_gid.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--user_copy</option></term>
+  <listitem>
+    <para>
+      Copy between request and user buffer by pread()/pwrite()
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+  
+<refsect2><title>NULL</title>
+<para>
+  The null device type does not take any extra options.
+</para>
+</refsect2>
+
+<refsect2><title>LOOP</title>
+<para>
+  Extra options for the loop device type:
+</para>
+<para>
+  <command>
+    add -t loop ... {-f, --file} FILE [--buffered_io] [-o, --offset OFFSET]
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>-f, --file</option></term>
+  <listitem>
+    <para>
+      File to use as backing storage for the loop device.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--buffered_io</option></term>
+  <listitem>
+    <para>
+      Use buffered i/o for accessing the backing file. Default is direct i/o.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--offset</option></term>
+  <listitem>
+    <para>
+      Offset skips first NUM sectors on backing file.
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+<para>
+  Example: Create a loop block device
+  <screen format="linespecific">
+    # ublk add -t loop -n 0 -f 10M.raw
+  </screen>
+</para>
+</refsect2>
+
+<refsect2><title>NBD</title>
+<para>
+  Extra options for the nbd (Network Block Device) device type:
+</para>
+<para>
+  <command>
+    add -t nbd ... {--host HOST | --unix UNIX_PATH} --export_name EXP_NAME [--send_zc] [--read_only]
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>--host</option></term>
+  <listitem>
+    <para>
+      Hostname of NBD server.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--host</option></term>
+  <listitem>
+    <para>
+      Hostname of NBD server to use.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--unix</option></term>
+  <listitem>
+    <para>
+      Path to unix domain socket to use to talk to NBD.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--export_name</option></term>
+  <listitem>
+    <para>
+      Name of NBD export.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--send_zc</option></term>
+  <listitem>
+    <para>
+      Use Zero-Copy.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--read_only</option></term>
+  <listitem>
+    <para>
+      Read-only device.
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+</refsect2>
+
+</refsect1>
+
+<refsect1><title>DEL COMMAND</title>
+<para>
+  Command to delete a ublk device.
+</para>
+<para>
+  <command>
+    del {-n, --number} DEV_ID [-a, --all] [--async]
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>-n, --number</option></term>
+  <listitem>
+    <para>
+      Delete the device with this id.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-a, --all</option></term>
+  <listitem>
+    <para>
+      Delete all devices.
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+<para>
+  Example: Deleting a loop block device
+  <screen format="linespecific">
+    # ublk del -n 0
+  </screen>
+</para>
+</refsect1>
+
+<refsect1><title>LIST COMMAND</title>
+<para>
+  List one or all devices and show their configutaion. 
+</para>
+<para>
+  <command>
+    list {-n, --number} DEV_ID [-v, --verbose]
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>-n, --number</option></term>
+  <listitem>
+    <para>
+      List the device with this id. If omitted all devices will be listed
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-v, --verbose</option></term>
+  <listitem>
+    <para>
+      Verbose listing. Include the JSON device arguments in the output.
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+</refsect1>
+
+<refsect1><title>RECOVER COMMAND</title>
+<para>
+  Recover a failed ublk device.
+</para>
+<para>
+  <command>
+    recover {-n, --number} DEV_ID
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>-n, --number</option></term>
+  <listitem>
+    <para>
+      Device to recover.
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+</refsect1>
+
+<refsect1><title>FEATURES COMMAND</title>
+<para>
+  Show supported features for the ublk driver.
+</para>
+<para>
+  <command>
+    features
+  </command>
+</para>
+</refsect1>
+
+<refsect1><title>HELP COMMAND</title>
+<para>
+  Show generic ot type specific help.
+</para>
+<para>
+  <command>
+    help [{-t, --type} TYPE]
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>-t, --type</option></term>
+  <listitem>
+    <para>
+      Show help page. It -t is specified, show help page for the specific device type.
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+</refsect1>
+
+<refsect1><title>VERSION</title>
+<para>
+  Show help page..
+</para>
+<para>
+  <command>
+    {-v, --version}
+  </command>
+</para>
+</refsect1>
+
+<refsect1><title>SEE ALSO</title>
+<para>
+  <ulink url="http://github.com/ublk-org/ublksrv"/>
+</para>
+</refsect1>
+
+</refentry>

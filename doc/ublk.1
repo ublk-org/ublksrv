@@ -1,0 +1,263 @@
+'\" t
+.\"     Title: ublk
+.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
+.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+.\"      Date: 02/24/2025
+.\"    Manual: ublk: manage ublk devices
+.\"    Source: ublk
+.\"  Language: English
+.\"
+.TH "UBLK" "1" "02/24/2025" "ublk" "ublk: manage ublk devices"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+ublk \- Utility to manage ublk devices
+.SH "SYNOPSIS"
+.HP \w'\fBublk\ <command>\ [<command\ options>]\ [<type\ specific\ options>]\fR\ 'u
+\fBublk <command> [<command options>] [<type specific options>]\fR
+.SH "DESCRIPTION"
+.PP
+ublk is a utility that allows you to create, recover, view or delete user\-space block devices\&.
+.PP
+ublk by default comes with three different types of devices, null, loop and nbd\&.
+.PP
+The following commands are supported:
+.SH "ADD COMMAND"
+.PP
+Command to add a ublk device\&.
+.PP
+\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} USER_RECOVERY] [{\-i, \-\-user_recovery_reissue} USER_RECOVERY_REISSUE] [{\-e, \-\-user_recovery_fail_io} USER_RECOVERY_FAIL_IO] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [<type specific options>] \fR
+.PP
+\fB\-t, \-\-type\fR
+.RS 4
+Specifies the type of device to create\&. The three types of supported devices are null, loop and bnd\&.
+.RE
+.PP
+\fB\-n, \-\-number\fR
+.RS 4
+Create a device with this id\&. The device node will be /dev/ublkb_n_\&.
+.RE
+.PP
+\fB\-q, \-\-queue\fR
+.RS 4
+Number of queues to create\&. Each queue is services by a dedicated child process\&. Default is 1\&.
+.RE
+.PP
+\fB\-d, \-\-depth\fR
+.RS 4
+Maximum queue\-depthfor each queue\&. Default is 4096\&.
+.RE
+.PP
+\fB\-u, \-\-uring_comp\fR
+.RS 4
+Force to complete io cmd via io_uring_cmd_complete_in_task so that performance comparison is done easily with using task_work_add\&.
+.RE
+.PP
+\fB\-g, \-\-need_get_data\fR
+.RS 4
+User should issue io cmd again for write requests to set io buffer address and copy data from bio vectors to the userspace io buffer\&.
+.RE
+.PP
+\fB\-r, \-\-user_recovey\fR
+.RS 4
+Block devices are recoverable if ublk server exits and restarts\&. Outstanding I/O when ublk server exits is met with errors\&. I/O issued while there is no ublk server queues\&.
+.RE
+.PP
+\fB\-i, \-\-user_recovey_reissue\fR
+.RS 4
+Block devices are recoverable if ublk server exits and restarts Outstanding I/O when ublk server exits is reissued I/O issued while there is no ublk server queues
+.RE
+.PP
+\fB\-e, \-\-user_recovey_fail_io\fR
+.RS 4
+Block devices are recoverable if ublk server exits and restarts Outstanding I/O when ublk server exits is met with errors I/O issued while there is no ublk server is met with errors
+.RE
+.PP
+\fB\-\-debug_mask\fR
+.RS 4
+Bitmask specifying which debug features to enable\&.
+.RE
+.PP
+\fB\-\-unprivileged\fR
+.RS 4
+Unprivileged user can create /dev/ublkcN and /dev/ublkbN\&.
+.sp
+/dev/ublk\-control needs to be available for unprivileged user, and it can be done via udev rule to make all control commands available to unprivileged user\&. Except for the command of UBLK_CMD_ADD_DEV, all other commands are only allowed for the owner of the specified device\&.
+.sp
+When userspace sends UBLK_CMD_ADD_DEV, the device pair\*(Aqs owner_uid and owner_gid are stored to ublksrv_ctrl_dev_info by kernel, so far only the current user\*(Aqs uid/gid is stored, that said owner of the created device is always the current user\&.
+.sp
+We still need udev rule to apply OWNER/GROUP with the stored owner_uid and owner_gid\&.
+.sp
+Then ublk server can be run as unprivileged user, and /dev/ublkbN can be accessed and managed by its owner represented by owner_uid/owner_gid\&.
+.RE
+.PP
+\fB\-\-user_copy\fR
+.RS 4
+Copy between request and user buffer by pread()/pwrite()
+.RE
+.SS "NULL"
+.PP
+The null device type does not take any extra options\&.
+.SS "LOOP"
+.PP
+Extra options for the loop device type:
+.PP
+\fB add \-t loop \&.\&.\&. {\-f, \-\-file} FILE [\-\-buffered_io] [\-o, \-\-offset OFFSET] \fR
+.PP
+\fB\-f, \-\-file\fR
+.RS 4
+File to use as backing storage for the loop device\&.
+.RE
+.PP
+\fB\-\-buffered_io\fR
+.RS 4
+Use buffered i/o for accessing the backing file\&. Default is direct i/o\&.
+.RE
+.PP
+\fB\-\-offset\fR
+.RS 4
+Offset skips first NUM sectors on backing file\&.
+.RE
+.PP
+Example: Create a loop block device
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+    # ublk add \-t loop \-n 0 \-f 10M\&.raw
+  
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+.SS "NBD"
+.PP
+Extra options for the nbd (Network Block Device) device type:
+.PP
+\fB add \-t nbd \&.\&.\&. {\-\-host HOST | \-\-unix UNIX_PATH} \-\-export_name EXP_NAME [\-\-send_zc] [\-\-read_only] \fR
+.PP
+\fB\-\-host\fR
+.RS 4
+Hostname of NBD server\&.
+.RE
+.PP
+\fB\-\-host\fR
+.RS 4
+Hostname of NBD server to use\&.
+.RE
+.PP
+\fB\-\-unix\fR
+.RS 4
+Path to unix domain socket to use to talk to NBD\&.
+.RE
+.PP
+\fB\-\-export_name\fR
+.RS 4
+Name of NBD export\&.
+.RE
+.PP
+\fB\-\-send_zc\fR
+.RS 4
+Use Zero\-Copy\&.
+.RE
+.PP
+\fB\-\-read_only\fR
+.RS 4
+Read\-only device\&.
+.RE
+.SH "DEL COMMAND"
+.PP
+Command to delete a ublk device\&.
+.PP
+\fB del {\-n, \-\-number} DEV_ID [\-a, \-\-all] [\-\-async] \fR
+.PP
+\fB\-n, \-\-number\fR
+.RS 4
+Delete the device with this id\&.
+.RE
+.PP
+\fB\-a, \-\-all\fR
+.RS 4
+Delete all devices\&.
+.RE
+.PP
+Example: Deleting a loop block device
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+    # ublk del \-n 0
+  
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+.SH "LIST COMMAND"
+.PP
+List one or all devices and show their configutaion\&.
+.PP
+\fB list {\-n, \-\-number} DEV_ID [\-v, \-\-verbose] \fR
+.PP
+\fB\-n, \-\-number\fR
+.RS 4
+List the device with this id\&. If omitted all devices will be listed
+.RE
+.PP
+\fB\-v, \-\-verbose\fR
+.RS 4
+Verbose listing\&. Include the JSON device arguments in the output\&.
+.RE
+.SH "RECOVER COMMAND"
+.PP
+Recover a failed ublk device\&.
+.PP
+\fB recover {\-n, \-\-number} DEV_ID \fR
+.PP
+\fB\-n, \-\-number\fR
+.RS 4
+Device to recover\&.
+.RE
+.SH "FEATURES COMMAND"
+.PP
+Show supported features for the ublk driver\&.
+.PP
+\fB features \fR
+.SH "HELP COMMAND"
+.PP
+Show generic ot type specific help\&.
+.PP
+\fB help [{\-t, \-\-type} TYPE] \fR
+.PP
+\fB\-t, \-\-type\fR
+.RS 4
+Show help page\&. It \-t is specified, show help page for the specific device type\&.
+.RE
+.SH "VERSION"
+.PP
+Show help page\&.\&.
+.PP
+\fB {\-v, \-\-version} \fR
+.SH "SEE ALSO"
+.PP
+\m[blue]\fB\%http://github.com/ublk-org/ublksrv\fR\m[]

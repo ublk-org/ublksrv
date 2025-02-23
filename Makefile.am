@@ -7,7 +7,7 @@ EXTRA_DIST = \
 	.gitignore \
 	LICENSE
 
-SUBDIRS = include lib tests
+SUBDIRS = doc include lib tests
 
 AM_CXXFLAGS = -std=c++20 -Wunused
 
