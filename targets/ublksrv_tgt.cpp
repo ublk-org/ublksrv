@@ -495,7 +495,6 @@ int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int *efd, int argc, ch
 		{ "number",		1,	NULL, 'n' },
 		{ "queues",		1,	NULL, 'q' },
 		{ "depth",		1,	NULL, 'd' },
-		{ "zero_copy",		1,	NULL, 'z' },
 		{ "uring_comp",		1,	NULL, 'u' },
 		{ "need_get_data",	1,	NULL, 'g' },
 		{ "user_recovery",	1,	NULL, 'r'},
@@ -515,7 +514,7 @@ int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int *efd, int argc, ch
 
 	mkpath(data->run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
