@@ -296,10 +296,16 @@ static void ublksrv_submit_fetch_commands(struct _ublksrv_queue *q)
 	__ublksrv_queue_event(q);
 }
 
-static int ublksrv_queue_is_done(struct _ublksrv_queue *q)
+static inline int __ublksrv_queue_is_done(const struct _ublksrv_queue *q)
 {
 	return (q->state & UBLKSRV_QUEUE_STOPPING) &&
 		!io_uring_sq_ready(&q->ring);
+}
+
+int ublksrv_queue_is_done(const struct ublksrv_queue *tq)
+{
+	const struct _ublksrv_queue *q = tq_to_local(tq);
+	return __ublksrv_queue_is_done(q);
 }
 
 /* used for allocating zero copy vma space */
@@ -937,7 +943,7 @@ int ublksrv_process_io(const struct ublksrv_queue *tq)
 				q->cmd_inflight, q->tgt_io_inflight,
 				(q->state & UBLKSRV_QUEUE_STOPPING));
 
-	if (ublksrv_queue_is_done(q))
+	if (__ublksrv_queue_is_done(q))
 		return -ENODEV;
 
 	ret = io_uring_submit_and_wait_timeout(&q->ring, &cqe, 1, tsp, NULL);
