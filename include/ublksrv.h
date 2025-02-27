@@ -916,6 +916,16 @@ extern void *ublksrv_queue_get_io_buf(const struct ublksrv_queue *q, int tag);
 extern unsigned int ublksrv_queue_state(const struct ublksrv_queue *q);
 
 /**
+ * Return if the queue is done or not
+ *
+ * Used to determine if the queue has been stopped.
+ *
+ * @param q the ublksrv queue instance
+ * @return queue current state
+ */
+extern int ublksrv_queue_is_done(const struct ublksrv_queue *q);
+
+/**
  * Allocate and initialize ublksrv queue instance
  *
  * @param dev the ublksrv device instance
