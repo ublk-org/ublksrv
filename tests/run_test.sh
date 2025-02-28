@@ -4,7 +4,11 @@
 DIR=$(cd "$(dirname "$0")";pwd)
 cd $DIR
 
-#. $DIR/common/fio_common
+# try to populate 'lt-ublk.{target}' first because 'lt-' prefix for
+# 'ulbk.{target}' may be required
+for UBLKT in `ls $DIR/../ublk.*`; do
+	$UBLKT help  > /dev/null 2>&1
+done
 
 : ${UBLK:=${DIR}/../ublk}
 if ! command -v "${UBLK}" &> /dev/null; then
