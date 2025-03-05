@@ -571,7 +571,7 @@ void ublksrv_print_std_opts(void)
 	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n\n");
 }
 
-int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
+static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;

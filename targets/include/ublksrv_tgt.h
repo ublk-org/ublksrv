@@ -176,7 +176,6 @@ struct ublksrv_queue_info {
 
 int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[]);
 void ublksrv_print_std_opts(void);
-int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
