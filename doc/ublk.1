@@ -2,12 +2,12 @@
 .\"     Title: ublk
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 02/24/2025
+.\"      Date: 03/05/2025
 .\"    Manual: ublk: manage ublk devices
 .\"    Source: ublk
 .\"  Language: English
 .\"
-.TH "UBLK" "1" "02/24/2025" "ublk" "ublk: manage ublk devices"
+.TH "UBLK" "1" "03/05/2025" "ublk" "ublk: manage ublk devices"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -43,7 +43,7 @@ The following commands are supported:
 .PP
 Command to add a ublk device\&.
 .PP
-\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} USER_RECOVERY] [{\-i, \-\-user_recovery_reissue} USER_RECOVERY_REISSUE] [{\-e, \-\-user_recovery_fail_io} USER_RECOVERY_FAIL_IO] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [<type specific options>] \fR
+\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} {0|1}] [{\-i, \-\-user_recovery_reissue} {0|1}] [{\-e, \-\-user_recovery_fail_io} {0|1}] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [<type specific options>] \fR
 .PP
 \fB\-t, \-\-type\fR
 .RS 4
@@ -258,6 +258,40 @@ Show help page\&. It \-t is specified, show help page for the specific device ty
 Show help page\&.\&.
 .PP
 \fB {\-v, \-\-version} \fR
+.SH "RECOVERY"
+.PP
+There are three arguments that control how ublk will behave in case of a failure, such as crashing\&. The default behavior is no recovery and the device will fail and be removed once the target exists\&.
+.PP
+To enable recovery mode set "\-\-recovery 1" on the command line\&. Then instead of removing the device upon failure it will instead become inactive in a quiesced state\&.
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+dev id 0: nr_hw_queues 1 queue_depth 128 block size 4096 dev_capacity 20480
+    max rq size 524288 daemon pid 1239110 state QUIESCED
+    flags 0x4a [ URING_CMD_COMP_IN_TASK RECOVERY CMD_IOCTL_ENCODE ]
+    ublkc: 511:0 ublkb: 259:4 owner: 0:0
+    queue 0: tid 1239112 affinity(0 1 2 3 4 5 6 7 )
+    target {"backing_file":"10M","dev_size":10485760,"direct_io":1,"name":"loop","offset":0,"type":0}
+  
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+In this state the block device still exists but no I/O can be performed\&.
+.PP
+To recover a QUIESCED device you can use the recover command:
+\fB ublk recover \-n DEV_ID \fR
+.PP
+There are two additional flags that control how ublk will handle I/O that were in flight when a device is recovered\&.
+.SS "\-\-user_recovery_reissue 1"
+.PP
+When the device is recovered ublk will reissue any I/O that were in flight\&.
+.SS "\-\-user_recovery_fail_io 1"
+.PP
+When the device is recovered ublk will fail all I/O and return an error back to the application\&.
 .SH "SEE ALSO"
 .PP
 \m[blue]\fB\%http://github.com/ublk-org/ublksrv\fR\m[]
