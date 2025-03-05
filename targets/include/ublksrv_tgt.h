@@ -166,7 +166,6 @@ static inline void ublk_get_sqe_pair(struct io_uring *r,
 		*sqe2 = io_uring_get_sqe(r);
 }
 
-int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev);
 int ublksrv_tgt_send_dev_event(int evtfd, int dev_id);
 
 struct ublksrv_queue_info {
