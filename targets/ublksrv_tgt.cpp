@@ -724,7 +724,7 @@ static int __cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 	return ret;
 }
 
-int ublksrv_cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
+static int ublksrv_cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
 {
 	static const struct option longopts[] = {
 		{ "number",		0,	NULL, 'n' },
