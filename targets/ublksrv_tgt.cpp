@@ -427,7 +427,7 @@ void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 	}
 }
 
-int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
+static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
