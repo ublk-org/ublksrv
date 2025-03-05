@@ -386,26 +386,6 @@ out:
 	return ret;
 }
 
-/* Not called from ublksrv daemon */
-int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
-{
-	int daemon_pid, cnt = 0;
-
-	/* wait until daemon is exited, or timeout after 3 seconds */
-	do {
-		daemon_pid = ublksrv_get_io_daemon_pid(ctrl_dev, false);
-		if (daemon_pid > 0) {
-			usleep(100000);
-			cnt++;
-		}
-	} while (daemon_pid > 0 && cnt < 30);
-
-	if (daemon_pid > 0)
-		return -1;
-
-	return 0;
-}
-
 /* Wait until ublk device is setup by udev */
 static void ublksrv_check_dev(const struct ublksrv_ctrl_dev_info *info)
 {
