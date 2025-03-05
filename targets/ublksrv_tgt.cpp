@@ -251,6 +251,27 @@ int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
 	return 0;
 }
 
+static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
+				   const char *jbuf)
+{
+	const struct ublksrv_ctrl_dev_info *info =
+		ublksrv_ctrl_get_dev_info(cdev);
+	int dev_id = info->dev_id;
+	struct ublk_params p;
+	int ret;
+
+	ret = ublksrv_json_read_params(&p, jbuf);
+	if (ret >= 0) {
+		ret = ublksrv_ctrl_set_params(cdev, &p);
+		if (ret)
+			fprintf(stderr, "set param for dev %d failed %d\n",
+					dev_id, ret);
+	} else {
+		fprintf(stderr, "params not found for dev %d failed %d\n",
+				dev_id, ret);
+	}
+}
+
 static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 		const struct ublksrv_dev *dev, int evtfd, bool recover)
 {
@@ -403,27 +424,6 @@ static void ublksrv_check_dev(const struct ublksrv_ctrl_dev_info *info)
 
 		usleep(100000);
 		wait += 100000;
-	}
-}
-
-void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
-			    const char *jbuf)
-{
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(cdev);
-	int dev_id = info->dev_id;
-	struct ublk_params p;
-	int ret;
-
-	ret = ublksrv_json_read_params(&p, jbuf);
-	if (ret >= 0) {
-		ret = ublksrv_ctrl_set_params(cdev, &p);
-		if (ret)
-			fprintf(stderr, "set param for dev %d failed %d\n",
-					dev_id, ret);
-	} else {
-		fprintf(stderr, "params not found for dev %d failed %d\n",
-				dev_id, ret);
 	}
 }
 
