@@ -649,6 +649,22 @@ extern const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev 
 extern void ublksrv_dev_deinit(const struct ublksrv_dev *dev);
 
 /**
+ * Parses the standard command line options used when adding a device
+ * and populates the ublksrv_dev_data structure
+ *
+ * @param data the ublksrv device to populate from the command line arguments.
+ * @param efd whether the command line arguments specified an eventfd to be used
+ * @param argc number of arguments
+ * @param argv argument list
+ */
+extern int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[]);
+
+/**
+ * Prints the standard command line options that all targets support
+ */
+extern void ublksrv_print_std_opts(void);
+
+/**
  * Return the associated ublksrv control device instance
  *
  * @param dev the ublksrv device instance
