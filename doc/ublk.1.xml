@@ -41,9 +41,9 @@
     add {-t, --type} TYPE [{-n, --number} DEV_ID] [{-q, --queues} NR_HW_QUEUES]
     [{-d, --depth} QUEUE_DEPTH]
     [{-u, --uring_comp} URING_COMP] [{-g, --need-get-data} NEED_GET_DATA]
-    [{-r, --user_recovery} USER_RECOVERY]
-    [{-i, --user_recovery_reissue} USER_RECOVERY_REISSUE]
-    [{-e, --user_recovery_fail_io} USER_RECOVERY_FAIL_IO]
+    [{-r, --user_recovery} {0|1}]
+    [{-i, --user_recovery_reissue} {0|1}]
+    [{-e, --user_recovery_fail_io} {0|1}]
     [--debug_mask=0x{DBG_MASK}] [--unprivileged]
     [--usercopy]
     [&lt;type specific options&gt;]
@@ -389,6 +389,47 @@
     {-v, --version}
   </command>
 </para>
+</refsect1>
+
+<refsect1><title>Recovery</title>
+<para>
+  There are three arguments that control how ublk will behave in case of a failure,
+  such as crashing. The default behavior is no recovery and the device will fail and be removed
+  once the target exists.
+</para>
+<para>
+  To enable recovery mode set "--recovery 1" on the command line. Then instead of removing the device
+  upon failure it will instead become inactive in a quiesced state.
+  <screen format="linespecific">
+dev id 0: nr_hw_queues 1 queue_depth 128 block size 4096 dev_capacity 20480
+    max rq size 524288 daemon pid 1239110 state QUIESCED
+    flags 0x4a [ URING_CMD_COMP_IN_TASK RECOVERY CMD_IOCTL_ENCODE ]
+    ublkc: 511:0 ublkb: 259:4 owner: 0:0
+    queue 0: tid 1239112 affinity(0 1 2 3 4 5 6 7 )
+    target {"backing_file":"10M","dev_size":10485760,"direct_io":1,"name":"loop","offset":0,"type":0}
+  </screen>
+  In this state the block device still exists but no I/O can be performed.
+</para>
+<para>
+  To recover a QUIESCED device you can use the recover command:
+  <command>
+    ublk recover -n DEV_ID
+  </command>
+</para>
+<para>
+  There are two additional flags that control how ublk will handle I/O that were in flight when
+  a device is recovered.
+</para>
+<refsect2><title>--user_recovery_reissue 1</title>
+<para>
+  When the device is recovered ublk will reissue any I/O that were in flight.
+</para>
+</refsect2>
+<refsect2><title>--user_recovery_fail_io 1</title>
+<para>
+  When the device is recovered ublk will fail all I/O and return an error back to the application.
+</para>
+</refsect2>
 </refsect1>
 
 <refsect1><title>SEE ALSO</title>
