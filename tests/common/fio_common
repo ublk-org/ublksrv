@@ -198,7 +198,7 @@ __ublk_get_dev_state() {
 	local dev_id=`__ublk_dev_id $dev`
 
 	eval $UBLK list -n ${dev_id} > ${UBLK_TMP}
-	state=`cat ${UBLK_TMP} | grep "state" | awk '{print $11}'`
+	state=`cat ${UBLK_TMP} | grep "state" | awk '{print $9}'`
 	echo $state
 }
 
