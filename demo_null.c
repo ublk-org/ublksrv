@@ -154,7 +154,7 @@ static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 	return ret;
 }
 
-static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
+static int null_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int ret;
 
@@ -274,7 +274,7 @@ int main(int argc, char *argv[])
 		goto fail;
 	}
 
-	ret = ublksrv_start_daemon(dev);
+	ret = null_start_daemon(dev);
 	if (ret < 0) {
 		error(0, -ret, "can't start daemon");
 		goto fail_del_dev;

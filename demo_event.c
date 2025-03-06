@@ -450,7 +450,7 @@ fail:
 	return ret;
 }
 
-static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
+static int event_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	if (ublksrv_ctrl_get_affinity(ctrl_dev) < 0)
 		return -1;
@@ -585,7 +585,7 @@ int main(int argc, char *argv[])
 		goto fail;
 	}
 
-	ret = ublksrv_start_daemon(dev);
+	ret = event_start_daemon(dev);
 	if (ret < 0) {
 		error(0, -ret, "can't start daemon");
 		goto fail_del_dev;
