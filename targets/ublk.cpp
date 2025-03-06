@@ -353,6 +353,24 @@ static void cmd_usage(const char *cmd)
 	printf("%s -h [--help]\n", cmd);
 }
 
+static void args_parse_number(struct ublksrv_dev_data *data, int argc, char *argv[])
+{
+	static const struct option longopts[] = {
+		{ "number",		1,	NULL, 'n' },
+		{ NULL }
+	};
+	int opt, option_index = 0;
+
+	while ((opt = getopt_long(argc, argv, "-:n:",
+				  longopts, &option_index)) != -1) {
+		switch (opt) {
+		case 'n':
+			data->dev_id = strtol(optarg, NULL, 10);
+			break;
+		}
+	}
+}
+
 static int cmd_dev_add(int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
@@ -382,14 +400,16 @@ static int cmd_dev_help(int argc, char *argv[])
 
 static int cmd_dev_recover(int argc, char *argv[])
 {
-	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
 	char tgt_type[32] = {0};
 	char *buf = NULL;
+	struct ublksrv_dev_data data = {
+	  .dev_id = -1,
+	};
 	int ret;
 
-	ublksrv_parse_std_opts(&data, NULL, argc, argv);
-  
+	args_parse_number(&data, argc, argv);
+
 	if (data.dev_id < 0) {
 		fprintf(stderr, "wrong dev_id provided for recover\n");
 		return EXIT_FAILURE;
