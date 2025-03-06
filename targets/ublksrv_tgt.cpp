@@ -459,7 +459,7 @@ static int mkpath(const char *dir)
  * This function parses all the standard options that all targets support
  * and populates ublksrv_dev_data.
  */
-int ublksrv_parse_std_opts(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
+static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
 {
 	int opt;
 	int uring_comp = 0;
@@ -577,7 +577,7 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	struct ublksrv_ctrl_dev *dev;
 	int ret, evtfd = -1;
 
-	ublksrv_parse_std_opts(&data, &evtfd, argc, argv);
+	ublksrv_parse_add_opts(&data, &evtfd, argc, argv);
 
 	if (data.tgt_type && strcmp(data.tgt_type, tgt_type->name)) {
 		fprintf(stderr, "Wrong tgt_type specified\n");
