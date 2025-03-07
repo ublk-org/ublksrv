@@ -117,15 +117,15 @@ static int __ublksrv_ctrl_cmd(struct ublksrv_ctrl_dev *dev,
 
 	ublksrv_ctrl_init_cmd(dev, sqe, data);
 
-	ret = io_uring_submit(&dev->ring);
+	do {
+		ret = io_uring_submit_and_wait(&dev->ring, 1);
+	} while (ret == -EINTR);
 	if (ret < 0) {
-		fprintf(stderr, "uring submit ret %d\n", ret);
+		fprintf(stderr, "uring submit_and_wait ret %d\n", ret);
 		return ret;
 	}
 
-	do {
-		ret = io_uring_wait_cqe(&dev->ring, &cqe);
-	} while (ret == -EINTR);
+	ret = io_uring_peek_cqe(&dev->ring, &cqe);
 	if (ret < 0) {
 		fprintf(stderr, "wait cqe: %s\n", strerror(-ret));
 		return ret;
