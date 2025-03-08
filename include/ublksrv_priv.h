@@ -18,6 +18,7 @@
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 #include <sys/poll.h>
+#include <semaphore.h>
 
 #include "ublk_cmd.h"
 #include "ublksrv_utils.h"
@@ -37,12 +38,25 @@
 extern "C" {
 #endif
 
+struct ublksrv_tgt_jbuf {
+	pthread_mutex_t lock;
+	int jbuf_size;
+	char *jbuf;
+};
+
+struct ublksrv_ctrl_data {
+	struct ublksrv_tgt_jbuf jbuf;
+	sem_t queue_sem;
+	bool recover;
+};
+
 struct ublksrv_ctrl_dev {
 	struct io_uring ring;
 
 	int ctrl_fd;
 	unsigned bs_shift;
 	struct ublksrv_ctrl_dev_info  dev_info;
+	struct ublksrv_ctrl_data *data;
 
 	const char *tgt_type;
 	const struct ublksrv_tgt_type *tgt_ops;

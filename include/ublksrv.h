@@ -555,9 +555,6 @@ extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
  * @param dev the ublksrv control device instance
  *
  * Obsolete!!!
- *
- * Target code can maintain json buffer by its private data via
- * ublksrv_ctrl_get_priv_data() and ublksrv_ctrl_set_priv_data()
  */
 extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev);
 
@@ -567,9 +564,6 @@ extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev 
  * @param dev the ublksrv control device instance
  *
  * Obsolete!!!
- *
- * Target code can maintain recovering status by its private data via
- * ublksrv_ctrl_get_priv_data() and ublksrv_ctrl_set_priv_data()
  */
 extern bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev);
 
