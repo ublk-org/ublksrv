@@ -18,7 +18,6 @@
 #include <coroutine>
 #include <iostream>
 #include <type_traits>
-#include <semaphore.h>
 
 #define UBLKSRV_INTERNAL_H_
 #include "ublksrv_priv.h"
@@ -198,11 +197,6 @@ char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
 #define UBLK_TGT_MAX_JBUF_SZ 8192
-struct ublksrv_tgt_jbuf {
-	pthread_mutex_t lock;
-	int jbuf_size;
-	char *jbuf;
-};
 
 static inline bool tgt_realloc_jbuf(struct ublksrv_tgt_jbuf *j)
 {
@@ -240,17 +234,9 @@ static inline void ublksrv_tgt_jbuf_init(struct ublksrv_ctrl_dev *cdev,
 
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
 
-struct ublksrv_ctrl_data {
-	struct ublksrv_tgt_jbuf jbuf;
-	sem_t queue_sem;
-	bool recover;
-};
-
 static inline struct ublksrv_ctrl_data *ublksrv_get_ctrl_data(const struct ublksrv_ctrl_dev *cdev)
 {
-	void *data = ublksrv_ctrl_get_priv_data(cdev);
-
-	return (struct ublksrv_ctrl_data *)data;
+	return cdev->data;
 }
 
 static inline bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev)

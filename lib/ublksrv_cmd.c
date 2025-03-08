@@ -142,6 +142,7 @@ void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev)
 	close(dev->ring.ring_fd);
 	close(dev->ctrl_fd);
 	free(dev->queues_cpuset);
+	free(dev->data);
 	free(dev);
 }
 
@@ -179,6 +180,13 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 	ret = io_uring_queue_init_params(32, &dev->ring, &p);
 	if (ret < 0) {
 		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
+		free(dev);
+		return NULL;
+	}
+
+	dev->data = calloc(1, sizeof(struct ublksrv_ctrl_data));
+	if (dev->data == NULL) {
+		fprintf(stderr, "failed to allocate dev data\n");
 		free(dev);
 		return NULL;
 	}
