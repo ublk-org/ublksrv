@@ -20,6 +20,9 @@
 #include <type_traits>
 #include <semaphore.h>
 
+#define UBLKSRV_INTERNAL_H_
+#include "ublksrv_priv.h"
+
 #include "ublksrv_utils.h"
 #include "ublksrv.h"
 
