@@ -399,12 +399,20 @@ static inline __u64 ublk_pos(__u16 q_id, __u16 tag, __u32 offset)
 extern void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev);
 
 /**
- * Allocate and init one control device
+ * Allocate and init one control device for normal use
  *
  * @param data data for allocating & initializing this control device
  *
  */
 extern struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data);
+
+/**
+ * Allocate and init one control device for recovery use
+ *
+ * @param data data for allocating & initializing this control device
+ *
+ */
+extern struct ublksrv_ctrl_dev *ublksrv_ctrl_recover_init(struct ublksrv_dev_data *data);
 
 /**
  * Retrieve and store each queue's cpu affinity info into private data of the

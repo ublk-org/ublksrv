@@ -5,19 +5,6 @@
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
-static void ublksrv_ctrl_data_init(struct ublksrv_ctrl_dev *cdev,
-		bool recover)
-{
-	ublksrv_tgt_jbuf_init(cdev, &cdev->data->jbuf, recover);
-	sem_init(&cdev->data->queue_sem, 0, 0);
-	cdev->data->recover = recover;
-}
-
-static void ublksrv_ctrl_data_exit(struct ublksrv_ctrl_dev *cdev)
-{
-	ublksrv_tgt_jbuf_exit(&cdev->data->jbuf);
-}
-
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
 {
 	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
@@ -326,8 +313,6 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, 
 	struct ublksrv_queue_info *info_array;
 	int i, ret = -EINVAL;
 
-	ublksrv_ctrl_data_init(ctrl_dev, recover);
-
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
 
@@ -376,7 +361,6 @@ out:
 	if (ret)
 		ublksrv_ctrl_del_dev(ctrl_dev);
 	ublk_log("end ublksrv io daemon");
-	ublksrv_ctrl_data_exit(ctrl_dev);
 	closelog();
 
 	return ret;
@@ -656,7 +640,7 @@ static int __cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 	int ret;
 	unsigned elapsed = 0;
 
-	dev = ublksrv_ctrl_init(&data);
+	dev = ublksrv_ctrl_recover_init(&data);
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failure dev %d\n", number);
 		ret = -EOPNOTSUPP;
