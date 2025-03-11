@@ -10,6 +10,10 @@ static int print_dev_owner_id(int number)
 		.dev_id = number,
 	};
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "can't init dev %d\n", data.dev_id);
+		return -EOPNOTSUPP;
+	}
 	int ret = ublksrv_ctrl_get_info(dev);
 
 	if (ret >= 0) {

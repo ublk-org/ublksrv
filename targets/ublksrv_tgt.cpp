@@ -595,7 +595,8 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "can't init dev %d\n", data.dev_id);
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		goto fail_send_event;
 	}
 
 	ret = ublksrv_ctrl_add_dev(dev);
@@ -623,7 +624,7 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	ublksrv_ctrl_del_dev(dev);
  fail:
 	ublksrv_ctrl_deinit(dev);
-
+ fail_send_event:
 	ublksrv_tgt_send_dev_event(evtfd, -1);
 
 	return ret;

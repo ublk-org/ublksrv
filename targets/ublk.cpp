@@ -3,6 +3,7 @@
 #include "config.h"
 #include "ublksrv_tgt.h"
 #include <sys/eventfd.h>
+#include <sys/wait.h>
 
 static int list_one_dev(int number, bool log, bool verbose);
 
@@ -63,12 +64,7 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 
 	if (!daemon) {
 exec:
-		if (execve(fp, nargv, nenv) < 0) {
-			fprintf(stderr, "Failed to execve() %s. %s\n", fp, strerror(errno));
-			if (evtfd >= 0)
-				ublksrv_tgt_send_dev_event(evtfd, -1);
-			return errno;
-		}
+		return execve(fp, nargv, nenv);
 	}
 
 	setsid();
@@ -76,7 +72,12 @@ exec:
 	if (res == 0)
 		goto exec;
 	if (res > 0) {
-		uint64_t id;
+		int wstatus = 0;
+		int wpid = waitpid(res, &wstatus, 0);
+		if (wpid == -1) {
+			return -1;
+		}
+		int id = WEXITSTATUS(wstatus);
 
 		res = read(evtfd, &id, sizeof(id));
 		close(evtfd);
@@ -214,6 +215,10 @@ static int list_one_dev(int number, bool log, bool verbose)
 		.run_dir = ublksrv_get_pid_dir(),
 	};
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "can't init dev %d\n", data.dev_id);
+		return -EOPNOTSUPP;
+	}
 	int ret;
 
 	if (!dev) {
@@ -288,6 +293,10 @@ static int cmd_dev_get_features(int argc, char *argv[])
 		.run_dir = ublksrv_get_pid_dir(),
 	};
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "can't init dev %d\n", data.dev_id);
+		return -EOPNOTSUPP;
+	}
 	__u64 features = 0;
 	int ret;
 	static const char *feat_map[] = {
@@ -380,7 +389,7 @@ static int cmd_dev_add(int argc, char *argv[])
 	struct ublksrv_dev_data data = {0};
 
 	args_parse_number_type(&data, argc, argv);
-  
+
 	if (data.tgt_type == NULL) {
 		fprintf(stderr, "no dev type specified\n");
 		return -EINVAL;
@@ -393,7 +402,7 @@ static int cmd_dev_help(int argc, char *argv[])
 	struct ublksrv_dev_data data = {0};
 
 	args_parse_number_type(&data, argc, argv);
-  
+
 	if (data.tgt_type == NULL) {
 		cmd_usage("ublk");
 		return EXIT_SUCCESS;
