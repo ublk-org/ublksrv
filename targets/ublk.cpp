@@ -214,6 +214,10 @@ static int list_one_dev(int number, bool log, bool verbose)
 		.run_dir = ublksrv_get_pid_dir(),
 	};
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "can't init dev %d\n", data.dev_id);
+		return -EOPNOTSUPP;
+	}
 	int ret;
 
 	if (!dev) {
@@ -288,6 +292,10 @@ static int cmd_dev_get_features(int argc, char *argv[])
 		.run_dir = ublksrv_get_pid_dir(),
 	};
 	struct ublksrv_ctrl_dev *dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "can't init dev %d\n", data.dev_id);
+		return -EOPNOTSUPP;
+	}
 	__u64 features = 0;
 	int ret;
 	static const char *feat_map[] = {
