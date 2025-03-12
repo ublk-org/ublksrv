@@ -730,6 +730,8 @@ extern int ublksrv_json_read_dev_info(const char *json_buf,
 /**
  * Serialize json buffer from ublksrv queue
  *
+ * DEPRECATED. Use ublk_json_write_queue_info instead
+ *
  * @param dev the ublksrv control device instance
  * @param jbuf json buffer
  * @param len length of json buffer
@@ -738,6 +740,16 @@ extern int ublksrv_json_read_dev_info(const char *json_buf,
  */
 extern int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
 		char *jbuf, int len, int qid, int ubq_daemon_tid);
+
+/**
+ * Serialize json buffer from ublksrv queue
+ *
+ * @param dev the ublksrv control device instance
+ * @param qid queue id
+ * @param ubq_daemon_tid queue pthread tid
+ */
+extern int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
+		unsigned int qid, int tid);
 
 /**
  * Deserialize json buffer to ublksrv queue
