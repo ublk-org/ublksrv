@@ -106,6 +106,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_discard,
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
 	len, types, basic, discard)
 
+struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
+{
+	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
+
+	return &data->jbuf;
+}
+
 int ublksrv_json_write_params(const struct ublk_params *p,
 		char *jbuf, int len)
 {
