@@ -806,12 +806,24 @@ extern int ublksrv_json_read_target_ulong_info(const char *jbuf,
 /**
  * Serialize json buffer from target field with string type
  *
+ * DEPRECATED. Use ublk_json_write_tgt_str instead.
+ *
  * @param jbuf json buffer
  * @param len length of json buffer
  * @param name field name with string type
  * @param val field value with string type
  */
 extern int ublksrv_json_write_target_str_info(char *jbuf, int len,
+		const char *name, const char *val);
+
+/**
+ * Serialize json buffer from target field with string type
+ *
+ * @param dev the ublksrv control device instance
+ * @param name field name with string type
+ * @param val field value with string type
+ */
+extern int ublk_json_write_tgt_str(const struct ublksrv_ctrl_dev *dev,
 		const char *name, const char *val);
 
 extern int ublksrv_json_write_target_long_info(char *jbuf, int len,

@@ -253,6 +253,25 @@ int ublksrv_json_write_target_str_info(char *jbuf, int len,
 	return dump_json_to_buf(j, jbuf, len);
 }
 
+int ublk_json_write_tgt_str(const struct ublksrv_ctrl_dev *cdev, const char *name, const char *val)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		if (val)
+			ret = ublksrv_json_write_target_str_info(j->jbuf,
+					j->jbuf_size, name, val);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
+}
+
 int ublksrv_json_write_target_long_info(char *jbuf, int len,
 		const char *name, long val)
 {
