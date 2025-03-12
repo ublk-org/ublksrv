@@ -115,25 +115,6 @@ int ublk_json_write_tgt_long(const struct ublksrv_ctrl_dev *cdev, const char *na
 	return ret;
 }
 
-static int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
-		unsigned int qid, int tid)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		ret = ublksrv_json_write_queue_info(cdev, j->jbuf, j->jbuf_size,
-				qid, tid);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-}
-
 static void *ublksrv_queue_handler(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
