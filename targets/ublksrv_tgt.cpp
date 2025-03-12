@@ -3,6 +3,9 @@
 #include "config.h"
 #include "ublksrv_tgt.h"
 
+#define UBLKSRV_INTERNAL_H_
+#include "ublksrv_priv.h"
+
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
 struct ublksrv_queue_info {
