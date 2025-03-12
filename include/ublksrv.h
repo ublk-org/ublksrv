@@ -415,6 +415,13 @@ extern struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 extern struct ublksrv_ctrl_dev *ublksrv_ctrl_recover_init(struct ublksrv_dev_data *data);
 
 /**
+ * Return whether or not the device is in recovery state
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *dev);
+
+/**
  * Retrieve and store each queue's cpu affinity info into private data of the
  * control device by sending commands to ublk control device
  *
@@ -572,6 +579,7 @@ extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev 
  * @param dev the ublksrv control device instance
  *
  * Obsolete!!!
+ * Use ublksrv_tgt_is_recovering instead.
  */
 extern bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev);
 

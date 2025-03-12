@@ -218,6 +218,13 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_recover_init(struct ublksrv_dev_data *data
 	return __ublksrv_ctrl_init(data, true);
 }
 
+bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev)
+{
+	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
+
+	return data->recover;
+}
+
 /* queues_cpuset is only used for setting up queue pthread daemon */
 int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 {
