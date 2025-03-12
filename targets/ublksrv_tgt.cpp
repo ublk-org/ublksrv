@@ -5,6 +5,12 @@
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
+struct ublksrv_queue_info {
+	const struct ublksrv_dev *dev;
+	int qid;
+	pthread_t thread;
+};
+
 static void *ublksrv_queue_handler(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;

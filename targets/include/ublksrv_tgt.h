@@ -178,12 +178,6 @@ static inline enum io_uring_op ublk_to_uring_fs_op(const struct ublksrv_io_desc 
 
 int ublksrv_tgt_send_dev_event(int evtfd, int dev_id);
 
-struct ublksrv_queue_info {
-	const struct ublksrv_dev *dev;
-	int qid;
-	pthread_t thread;
-};
-
 void ublksrv_print_std_opts(void);
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
