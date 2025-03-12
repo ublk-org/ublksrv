@@ -196,8 +196,6 @@ void ublksrv_print_std_opts(void);
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
-struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
-
 static inline bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev)
 {
 	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
