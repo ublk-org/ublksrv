@@ -154,7 +154,6 @@ static inline bool ublk_param_is_valid(const struct ublk_params *p)
 }
 
 int ublk_json_write_tgt_long(const struct ublksrv_ctrl_dev *dev, const char *name, long val);
-int ublk_json_write_tgt_ulong(const struct ublksrv_ctrl_dev *dev, const char *name, unsigned long val);
 
 static inline void ublk_get_sqe_pair(struct io_uring *r,
 		struct io_uring_sqe **sqe, struct io_uring_sqe **sqe2)
