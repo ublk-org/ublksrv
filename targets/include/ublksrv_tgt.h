@@ -19,9 +19,6 @@
 #include <iostream>
 #include <type_traits>
 
-#define UBLKSRV_INTERNAL_H_
-#include "ublksrv_priv.h"
-
 #include "ublksrv_utils.h"
 #include "ublksrv.h"
 
