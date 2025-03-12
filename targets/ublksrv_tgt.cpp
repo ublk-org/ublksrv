@@ -5,24 +5,6 @@
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
-int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *cdev)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		ret = ublksrv_json_write_dev_info(cdev,
-				j->jbuf, j->jbuf_size);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-}
-
 int ublk_json_write_params(const struct ublksrv_ctrl_dev *cdev,
 		const struct ublk_params *p)
 {
