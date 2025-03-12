@@ -5,13 +5,6 @@
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
-struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
-{
-	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
-
-	return &data->jbuf;
-}
-
 int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *cdev)
 {
 	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);

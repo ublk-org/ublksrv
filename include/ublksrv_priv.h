@@ -178,6 +178,8 @@ struct _ublksrv_dev {
 #define local_to_tdev(d)	((struct ublksrv_dev *)(d))
 #define tdev_to_local(d)	((struct _ublksrv_dev *)(d))
 
+struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
+
 static inline struct ublksrv_ctrl_data *ublksrv_get_ctrl_data(const struct ublksrv_ctrl_dev *cdev)
 {
 	return cdev->data;
