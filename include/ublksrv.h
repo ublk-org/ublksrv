@@ -861,12 +861,24 @@ extern int ublksrv_json_read_params(struct ublk_params *p,
 /**
  * Serialize json buffer from ublk_params instance
  *
+ * DEPRECATED. Use ublk_json_write_params instead.
+ *
  * @param p ublk_params instance
  * @param jbuf json buffer
  * @param len length of json buffer
  */
 extern int ublksrv_json_write_params(const struct ublk_params *p,
 		char *jbuf, int len);
+
+/**
+ * Serialize json buffer from ublk_params instance
+ *
+ * @param dev the ublksrv control device instance
+ * @param p ublk_params instance
+ */
+extern int ublk_json_write_params(const struct ublksrv_ctrl_dev *dev,
+		const struct ublk_params *p);
+
 extern int ublksrv_json_dump_params(const char *jbuf);
 
 /**
