@@ -826,7 +826,27 @@ extern int ublksrv_json_write_target_str_info(char *jbuf, int len,
 extern int ublk_json_write_tgt_str(const struct ublksrv_ctrl_dev *dev,
 		const char *name, const char *val);
 
+/**
+ * Serialize json buffer from target field with long type
+ *
+ * DEPRECATED. Use ublk_json_write_tgt_long instead.
+ *
+ * @param jbuf json buffer
+ * @param len length of json buffer
+ * @param name field name with long type
+ * @param val field value with long type
+ */
 extern int ublksrv_json_write_target_long_info(char *jbuf, int len,
+		const char *name, long val);
+
+/**
+ * Serialize json buffer from target field with long type
+ *
+ * @param dev the ublksrv control device instance
+ * @param name field name with long type
+ * @param val field value with long type
+ */
+extern int ublk_json_write_tgt_long(const struct ublksrv_ctrl_dev *dev,
 		const char *name, long val);
 
 /**
