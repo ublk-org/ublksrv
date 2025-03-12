@@ -51,6 +51,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ublksrv_ctrl_dev_info,
 	reserved1,
 	reserved2)
 
+
 /*
  * build one json string with dev_info head, and result is stored
  * in 'buf'.
@@ -318,6 +319,25 @@ int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
 	j["queues"][std::string(name)]["affinity"] = cpus;
 
 	return dump_json_to_buf(j, jbuf, len);
+}
+
+int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
+		unsigned int qid, int tid)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		ret = ublksrv_json_write_queue_info(cdev, j->jbuf, j->jbuf_size,
+				qid, tid);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
 }
 
 int ublksrv_json_read_queue_info(const char *jbuf, int qid, unsigned *tid,
