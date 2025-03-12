@@ -842,11 +842,22 @@ extern int ublksrv_json_read_target_base_info(const char *jbuf,
 /**
  * Serialize json buffer from ublksrv_tgt_base_json
  *
+ * DEPRECATED. Use ublk_json_write_target_base instead.
+ *
  * @param jbuf json buffer
  * @param len length of json buffer
  * @param tgt ublksrv_tgt_base_json instance
  */
 extern int ublksrv_json_write_target_base_info(char *jbuf, int len,
+		const struct ublksrv_tgt_base_json *tgt);
+
+/**
+ * Serialize json buffer from ublksrv_tgt_base_json
+ *
+ * @param dev the ublksrv control device instance
+ * @param tgt ublksrv_tgt_base_json instance
+ */
+extern int ublk_json_write_target_base(const struct ublksrv_ctrl_dev *dev,
 		const struct ublksrv_tgt_base_json *tgt);
 
 /**
