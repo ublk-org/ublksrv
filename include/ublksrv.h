@@ -832,12 +832,24 @@ extern int ublksrv_json_write_target_long_info(char *jbuf, int len,
 /**
  * Serialize json buffer from target field with ulong type
  *
+ * DEPRECATED. Use ublk_json_write_tgt_ulong instead.
+ *
  * @param jbuf json buffer
  * @param len length of json buffer
  * @param name field name with ulong type
  * @param val field value with ulong type
  */
 extern int ublksrv_json_write_target_ulong_info(char *jbuf, int len,
+		const char *name, unsigned long val);
+
+/**
+ * Serialize json buffer from target field with ulong type
+ *
+ * @param dev the ublksrv control device instance
+ * @param name field name with ulong type
+ * @param val field value with ulong type
+ */
+extern int ublk_json_write_tgt_ulong(const struct ublksrv_ctrl_dev *dev,
 		const char *name, unsigned long val);
 
 extern void ublksrv_json_dump(const char *jbuf);
