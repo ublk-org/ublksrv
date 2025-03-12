@@ -711,12 +711,21 @@ struct ublksrv_tgt_base_json {
 /**
  * Serialize json buffer from device's ublksrv_ctrl_dev_info data
  *
+ * DEPRECATED. Use ublk_json_write_dev_info instead.
+ *
  * @param dev the ublksrv control device instance
  * @param buf json buffer
  * @param len length of json buffer
  */
 extern int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *dev,
 		char *buf, int len);
+
+/**
+ * Serialize json buffer from device's ublksrv_ctrl_dev_info data
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *dev);
 
 /**
  * Deserialize json buffer to ublksrv_ctrl_dev_info instance
