@@ -178,6 +178,11 @@ struct _ublksrv_dev {
 #define local_to_tdev(d)	((struct ublksrv_dev *)(d))
 #define tdev_to_local(d)	((struct _ublksrv_dev *)(d))
 
+static inline struct ublksrv_ctrl_data *ublksrv_get_ctrl_data(const struct ublksrv_ctrl_dev *cdev)
+{
+	return cdev->data;
+}
+
 static inline bool ublk_is_unprivileged(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	return !!(ctrl_dev->dev_info.flags & UBLK_F_UNPRIVILEGED_DEV);

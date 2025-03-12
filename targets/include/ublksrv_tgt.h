@@ -198,11 +198,6 @@ int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char
 
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
 
-static inline struct ublksrv_ctrl_data *ublksrv_get_ctrl_data(const struct ublksrv_ctrl_dev *cdev)
-{
-	return cdev->data;
-}
-
 static inline bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev)
 {
 	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
