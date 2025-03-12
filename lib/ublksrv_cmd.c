@@ -667,6 +667,11 @@ void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 	dev->recovery_jbuf = recovery_jbuf;
 }
 
+const char *ublksrv_ctrl_get_jbuf(const struct ublksrv_ctrl_dev *dev)
+{
+	return dev->data->jbuf.jbuf;
+}
+
 const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev)
 {
 	return dev->recovery_jbuf;

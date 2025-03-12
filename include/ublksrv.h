@@ -563,7 +563,13 @@ extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 		const char *recovery_jbuf);
 
 /**
- * Return device's json buffer
+ *
+ * Get json buffer from device
+ */
+extern const char *ublksrv_ctrl_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
+
+/**
+ * Return device's json recovery buffer
  *
  * Setup target type, run_dir and json buffer before starting to recovery device.
  *
