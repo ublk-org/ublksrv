@@ -6,6 +6,9 @@
 
 static int list_one_dev(int number, bool log, bool verbose);
 
+/*
+ * returns 0 on success and -errno on failure
+ */
 static int ublksrv_execve_helper(const char *op, const char *type, int argc, char *argv[])
 {
 	char *cmd, *fp, *ldlp, **nargv, *evtfd_str;
@@ -42,7 +45,7 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 	if (daemon) {
 		if (pipe(pfd)) {
 			fprintf(stderr, "Failed to create pipe %s\n", strerror(errno));
-			return errno;
+			return -errno;
 		}
 		asprintf(&evtfd_str, "%d", pfd[1]);
 		nargv[argc + 1] = strdup("--eventfd");
@@ -64,12 +67,13 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 	if (!daemon) {
 exec:
 		close(pfd[0]);
-		if (execve(fp, nargv, nenv) < 0) {
-			fprintf(stderr, "Failed to execve() %s. %s\n", fp, strerror(errno));
-			if (pfd[1] >= 0)
-				ublksrv_tgt_send_dev_event(pfd[1], -1);
-			return errno;
-		}
+		execve(fp, nargv, nenv);
+
+		/* only reach here is execve failed */
+		fprintf(stderr, "Failed to execve() %s. %s\n", fp, strerror(errno));
+		if (pfd[1] >= 0)
+			ublksrv_tgt_send_dev_event(pfd[1], -1);
+		return -errno;
 	}
 
 	setsid();
@@ -89,6 +93,8 @@ exec:
 			return list_one_dev(id - 1, false, false);
 		return res;
 	}
+	if (res == -1)
+		res = -errno;
 	return res;
 }
 
