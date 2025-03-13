@@ -13,7 +13,8 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 	char full_path[256];
 	ssize_t fp_len;
 	int daemon = strcmp(op, "help");
-	int res, i, evtfd = -1;
+	int res, i;
+	int pfd[2] = { -1, -1};
 
 	asprintf(&cmd, "ublk.%s", type);
 
@@ -39,12 +40,11 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 	}
 
 	if (daemon) {
-		evtfd = eventfd(0, 0);
-		if (evtfd < 0) {
-			fprintf(stderr, "Failed to create eventfd %s\n", strerror(errno));
+		if (pipe(pfd)) {
+			fprintf(stderr, "Failed to create pipe %s\n", strerror(errno));
 			return errno;
 		}
-		asprintf(&evtfd_str, "%d", evtfd);
+		asprintf(&evtfd_str, "%d", pfd[1]);
 		nargv[argc + 1] = strdup("--eventfd");
 		nargv[argc + 2] = evtfd_str;
 	}
@@ -63,10 +63,11 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 
 	if (!daemon) {
 exec:
+		close(pfd[0]);
 		if (execve(fp, nargv, nenv) < 0) {
 			fprintf(stderr, "Failed to execve() %s. %s\n", fp, strerror(errno));
-			if (evtfd >= 0)
-				ublksrv_tgt_send_dev_event(evtfd, -1);
+			if (pfd[1] >= 0)
+				ublksrv_tgt_send_dev_event(pfd[1], -1);
 			return errno;
 		}
 	}
@@ -78,9 +79,12 @@ exec:
 	if (res > 0) {
 		uint64_t id;
 
-		res = read(evtfd, &id, sizeof(id));
-		close(evtfd);
+		close(pfd[1]);
+		res = read(pfd[0], &id, sizeof(id));
+		close(pfd[0]);
 
+		if (res == 0)
+			res = -EINVAL;
 		if (res == sizeof(id))
 			return list_one_dev(id - 1, false, false);
 		return res;
