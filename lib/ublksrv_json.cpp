@@ -51,6 +51,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ublksrv_ctrl_dev_info,
 	reserved1,
 	reserved2)
 
+
 /*
  * build one json string with dev_info head, and result is stored
  * in 'buf'.
@@ -106,6 +107,31 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_discard,
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
 	len, types, basic, discard)
 
+struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
+{
+	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
+
+	return &data->jbuf;
+}
+
+int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *cdev)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		ret = ublksrv_json_write_dev_info(cdev,
+				j->jbuf, j->jbuf_size);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
+}
+
 int ublksrv_json_write_params(const struct ublk_params *p,
 		char *jbuf, int len)
 {
@@ -117,6 +143,24 @@ int ublksrv_json_write_params(const struct ublk_params *p,
 	j["params"] = *p;
 
 	return dump_json_to_buf(j, jbuf, len);
+}
+
+int ublk_json_write_params(const struct ublksrv_ctrl_dev *cdev,
+		const struct ublk_params *p)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		ret = ublksrv_json_write_params(p, j->jbuf, j->jbuf_size);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
 }
 
 int ublksrv_json_read_params(struct ublk_params *p,
@@ -209,6 +253,25 @@ int ublksrv_json_write_target_str_info(char *jbuf, int len,
 	return dump_json_to_buf(j, jbuf, len);
 }
 
+int ublk_json_write_tgt_str(const struct ublksrv_ctrl_dev *cdev, const char *name, const char *val)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		if (val)
+			ret = ublksrv_json_write_target_str_info(j->jbuf,
+					j->jbuf_size, name, val);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
+}
+
 int ublksrv_json_write_target_long_info(char *jbuf, int len,
 		const char *name, long val)
 {
@@ -220,6 +283,24 @@ int ublksrv_json_write_target_long_info(char *jbuf, int len,
 	j["target"][std::string(name)] = val;;
 
 	return dump_json_to_buf(j, jbuf, len);
+}
+
+int ublk_json_write_tgt_long(const struct ublksrv_ctrl_dev *cdev, const char *name, long val)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		ret = ublksrv_json_write_target_long_info(j->jbuf, j->jbuf_size,
+				name, val);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
 }
 
 int ublksrv_json_write_target_ulong_info(char *jbuf, int len, const char *name,
@@ -235,6 +316,24 @@ int ublksrv_json_write_target_ulong_info(char *jbuf, int len, const char *name,
 	return dump_json_to_buf(j, jbuf, len);
 }
 
+int ublk_json_write_tgt_ulong(const struct ublksrv_ctrl_dev *cdev, const char *name, unsigned long val)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		ret = ublksrv_json_write_target_ulong_info(j->jbuf, j->jbuf_size,
+				name, val);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
+}
+
 int ublksrv_json_write_target_base_info(char *jbuf, int len,
 		const struct ublksrv_tgt_base_json *tgt)
 {
@@ -248,6 +347,25 @@ int ublksrv_json_write_target_base_info(char *jbuf, int len,
 	j["target"]["dev_size"] = tgt->dev_size;
 
 	return dump_json_to_buf(j, jbuf, len);
+}
+
+int ublk_json_write_target_base(const struct ublksrv_ctrl_dev *cdev,
+		const struct ublksrv_tgt_base_json *tgt)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		ret = ublksrv_json_write_target_base_info(j->jbuf, j->jbuf_size, tgt);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
+
 }
 
 int ublksrv_json_read_target_base_info(const char *jbuf,
@@ -311,6 +429,25 @@ int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
 	j["queues"][std::string(name)]["affinity"] = cpus;
 
 	return dump_json_to_buf(j, jbuf, len);
+}
+
+int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
+		unsigned int qid, int tid)
+{
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	do {
+		ret = ublksrv_json_write_queue_info(cdev, j->jbuf, j->jbuf_size,
+				qid, tid);
+	} while (ret < 0 && tgt_realloc_jbuf(j));
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
 }
 
 int ublksrv_json_read_queue_info(const char *jbuf, int qid, unsigned *tid,

@@ -49,19 +49,17 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 static int null_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	const char *jbuf = ublksrv_ctrl_get_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(cdev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	int ret;
 	struct ublk_params p;
 
-	if (!j)
+	if (!jbuf)
 		return -EINVAL;
 
-	ublk_assert(j->jbuf);
-
-	ret = ublksrv_json_read_params(&p, j->jbuf);
+	ret = ublksrv_json_read_params(&p, jbuf);
 	if (ret) {
 		ublk_err( "%s: read ublk params failed %d\n",
 				__func__, ret);

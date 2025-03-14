@@ -399,12 +399,27 @@ static inline __u64 ublk_pos(__u16 q_id, __u16 tag, __u32 offset)
 extern void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev);
 
 /**
- * Allocate and init one control device
+ * Allocate and init one control device for normal use
  *
  * @param data data for allocating & initializing this control device
  *
  */
 extern struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data);
+
+/**
+ * Allocate and init one control device for recovery use
+ *
+ * @param data data for allocating & initializing this control device
+ *
+ */
+extern struct ublksrv_ctrl_dev *ublksrv_ctrl_recover_init(struct ublksrv_dev_data *data);
+
+/**
+ * Return whether or not the device is in recovery state
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *dev);
 
 /**
  * Retrieve and store each queue's cpu affinity info into private data of the
@@ -548,16 +563,19 @@ extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 		const char *recovery_jbuf);
 
 /**
- * Return device's json buffer
+ *
+ * Get json buffer from device
+ */
+extern const char *ublksrv_ctrl_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
+
+/**
+ * Return device's json recovery buffer
  *
  * Setup target type, run_dir and json buffer before starting to recovery device.
  *
  * @param dev the ublksrv control device instance
  *
  * Obsolete!!!
- *
- * Target code can maintain json buffer by its private data via
- * ublksrv_ctrl_get_priv_data() and ublksrv_ctrl_set_priv_data()
  */
 extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev *dev);
 
@@ -567,9 +585,7 @@ extern const char *ublksrv_ctrl_get_recovery_jbuf(const struct ublksrv_ctrl_dev 
  * @param dev the ublksrv control device instance
  *
  * Obsolete!!!
- *
- * Target code can maintain recovering status by its private data via
- * ublksrv_ctrl_get_priv_data() and ublksrv_ctrl_set_priv_data()
+ * Use ublksrv_tgt_is_recovering instead.
  */
 extern bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev);
 
@@ -709,12 +725,21 @@ struct ublksrv_tgt_base_json {
 /**
  * Serialize json buffer from device's ublksrv_ctrl_dev_info data
  *
+ * DEPRECATED. Use ublk_json_write_dev_info instead.
+ *
  * @param dev the ublksrv control device instance
  * @param buf json buffer
  * @param len length of json buffer
  */
 extern int ublksrv_json_write_dev_info(const struct ublksrv_ctrl_dev *dev,
 		char *buf, int len);
+
+/**
+ * Serialize json buffer from device's ublksrv_ctrl_dev_info data
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *dev);
 
 /**
  * Deserialize json buffer to ublksrv_ctrl_dev_info instance
@@ -728,6 +753,8 @@ extern int ublksrv_json_read_dev_info(const char *json_buf,
 /**
  * Serialize json buffer from ublksrv queue
  *
+ * DEPRECATED. Use ublk_json_write_queue_info instead
+ *
  * @param dev the ublksrv control device instance
  * @param jbuf json buffer
  * @param len length of json buffer
@@ -736,6 +763,16 @@ extern int ublksrv_json_read_dev_info(const char *json_buf,
  */
 extern int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
 		char *jbuf, int len, int qid, int ubq_daemon_tid);
+
+/**
+ * Serialize json buffer from ublksrv queue
+ *
+ * @param dev the ublksrv control device instance
+ * @param qid queue id
+ * @param ubq_daemon_tid queue pthread tid
+ */
+extern int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
+		unsigned int qid, int tid);
 
 /**
  * Deserialize json buffer to ublksrv queue
@@ -783,6 +820,8 @@ extern int ublksrv_json_read_target_ulong_info(const char *jbuf,
 /**
  * Serialize json buffer from target field with string type
  *
+ * DEPRECATED. Use ublk_json_write_tgt_str instead.
+ *
  * @param jbuf json buffer
  * @param len length of json buffer
  * @param name field name with string type
@@ -791,11 +830,43 @@ extern int ublksrv_json_read_target_ulong_info(const char *jbuf,
 extern int ublksrv_json_write_target_str_info(char *jbuf, int len,
 		const char *name, const char *val);
 
+/**
+ * Serialize json buffer from target field with string type
+ *
+ * @param dev the ublksrv control device instance
+ * @param name field name with string type
+ * @param val field value with string type
+ */
+extern int ublk_json_write_tgt_str(const struct ublksrv_ctrl_dev *dev,
+		const char *name, const char *val);
+
+/**
+ * Serialize json buffer from target field with long type
+ *
+ * DEPRECATED. Use ublk_json_write_tgt_long instead.
+ *
+ * @param jbuf json buffer
+ * @param len length of json buffer
+ * @param name field name with long type
+ * @param val field value with long type
+ */
 extern int ublksrv_json_write_target_long_info(char *jbuf, int len,
 		const char *name, long val);
 
 /**
+ * Serialize json buffer from target field with long type
+ *
+ * @param dev the ublksrv control device instance
+ * @param name field name with long type
+ * @param val field value with long type
+ */
+extern int ublk_json_write_tgt_long(const struct ublksrv_ctrl_dev *dev,
+		const char *name, long val);
+
+/**
  * Serialize json buffer from target field with ulong type
+ *
+ * DEPRECATED. Use ublk_json_write_tgt_ulong instead.
  *
  * @param jbuf json buffer
  * @param len length of json buffer
@@ -803,6 +874,16 @@ extern int ublksrv_json_write_target_long_info(char *jbuf, int len,
  * @param val field value with ulong type
  */
 extern int ublksrv_json_write_target_ulong_info(char *jbuf, int len,
+		const char *name, unsigned long val);
+
+/**
+ * Serialize json buffer from target field with ulong type
+ *
+ * @param dev the ublksrv control device instance
+ * @param name field name with ulong type
+ * @param val field value with ulong type
+ */
+extern int ublk_json_write_tgt_ulong(const struct ublksrv_ctrl_dev *dev,
 		const char *name, unsigned long val);
 
 extern void ublksrv_json_dump(const char *jbuf);
@@ -819,11 +900,22 @@ extern int ublksrv_json_read_target_base_info(const char *jbuf,
 /**
  * Serialize json buffer from ublksrv_tgt_base_json
  *
+ * DEPRECATED. Use ublk_json_write_target_base instead.
+ *
  * @param jbuf json buffer
  * @param len length of json buffer
  * @param tgt ublksrv_tgt_base_json instance
  */
 extern int ublksrv_json_write_target_base_info(char *jbuf, int len,
+		const struct ublksrv_tgt_base_json *tgt);
+
+/**
+ * Serialize json buffer from ublksrv_tgt_base_json
+ *
+ * @param dev the ublksrv control device instance
+ * @param tgt ublksrv_tgt_base_json instance
+ */
+extern int ublk_json_write_target_base(const struct ublksrv_ctrl_dev *dev,
 		const struct ublksrv_tgt_base_json *tgt);
 
 /**
@@ -838,12 +930,24 @@ extern int ublksrv_json_read_params(struct ublk_params *p,
 /**
  * Serialize json buffer from ublk_params instance
  *
+ * DEPRECATED. Use ublk_json_write_params instead.
+ *
  * @param p ublk_params instance
  * @param jbuf json buffer
  * @param len length of json buffer
  */
 extern int ublksrv_json_write_params(const struct ublk_params *p,
 		char *jbuf, int len);
+
+/**
+ * Serialize json buffer from ublk_params instance
+ *
+ * @param dev the ublksrv control device instance
+ * @param p ublk_params instance
+ */
+extern int ublk_json_write_params(const struct ublksrv_ctrl_dev *dev,
+		const struct ublk_params *p);
+
 extern int ublksrv_json_dump_params(const char *jbuf);
 
 /**
