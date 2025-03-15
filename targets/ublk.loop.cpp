@@ -403,16 +403,10 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 	int ret;
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-	io->queued_tgt_io = 0;
  again:
 	ret = loop_queue_tgt_io(q, data, tag);
 	if (ret > 0) {
-		if (io->queued_tgt_io)
-			ublk_err("bad queued_tgt_io %d\n", io->queued_tgt_io);
-		io->queued_tgt_io += 1;
-
 		co_await__suspend_always(tag);
-		io->queued_tgt_io -= 1;
 
 		if (io->tgt_io_cqe->res == -EAGAIN)
 			goto again;
@@ -458,11 +452,6 @@ static void loop_tgt_io_done(const struct ublksrv_queue *q,
 		return;
 
 	ublk_assert(tag == data->tag);
-	if (!io->queued_tgt_io)
-		ublk_err("%s: wrong queued_tgt_io: res %d qid %u tag %u, cmd_op %u\n",
-			__func__, cqe->res, q->q_id,
-			user_data_to_tag(cqe->user_data),
-			user_data_to_op(cqe->user_data));
 	io->tgt_io_cqe = cqe;
 	io->co.resume();
 }
