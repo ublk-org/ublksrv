@@ -166,6 +166,17 @@ static inline void ublk_get_sqe_pair(struct io_uring *r,
 		*sqe2 = io_uring_get_sqe(r);
 }
 
+static inline enum io_uring_op ublk_to_uring_fs_op(const struct ublksrv_io_desc *iod)
+{
+	unsigned ublk_op = ublksrv_get_op(iod);
+
+	if (ublk_op == UBLK_IO_OP_READ)
+		return IORING_OP_READ;
+	else if (ublk_op == UBLK_IO_OP_WRITE)
+		return IORING_OP_WRITE;
+	assert(0);
+}
+
 int ublksrv_tgt_send_dev_event(int evtfd, int dev_id);
 
 struct ublksrv_queue_info {
