@@ -6,12 +6,40 @@
 
 static int null_recover_tgt(struct ublksrv_dev *dev, int type);
 
+static int null_setup_tgt(struct ublksrv_dev *dev)
+{
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const struct ublksrv_ctrl_dev_info *info = ublksrv_ctrl_get_dev_info(cdev);
+	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	struct ublksrv_tgt_info *tgt = &dev->tgt;
+	struct ublk_params p;
+	int ret;
+
+	if (!j)
+		return -EINVAL;
+
+	ublk_assert(j->jbuf);
+
+	ret = ublksrv_json_read_params(&p, j->jbuf);
+	if (ret) {
+		ublk_err( "%s: read ublk params failed %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	tgt->dev_size = p.basic.dev_sectors << 9;
+	tgt->tgt_ring_depth = info->queue_depth;
+	tgt->nr_fds = 0;
+	ublksrv_tgt_set_io_data_size(tgt);
+
+	return 0;
+}
+
 static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	const struct ublksrv_ctrl_dev_info *info = ublksrv_ctrl_get_dev_info(cdev);
-	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	unsigned long long dev_size = 250UL * 1024 * 1024 * 1024;
 	struct ublk_params p = {
@@ -26,53 +54,25 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		},
 	};
 
+	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
+		return -1;
+
 	if (ublksrv_tgt_is_recovering(cdev))
 		return null_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "null");
 
-	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
-		return -1;
-
-	tgt_json.dev_size = tgt->dev_size = dev_size;
-	tgt->tgt_ring_depth = info->queue_depth;
-	tgt->nr_fds = 0;
-	ublksrv_tgt_set_io_data_size(tgt);
-
 	ublk_json_write_dev_info(cdev);
 	ublk_json_write_target_base(cdev, &tgt_json);
 	ublk_json_write_params(cdev, &p);
+	tgt_json.dev_size = dev_size;
 
-	return 0;
+	return null_setup_tgt(dev);
 }
 
 static int null_recover_tgt(struct ublksrv_dev *dev, int type)
 {
-	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(cdev);
-	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	int ret;
-	struct ublk_params p;
-
-	if (!j)
-		return -EINVAL;
-
-	ublk_assert(j->jbuf);
-
-	ret = ublksrv_json_read_params(&p, j->jbuf);
-	if (ret) {
-		ublk_err( "%s: read ublk params failed %d\n",
-				__func__, ret);
-		return ret;
-	}
-
-	ublksrv_tgt_set_io_data_size(tgt);
-	tgt->dev_size = p.basic.dev_sectors << 9;
-	tgt->tgt_ring_depth = info->queue_depth;
-	tgt->nr_fds = 0;
-	return 0;
+	return null_setup_tgt(dev);
 }
 
 static co_io_job __null_handle_io_async(const struct ublksrv_queue *q,
