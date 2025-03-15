@@ -109,7 +109,7 @@ static int __ublksrv_ctrl_cmd(struct ublksrv_ctrl_dev *dev,
 	struct io_uring_cqe *cqe;
 	int ret = -EINVAL;
 
-	sqe = io_uring_get_sqe(&dev->ring);
+	sqe = ublksrv_alloc_sqe(&dev->ring);
 	if (!sqe) {
 		fprintf(stderr, "can't get sqe ret %d\n", ret);
 		return ret;
