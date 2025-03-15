@@ -191,11 +191,6 @@ static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
 	io->result = res;
 }
 
-static inline bool ublksrv_io_done(struct ublk_io *io)
-{
-	return io->flags & UBLKSRV_IO_FREE;
-}
-
 int create_pid_file(const char *pid_file, int *pid_fd);
 
 extern void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset);
