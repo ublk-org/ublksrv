@@ -129,12 +129,12 @@ static void ublksrv_tgt_deinit(struct _ublksrv_dev *dev)
 
 static inline bool ublksrv_queue_use_buf(const struct _ublksrv_queue *q)
 {
-	return !(q->state & UBLKSRV_USER_COPY);
+	return !(q->state & (UBLKSRV_USER_COPY | UBLKSRV_ZERO_COPY));
 }
 
 static inline bool ublksrv_queue_alloc_buf(const struct _ublksrv_queue *q)
 {
-	return true;
+	return !(q->state & UBLKSRV_ZERO_COPY);
 }
 
 static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
@@ -375,6 +375,7 @@ void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 	if (q->efd >= 0)
 		close(q->efd);
 
+	io_uring_unregister_buffers(&q->ring);
 	io_uring_unregister_ring_fd(&q->ring);
 
 	if (q->ring.ring_fd > 0) {
@@ -570,6 +571,9 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 	q->cmd_inflight = 0;
 	q->tid = ublksrv_gettid();
 
+	if (ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY)
+		q->state |= UBLKSRV_ZERO_COPY;
+
 	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
 	off = UBLKSRV_CMD_BUF_OFFSET + q_id * queue_max_cmd_buf_sz();
 	q->io_cmd_buf = (char *)mmap(0, cmd_buf_size, PROT_READ,
@@ -635,8 +639,17 @@ skip_alloc_buf:
 			dev->tgt.nr_fds + 1);
 	if (ret) {
 		ublk_err("ublk dev %d queue %d register files failed %d",
-				q->dev->ctrl_dev->dev_info.dev_id, q->q_id, ret);
+				ctrl_dev->dev_info.dev_id, q->q_id, ret);
 		goto fail;
+	}
+
+	if (ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+		ret = io_uring_register_buffers_sparse(&q->ring, q->q_depth);
+		if (ret) {
+			ublk_err("ublk dev %d queue %d register spare buffers failed %d",
+					ctrl_dev->dev_info.dev_id, q->q_id, ret);
+			goto fail;
+		}
 	}
 
 	io_uring_register_ring_fd(&q->ring);
@@ -817,9 +830,10 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 		!(q->state & UBLKSRV_QUEUE_STOPPING);
 	struct ublk_io *io;
 
-	ublk_dbg(UBLK_DBG_IO_CMD, "%s: res %d (qid %d tag %u cmd_op %u target %d event %d) stopping %d\n",
+	ublk_dbg(UBLK_DBG_IO_CMD, "%s: res %d (qid %d tag %u cmd_op %u target %d/%x event %d) stopping %d\n",
 			__func__, cqe->res, q->q_id, tag, cmd_op,
 			is_target_io(cqe->user_data),
+			user_data_to_tgt_data(cqe->user_data),
 			is_eventfd_io(cqe->user_data),
 			(q->state & UBLKSRV_QUEUE_STOPPING));
 
