@@ -191,6 +191,15 @@ static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
 	io->result = res;
 }
 
+static inline struct io_uring_sqe *ublksrv_alloc_sqe(struct io_uring *r)
+{
+	unsigned left = io_uring_sq_space_left(r);
+
+	if (left < 1)
+		io_uring_submit(r);
+	return io_uring_get_sqe(r);
+}
+
 int create_pid_file(const char *pid_file, int *pid_fd);
 
 extern void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset);

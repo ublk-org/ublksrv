@@ -152,7 +152,7 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 	else if (io->flags & UBLKSRV_NEED_FETCH_RQ)
 		cmd_op = UBLK_IO_FETCH_REQ;
 
-	sqe = io_uring_get_sqe(&q->ring);
+	sqe = ublksrv_alloc_sqe(&q->ring);
 	if (!sqe) {
 		ublk_err("%s: run out of sqe %d, tag %d\n",
 				__func__, q->q_id, tag);
