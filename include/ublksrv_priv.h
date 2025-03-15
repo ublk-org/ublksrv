@@ -191,9 +191,13 @@ static inline void ublksrv_mark_io_done(struct ublk_io *io, int res)
 	io->result = res;
 }
 
-static inline bool ublksrv_io_done(struct ublk_io *io)
+static inline struct io_uring_sqe *ublksrv_alloc_sqe(struct io_uring *r)
 {
-	return io->flags & UBLKSRV_IO_FREE;
+	unsigned left = io_uring_sq_space_left(r);
+
+	if (left < 1)
+		io_uring_submit(r);
+	return io_uring_get_sqe(r);
 }
 
 int create_pid_file(const char *pid_file, int *pid_fd);

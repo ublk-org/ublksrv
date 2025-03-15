@@ -98,6 +98,11 @@ struct ublk_io_tgt {
 	int queued_tgt_io;	/* obsolete */
 };
 
+enum {
+	UBLK_IO_TGT_BUF = 1, 	/* buffer operation */
+	UBLK_IO_TGT_IO, 	/* io operation */
+};
+
 static inline struct ublk_io_tgt *__ublk_get_io_tgt_data(const struct ublk_io_data *io)
 {
 	return (struct ublk_io_tgt *)io->private_data;
@@ -164,6 +169,18 @@ static inline void ublk_get_sqe_pair(struct io_uring *r,
 	*sqe = io_uring_get_sqe(r);
 	if (sqe2)
 		*sqe2 = io_uring_get_sqe(r);
+}
+
+static inline enum io_uring_op ublk_to_uring_fs_op(
+		const struct ublksrv_io_desc *iod, bool zc)
+{
+	unsigned ublk_op = ublksrv_get_op(iod);
+
+	if (ublk_op == UBLK_IO_OP_READ)
+		return zc ? IORING_OP_READ_FIXED : IORING_OP_READ;
+	else if (ublk_op == UBLK_IO_OP_WRITE)
+		return zc ? IORING_OP_WRITE_FIXED : IORING_OP_WRITE;
+	assert(0);
 }
 
 int ublksrv_tgt_send_dev_event(int evtfd, int dev_id);
@@ -239,6 +256,94 @@ static inline bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev
 	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
 
 	return data->recover;
+}
+
+/* called after one cqe is received */
+static inline int ublksrv_tgt_process_cqe(const struct ublk_io_tgt *io, int *io_res)
+{
+	const struct io_uring_cqe *cqe = io->tgt_io_cqe;
+
+	assert(cqe);
+
+	if (cqe->res != -EAGAIN &&
+		user_data_to_tgt_data(cqe->user_data) == UBLK_IO_TGT_IO)
+			*io_res = cqe->res;
+	return cqe->res;
+}
+
+static inline void ublksrv_tgt_io_done(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct io_uring_cqe *cqe)
+{
+	int tag = user_data_to_tag(cqe->user_data);
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+	ublk_assert(tag == data->tag);
+	io->tgt_io_cqe = cqe;
+	io->co.resume();
+}
+
+static inline void ublk_queue_alloc_sqe3(const struct ublksrv_queue *q,
+		struct io_uring_sqe **sqe1, struct io_uring_sqe **sqe2,
+		struct io_uring_sqe **sqe3)
+{
+	struct io_uring *r = q->ring_ptr;
+	unsigned left = io_uring_sq_space_left(r);
+
+	if (left < 3)
+		io_uring_submit(r);
+
+	*sqe1 = io_uring_get_sqe(r);
+	*sqe2 = io_uring_get_sqe(r);
+	*sqe3 = io_uring_get_sqe(r);
+}
+
+static inline void __set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op)
+{
+	__u32 *addr = (__u32 *)&sqe->off;
+
+	addr[0] = cmd_op;
+	addr[1] = 0;
+}
+
+static inline struct ublksrv_io_cmd *__get_sqe_cmd(struct io_uring_sqe *sqe)
+{
+	return (struct ublksrv_io_cmd *)&sqe->addr3;
+}
+
+static inline void io_uring_prep_buf_register(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id, __u64 index)
+{
+	struct ublksrv_io_cmd *cmd = __get_sqe_cmd(sqe);
+
+	io_uring_prep_read(sqe, dev_fd, 0, 0, 0);
+	sqe->opcode		= IORING_OP_URING_CMD;
+	sqe->flags		|= IOSQE_FIXED_FILE;
+	__set_sqe_cmd_op(sqe, UBLK_U_IO_REGISTER_IO_BUF);
+
+	cmd->tag		= tag;
+	cmd->addr		= index;
+	cmd->q_id		= q_id;
+}
+
+static inline void io_uring_prep_buf_unregister(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id, __u64 index)
+{
+	struct ublksrv_io_cmd *cmd = __get_sqe_cmd(sqe);
+
+	io_uring_prep_read(sqe, dev_fd, 0, 0, 0);
+	sqe->opcode		= IORING_OP_URING_CMD;
+	sqe->flags		|= IOSQE_FIXED_FILE;
+	__set_sqe_cmd_op(sqe, UBLK_U_IO_UNREGISTER_IO_BUF);
+
+	cmd->tag		= tag;
+	cmd->addr		= index;
+	cmd->q_id		= q_id;
+}
+
+static inline bool ublksrv_tgt_queue_zc(const struct ublksrv_queue *q)
+{
+	return ublksrv_queue_state(q) & UBLKSRV_ZERO_COPY;
 }
 
 #endif
