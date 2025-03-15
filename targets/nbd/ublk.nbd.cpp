@@ -857,6 +857,8 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 
 	ublksrv_dev_set_cq_depth(dev, 2 * tgt->tgt_ring_depth);
 
+	if (info->flags & UBLK_F_SUPPORT_ZERO_COPY)
+		return -EINVAL;
 	return 0;
 }
 

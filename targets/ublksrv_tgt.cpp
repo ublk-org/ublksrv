@@ -484,6 +484,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "unprivileged",	0,	NULL, 0},
 		{ "usercopy",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
+		{ "zerocopy",	0,	NULL, 'z'},
 		{ NULL }
 	};
 
@@ -494,7 +495,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 
 	mkpath(data->run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -504,7 +505,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 			data->tgt_type = optarg;
 			break;
 		case 'z':
-			data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
+			data->flags |= UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_USER_COPY;
 			break;
 		case 'q':
 			data->nr_hw_queues = strtol(optarg, NULL, 10);
