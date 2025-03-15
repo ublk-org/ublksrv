@@ -279,7 +279,7 @@ static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
        return mode;
 }
 
-static void lo_rw_user_copy(const struct ublksrv_queue *q,
+static int lo_rw_user_copy(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *tgt_data)
 {
@@ -296,20 +296,20 @@ static void lo_rw_user_copy(const struct ublksrv_queue *q,
 				iod->nr_sectors << 9,
 				(iod->start_sector + tgt_data->offset) << 9);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE | IOSQE_IO_LINK);
-		sqe->user_data = build_user_data(tag, ublk_op, 1, 1);
+		sqe->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
 
 		/* copy io buffer to ublkc device */
 		io_uring_prep_write(sqe2, 0 /*fds[0]*/,
 				buf, iod->nr_sectors << 9, pos);
 		io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
 		/* bit63 marks us as tgt io */
-		sqe2->user_data = build_user_data(tag, ublk_op, 0, 1);
+		sqe2->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_BUF, 1);
 	} else {
 		/* copy ublkc device data to io buffer */
 		io_uring_prep_read(sqe, 0 /*fds[0]*/,
 			buf, iod->nr_sectors << 9, pos);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE | IOSQE_IO_LINK);
-		sqe->user_data = build_user_data(tag, ublk_op, 1, 1);
+		sqe->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_BUF, 1);
 
 		/* write data in io buffer to backing file */
 		io_uring_prep_write(sqe2, 1 /*fds[1]*/,
@@ -318,11 +318,12 @@ static void lo_rw_user_copy(const struct ublksrv_queue *q,
 		io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
 		sqe2->rw_flags |= RWF_DSYNC;
 		/* bit63 marks us as tgt io */
-		sqe2->user_data = build_user_data(tag, ublk_op, 0, 1);
+		sqe2->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
 	}
+	return 2;
 }
 
-static void lo_rw(const struct ublksrv_queue *q,
+static int lo_rw(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *tgt_data)
 {
@@ -340,18 +341,18 @@ static void lo_rw(const struct ublksrv_queue *q,
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 	if (uring_op == IORING_OP_WRITE)
 		sqe->rw_flags |= RWF_DSYNC;
-	sqe->user_data = build_user_data(tag, ublksrv_get_op(iod), 0, 1);
+	sqe->user_data = build_user_data(tag, ublksrv_get_op(iod), UBLK_IO_TGT_IO, 1);
+	return 1;
 }
 
-static void loop_queue_tgt_rw(const struct ublksrv_queue *q,
+static int loop_queue_tgt_rw(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag)
 {
 	const struct loop_tgt_data *tgt_data = (struct loop_tgt_data*) q->dev->tgt.tgt_data;
 
 	if (tgt_data->user_copy)
-		lo_rw_user_copy(q, iod, tag, tgt_data);
-	else
-		lo_rw(q, iod, tag, tgt_data);
+		return lo_rw_user_copy(q, iod, tag, tgt_data);
+	return lo_rw(q, iod, tag, tgt_data);
 }
 
 static int loop_queue_tgt_io(const struct ublksrv_queue *q,
@@ -361,6 +362,7 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 	struct io_uring_sqe *sqe;
 	unsigned ublk_op = ublksrv_get_op(iod);
 	const struct loop_tgt_data *tgt_data = (struct loop_tgt_data*) q->dev->tgt.tgt_data;
+	int ret = 1;
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_FLUSH:
@@ -371,7 +373,7 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 				IORING_FSYNC_DATASYNC);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		/* bit63 marks us as tgt io */
-		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
+		sqe->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
 		break;
 	case UBLK_IO_OP_WRITE_ZEROES:
 	case UBLK_IO_OP_DISCARD:
@@ -382,11 +384,11 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 				iod->nr_sectors << 9);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		/* bit63 marks us as tgt io */
-		sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
+		sqe->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
 		break;
 	case UBLK_IO_OP_READ:
 	case UBLK_IO_OP_WRITE:
-		loop_queue_tgt_rw(q, iod, tag);
+		ret = loop_queue_tgt_rw(q, iod, tag);
 		break;
 	default:
 		return -EINVAL;
@@ -395,24 +397,26 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 	ublk_dbg(UBLK_DBG_IO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
 
-	return 1;
+	return ret;
 }
 
 static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data, int tag)
 {
-	int ret;
 	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+	int ret;
 
  again:
 	ret = loop_queue_tgt_io(q, data, tag);
 	if (ret > 0) {
-		co_await__suspend_always(tag);
+		int io_res = -EIO;
+		while (ret-- > 0) {
+			co_await__suspend_always(tag);
 
-		if (io->tgt_io_cqe->res == -EAGAIN)
-			goto again;
-
-		ublksrv_complete_io(q, tag, io->tgt_io_cqe->res);
+			if (ublksrv_tgt_process_cqe(io, &io_res) == -EAGAIN)
+				goto again;
+		}
+		ublksrv_complete_io(q, tag, io_res);
 	} else if (ret < 0) {
 		ublk_err( "fail to queue io %d, ret %d\n", tag, tag);
 	} else {
@@ -446,15 +450,7 @@ static void loop_tgt_io_done(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct io_uring_cqe *cqe)
 {
-	int tag = user_data_to_tag(cqe->user_data);
-	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
-
-	if (user_data_to_tgt_data(cqe->user_data))
-		return;
-
-	ublk_assert(tag == data->tag);
-	io->tgt_io_cqe = cqe;
-	io->co.resume();
+	ublksrv_tgt_io_done(q, data, cqe);
 }
 
 static void loop_deinit_tgt(const struct ublksrv_dev *dev)

@@ -98,6 +98,11 @@ struct ublk_io_tgt {
 	int queued_tgt_io;	/* obsolete */
 };
 
+enum {
+	UBLK_IO_TGT_BUF = 1, 	/* buffer operation */
+	UBLK_IO_TGT_IO, 	/* io operation */
+};
+
 static inline struct ublk_io_tgt *__ublk_get_io_tgt_data(const struct ublk_io_data *io)
 {
 	return (struct ublk_io_tgt *)io->private_data;
@@ -250,6 +255,31 @@ static inline bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev
 	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
 
 	return data->recover;
+}
+
+/* called after one cqe is received */
+static inline int ublksrv_tgt_process_cqe(const struct ublk_io_tgt *io, int *io_res)
+{
+	const struct io_uring_cqe *cqe = io->tgt_io_cqe;
+
+	assert(cqe);
+
+	if (cqe->res != -EAGAIN &&
+		user_data_to_tgt_data(cqe->user_data) == UBLK_IO_TGT_IO)
+			*io_res = cqe->res;
+	return cqe->res;
+}
+
+static inline void ublksrv_tgt_io_done(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct io_uring_cqe *cqe)
+{
+	int tag = user_data_to_tag(cqe->user_data);
+	struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
+
+	ublk_assert(tag == data->tag);
+	io->tgt_io_cqe = cqe;
+	io->co.resume();
 }
 
 #endif
