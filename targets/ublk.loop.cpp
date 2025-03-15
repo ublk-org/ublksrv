@@ -8,6 +8,7 @@
 
 struct loop_tgt_data {
 	bool user_copy;
+	bool zero_copy;
 	bool block_device;
 	unsigned long offset;
 };
@@ -102,12 +103,11 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery)
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 1;
 	tgt->fds[1] = fd;
-	tgt_data->user_copy = info->flags & UBLK_F_USER_COPY;
-	if (tgt_data->user_copy)
-		tgt->tgt_ring_depth *= 2;
 
-	if (info->flags & UBLK_F_SUPPORT_ZERO_COPY)
-		return -EINVAL;
+	tgt_data->zero_copy = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
+	tgt_data->user_copy = info->flags & UBLK_F_USER_COPY;
+	if (tgt_data->zero_copy || tgt_data->user_copy)
+		tgt->tgt_ring_depth *= 2;
 
 	return 0;
 }
@@ -138,7 +138,8 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	char *file = NULL;
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	struct ublk_params p = {
-		.types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD,
+		.types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD |
+			UBLK_PARAM_TYPE_DMA_ALIGN,
 		.basic = {
 			.attrs                  = UBLK_ATTR_VOLATILE_CACHE | UBLK_ATTR_FUA,
 			.logical_bs_shift	= 9,
@@ -151,6 +152,9 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		.discard = {
 			.max_discard_sectors	= UINT_MAX >> 9,
 			.max_discard_segments	= 1,
+		},
+		.dma = {
+			.alignment = 511,
 		},
 	};
 	bool can_discard = false;
@@ -327,7 +331,7 @@ static int lo_rw(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *tgt_data)
 {
-	enum io_uring_op uring_op = ublk_to_uring_fs_op(iod);
+	enum io_uring_op uring_op = ublk_to_uring_fs_op(iod, false);
 	void *buf = (void *)iod->addr;
 	struct io_uring_sqe *sqe[1];
 
@@ -345,11 +349,51 @@ static int lo_rw(const struct ublksrv_queue *q,
 	return 1;
 }
 
+static int lo_rw_zero_copy(const struct ublksrv_queue *q,
+		const struct ublksrv_io_desc *iod, int tag,
+		const struct loop_tgt_data *tgt_data)
+{
+	unsigned ublk_op = ublksrv_get_op(iod);
+	enum io_uring_op uring_op = ublk_to_uring_fs_op(iod, true);
+	struct io_uring_sqe *sqe[3];
+
+	ublk_queue_alloc_sqes(q, sqe, 3);
+
+	io_uring_prep_buf_register(sqe[0], 0, tag, q->q_id, tag);
+	sqe[0]->user_data = build_user_data(tag,
+			ublk_cmd_op_nr(UBLK_U_IO_REGISTER_IO_BUF),
+			0,
+			1);
+	sqe[0]->flags |= IOSQE_CQE_SKIP_SUCCESS | IOSQE_FIXED_FILE | IOSQE_IO_LINK;
+
+	io_uring_prep_rw(uring_op,
+			sqe[1],
+			1 /*fds[1]*/,
+			0,
+			iod->nr_sectors << 9,
+			(iod->start_sector + tgt_data->offset) << 9);
+	sqe[1]->buf_index = tag;
+	sqe[1]->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
+	sqe[1]->user_data = build_user_data(tag, ublk_op, 0, 1);
+
+	io_uring_prep_buf_unregister(sqe[2], 0, tag, q->q_id, tag);
+	sqe[2]->flags |= IOSQE_FIXED_FILE;
+	sqe[2]->user_data = build_user_data(tag,
+			ublk_cmd_op_nr(UBLK_U_IO_UNREGISTER_IO_BUF),
+			0,
+			1);
+
+	// buf register is marked as IOSQE_CQE_SKIP_SUCCESS
+	return 2;
+}
+
 static int loop_queue_tgt_rw(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *data)
 {
-
+	/* zero_copy has top priority */
+	if (data->zero_copy)
+		return lo_rw_zero_copy(q, iod, tag, data);
 	if (data->user_copy)
 		return lo_rw_user_copy(q, iod, tag, data);
 	return lo_rw(q, iod, tag, data);
