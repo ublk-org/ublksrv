@@ -367,9 +367,8 @@ static int loop_queue_tgt_io(const struct ublksrv_queue *q,
 	switch (ublk_op) {
 	case UBLK_IO_OP_FLUSH:
 		ublk_get_sqe_pair(q->ring_ptr, &sqe, NULL);
-		io_uring_prep_sync_file_range(sqe, 1 /*fds[1]*/,
-				iod->nr_sectors << 9,
-				(iod->start_sector + tgt_data->offset) << 9,
+		io_uring_prep_fsync(sqe,
+				1 /*fds[1]*/,
 				IORING_FSYNC_DATASYNC);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 		/* bit63 marks us as tgt io */
