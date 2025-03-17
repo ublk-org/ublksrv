@@ -623,9 +623,6 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 		}
 
 		ios.clear();
-
-		if (q_data->chained_send_ios && !q_data->send_sqe_chain_busy)
-			q_data->send_sqe_chain_busy = 1;
 	}
 	if (q_data->last_send_sqe) {
 		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
