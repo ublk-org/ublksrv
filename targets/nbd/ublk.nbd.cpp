@@ -661,20 +661,6 @@ static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
 	}
 }
 
-static void __nbd_handle_io_bg(const struct ublksrv_queue *q,
-		struct nbd_queue_data *q_data)
-{
-	nbd_handle_send_bg(q, q_data);
-
-	/*
-	 * recv SQE can't cut in send SQE chain, so it has to be
-	 * moved here after the send SQE chain is built
-	 *
-	 * Also queuing ublk io command may allocate sqe too.
-	 */
-	nbd_handle_recv_bg(q, q_data);
-}
-
 /*
  * The initial send request batch should be in same send sqe batch, before
  * this batch isn't done, all new send requests are staggered into next_chain
@@ -698,7 +684,15 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 				q_data->recv_started,
 				nr_queued_io);
 
-	__nbd_handle_io_bg(q, q_data);
+	nbd_handle_send_bg(q, q_data);
+
+	/*
+	 * recv SQE can't cut in send SQE chain, so it has to be
+	 * moved here after the send SQE chain is built
+	 *
+	 * Also queuing ublk io command may allocate sqe too.
+	 */
+	nbd_handle_recv_bg(q, q_data);
 
 	/*
 	 * io can be completed in recv work since we do sync recv, so
@@ -708,7 +702,7 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 	 */
 	if (!q_data->in_flight_ios) {
 		if (!q_data->next_chain.empty())
-			__nbd_handle_io_bg(q, q_data);
+			nbd_handle_send_bg(q, q_data);
 	}
 
 	if (!q_data->recv_started && !nbd_send_chain_busy(q_data) &&
