@@ -17,6 +17,7 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC,
 		.basic = {
+			.attrs                  = UBLK_ATTR_VOLATILE_CACHE,
 			.logical_bs_shift	= 9,
 			.physical_bs_shift	= 12,
 			.io_opt_shift		= 12,
