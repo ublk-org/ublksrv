@@ -47,7 +47,7 @@ struct nbd_queue_data {
 	unsigned short use_send_zc:1;
 	unsigned short use_unix_sock:1;
 	unsigned short need_handle_recv:1;
-	unsigned short send_sqe_chain_busy:1;
+	unsigned short chain_active:1;
 
 	unsigned int chained_send_ios;
 
@@ -506,6 +506,12 @@ handle_read_io:
 	co_return;
 }
 
+/* The current chain is busy iff it has been submitted to kernel */
+static inline int nbd_send_chain_busy(const struct nbd_queue_data *q_data)
+{
+	return q_data->chained_send_ios > 0 && q_data->chain_active;
+}
+
 static int nbd_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
@@ -516,7 +522,7 @@ static int nbd_handle_io_async(const struct ublksrv_queue *q,
 	 * Put the io in the queue and submit them after
 	 * the current chain becomes idle.
 	 */
-	if (q_data->send_sqe_chain_busy)
+	if (nbd_send_chain_busy(q_data))
 		q_data->next_chain.push_back(data);
 	else
 		io->co = __nbd_handle_io_async(q, data, io);
@@ -544,10 +550,8 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 		return;
 
 	ublk_assert(q_data->chained_send_ios);
-	if (!--q_data->chained_send_ios) {
-		if (q_data->send_sqe_chain_busy)
-			q_data->send_sqe_chain_busy = 0;
-	}
+	if (--q_data->chained_send_ios == 0)
+		q_data->chain_active = false;
 
 	/*
 	 * In case of failure, how to tell recv work to handle the
@@ -610,7 +614,7 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 		struct nbd_queue_data *q_data)
 {
-	if (!q_data->send_sqe_chain_busy) {
+	if (!nbd_send_chain_busy(q_data)) {
 		std::vector<const struct ublk_io_data *> &ios =
 			q_data->next_chain;
 
@@ -662,10 +666,6 @@ static void __nbd_handle_io_bg(const struct ublksrv_queue *q,
 {
 	nbd_handle_send_bg(q, q_data);
 
-	/* stop to queue send now since we need to recv now */
-	if (q_data->chained_send_ios && !q_data->send_sqe_chain_busy)
-		q_data->send_sqe_chain_busy = 1;
-
 	/*
 	 * recv SQE can't cut in send SQE chain, so it has to be
 	 * moved here after the send SQE chain is built
@@ -690,10 +690,10 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
-	NBD_IO_DBG("%s: pending ios %d/%d chain_busy %d next_chain %ld recv(%d) sqes %u\n",
+	NBD_IO_DBG("%s: pending ios %d/%d chain_active %d next_chain %ld recv(%d) sqes %u\n",
 				__func__, q_data->in_flight_ios,
 				q_data->chained_send_ios,
-				q_data->send_sqe_chain_busy,
+				q_data->chain_active,
 				q_data->next_chain.size(),
 				q_data->recv_started,
 				nr_queued_io);
@@ -704,22 +704,26 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 	 * io can be completed in recv work since we do sync recv, so
 	 * io could be completed before the send seq's cqe is returned.
 	 *
-	 * When this happens, simply clear chain busy, so that we can
-	 * queue more requests.
+	 * When this happens, queue more requests.
 	 */
-	if (!q_data->in_flight_ios && q_data->send_sqe_chain_busy) {
-		/* all inflight ios are done, so it is safe to send request */
-		q_data->send_sqe_chain_busy = 0;
-
+	if (!q_data->in_flight_ios) {
 		if (!q_data->next_chain.empty())
 			__nbd_handle_io_bg(q, q_data);
 	}
 
-	if (!q_data->recv_started && !q_data->send_sqe_chain_busy &&
+	if (!q_data->recv_started && !nbd_send_chain_busy(q_data) &&
 			!q_data->next_chain.empty())
 		nbd_err("%s: hang risk: pending ios %d/%d\n",
 				__func__, q_data->in_flight_ios,
 				q_data->chained_send_ios);
+
+	/*
+	 * This chain is going to be submitted to kernel because
+	 * ->handle_io_background() is the last thing before calling
+	 * io_uring_enter()
+	 */
+	if (q_data->chained_send_ios > 0)
+		q_data->chain_active = true;
 }
 
 static int nbd_init_queue(const struct ublksrv_queue *q,
