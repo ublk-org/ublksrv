@@ -147,7 +147,7 @@ static inline void __nbd_build_req(const struct ublksrv_queue *q,
 
 static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
-		const struct nbd_request *req, const struct msghdr *msg)
+		const struct msghdr *msg)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	const struct ublksrv_io_desc *iod = data->iod;
@@ -171,20 +171,10 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	 */
 	msg_flags |= MSG_WAITALL;
 
-	if (ublk_op != UBLK_IO_OP_WRITE) {
-		io_uring_prep_send(sqe, q->q_id + 1, req,
-				sizeof(*req), msg_flags);
-	} else {
-		if (q_data->use_send_zc)
-			io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg,
-				msg_flags);
-		else
-			io_uring_prep_sendmsg(sqe, q->q_id + 1, msg,
-				msg_flags);
-	}
-
-	if (ublk_op == UBLK_IO_OP_READ)
-		ublk_op = NBD_OP_READ_REQ;
+	if (q_data->use_send_zc)
+		io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg, msg_flags);
+	else
+		io_uring_prep_sendmsg(sqe, q->q_id + 1, msg, msg_flags);
 
 	/*
 	 * The encoded nr_sectors should only be used for validating write req
@@ -216,6 +206,7 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 	int type = req_to_nbd_cmd_type(data->iod);
+	unsigned op = ublksrv_get_op(data->iod);
 	struct iovec iov[2] = {
 		[0] = {
 			.iov_base = (void *)&req,
@@ -228,7 +219,7 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	};
 	struct msghdr msg = {
 		.msg_iov = iov,
-		.msg_iovlen = 2,
+		.msg_iovlen = (op == UBLK_IO_OP_WRITE) ? 2UL : 1UL,
 	};
 
 	if (type == -1)
@@ -242,7 +233,7 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	nbd_data->done = 0;
 
 again:
-	ret = nbd_queue_req(q, data, &req, &msg);
+	ret = nbd_queue_req(q, data, &msg);
 	if (ret < 0)
 		goto fail;
 
