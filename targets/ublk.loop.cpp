@@ -148,7 +148,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD,
 		.basic = {
-			.attrs                  = UBLK_ATTR_VOLATILE_CACHE,
+			.attrs                  = UBLK_ATTR_VOLATILE_CACHE | UBLK_ATTR_FUA,
 			.logical_bs_shift	= 9,
 			.physical_bs_shift	= 12,
 			.io_opt_shift	= 12,
@@ -280,6 +280,13 @@ static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
        return mode;
 }
 
+static inline void lo_rw_handle_fua(struct io_uring_sqe *sqe,
+		const struct ublksrv_io_desc *iod)
+{
+	if (ublksrv_get_op(iod) == UBLK_IO_OP_WRITE && (iod->op_flags & UBLK_IO_F_FUA))
+		sqe->rw_flags |= RWF_DSYNC;
+}
+
 static int lo_rw_user_copy(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *tgt_data)
@@ -317,6 +324,7 @@ static int lo_rw_user_copy(const struct ublksrv_queue *q,
 			buf, iod->nr_sectors << 9,
 			(iod->start_sector + tgt_data->offset) << 9);
 		io_uring_sqe_set_flags(sqe2, IOSQE_FIXED_FILE);
+		lo_rw_handle_fua(sqe2, iod);
 		/* bit63 marks us as tgt io */
 		sqe2->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
 	}
@@ -339,6 +347,8 @@ static int lo_rw(const struct ublksrv_queue *q,
 		iod->nr_sectors << 9,
 		(iod->start_sector + tgt_data->offset) << 9);
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+	lo_rw_handle_fua(sqe, iod);
+
 	sqe->user_data = build_user_data(tag, ublksrv_get_op(iod), UBLK_IO_TGT_IO, 1);
 	return 1;
 }
