@@ -825,12 +825,24 @@ extern int ublk_json_read_target_str_info(const struct ublksrv_ctrl_dev *cdev,
 /**
  * Deserialize json buffer to target ulong field
  *
+ * DEPRECATED. Use ublk_json_read_target_ulong_info instead.
+ *
  * @param jbuf json buffer
  * @param name field name with ulong type
  * @param val field value with ulong type
  */
 extern int ublksrv_json_read_target_ulong_info(const char *jbuf,
 		const char *name, unsigned long *val);
+
+/**
+ * Deserialize json buffer to target ulong field
+ *
+ * @param dev the ublksrv control device instance
+ * @param name field name with ulong type
+ * @param val field value with ulong type
+ */
+extern int ublk_json_read_target_ulong_info(const struct ublksrv_ctrl_dev *dev,
+				     const char *name, unsigned long *val);
 
 /**
  * Serialize json buffer from target field with string type
