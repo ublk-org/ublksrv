@@ -219,6 +219,23 @@ int ublksrv_json_read_target_str_info(const char *jbuf, int len,
 	return -EINVAL;
 }
 
+int ublk_json_read_target_str_info(const struct ublksrv_ctrl_dev *cdev,
+				   const char *name, char *val)
+{
+	struct ublksrv_tgt_jbuf *j = &cdev->data->jbuf;
+	int ret = 0;
+
+	if (!j)
+		return -EINVAL;
+
+	pthread_mutex_lock(&j->lock);
+	ret = ublksrv_json_read_target_str_info(j->jbuf, j->jbuf_size, name, val);
+	pthread_mutex_unlock(&j->lock);
+
+	return ret;
+}
+    
+  
 int ublksrv_json_read_target_ulong_info(const char *jbuf,
 		const char *name, unsigned long *val)
 {
