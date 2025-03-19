@@ -802,6 +802,8 @@ extern int ublksrv_json_read_target_info(const char *jbuf, char *tgt_buf,
 /**
  * Deserialize json buffer to target string field
  *
+ * DEPRECATED. Use ublk_json_read_target_str_info instead
+ *
  * @param jbuf json buffer
  * @param len length of json buffer
  * @param name string name
@@ -809,6 +811,16 @@ extern int ublksrv_json_read_target_info(const char *jbuf, char *tgt_buf,
  */
 extern int ublksrv_json_read_target_str_info(const char *jbuf, int len,
 		const char *name, char *val);
+
+/**
+ * Deserialize json buffer to target string field
+ *
+ * @param dev the ublksrv control device instance
+ * @param name string name
+ * @param val string value
+ */
+extern int ublk_json_read_target_str_info(const struct ublksrv_ctrl_dev *cdev,
+				   const char *name, char *val);
 
 /**
  * Deserialize json buffer to target ulong field
