@@ -540,6 +540,11 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 	}
 }
 
+void ublk_ctrl_dump(struct ublksrv_ctrl_dev *dev)
+{
+	return ublksrv_ctrl_dump(dev, dev->data->jbuf.jbuf);
+}
+
 int ublksrv_ctrl_set_params(struct ublksrv_ctrl_dev *dev,
 		struct ublk_params *params)
 {
