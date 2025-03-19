@@ -37,12 +37,11 @@ static bool backing_supports_discard(char *name)
 	return false;
 }
 
-static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
-		const char *jbuf)
+static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery)
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const struct ublksrv_ctrl_dev_info *info = ublksrv_ctrl_get_dev_info(cdev);
 	int fd, ret;
 	unsigned long direct_io = 0;
 	struct ublk_params p;
@@ -50,16 +49,14 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 	struct loop_tgt_data *tgt_data = (struct loop_tgt_data*)dev->tgt.tgt_data;
 	struct stat sb;
 
-	ublk_assert(jbuf);
-
-	ret = ublksrv_json_read_target_str_info(jbuf, PATH_MAX, "backing_file", file);
+	ret = ublk_json_read_target_str_info(cdev, "backing_file", file);
 	if (ret < 0) {
 		ublk_err( "%s: backing file can't be retrieved from jbuf %d\n",
 				__func__, ret);
 		return ret;
 	}
 
-	ret = ublksrv_json_read_target_ulong_info(jbuf, "direct_io",
+	ret = ublk_json_read_target_ulong_info(cdev, "direct_io",
 			&direct_io);
 	if (ret) {
 		ublk_err( "%s: read target direct_io failed %d\n",
@@ -67,7 +64,7 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 		return ret;
 	}
 
-	ret = ublksrv_json_read_target_ulong_info(jbuf, "offset",
+	ret = ublk_json_read_target_ulong_info(cdev, "offset",
 			&tgt_data->offset);
 	if (ret) {
 		ublk_err( "%s: read target offset failed %d\n",
@@ -75,7 +72,7 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 		return ret;
 	}
 
-	ret = ublksrv_json_read_params(&p, jbuf);
+	ret = ublk_json_read_params(&p, cdev);
 	if (ret) {
 		ublk_err( "%s: read ublk params failed %d\n",
 				__func__, ret);
@@ -115,22 +112,15 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 
 static int loop_recover_tgt(struct ublksrv_dev *dev, int type)
 {
-	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	const char *jbuf = ublksrv_ctrl_get_jbuf(cdev);
-
-	if (!jbuf)
-		return -EINVAL;
-
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
-	return loop_setup_tgt(dev, type, true, jbuf);
+	return loop_setup_tgt(dev, type, true);
 }
 
 static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	const char *jbuf = ublksrv_ctrl_get_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(cdev);
 	int buffered_io = 0;
@@ -256,7 +246,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
-	return loop_setup_tgt(dev, type, false, jbuf);
+	return loop_setup_tgt(dev, type, false);
 }
 
 static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
