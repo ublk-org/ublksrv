@@ -592,9 +592,17 @@ extern void ublksrv_ctrl_set_priv_data(struct ublksrv_ctrl_dev *dev, void *data)
 /**
  *
  * Store the device json in the pidfile
+ *
+ * DEPRECATED. Use ublk_tgt_store_dev_data instead.
  */
 extern int ublksrv_tgt_store_dev_data(const struct ublksrv_dev *dev,
 				      const char *buf);
+
+/**
+ *
+ * Store the device json in the pidfile
+ */
+extern int ublk_tgt_store_dev_data(const struct ublksrv_dev *dev);
 
 /**
  *
