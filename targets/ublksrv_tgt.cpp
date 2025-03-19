@@ -108,8 +108,7 @@ int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
 	return 0;
 }
 
-static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
-				   const char *jbuf)
+static void ublk_tgt_set_params(struct ublksrv_ctrl_dev *cdev)
 {
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(cdev);
@@ -117,7 +116,7 @@ static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 	struct ublk_params p;
 	int ret;
 
-	ret = ublksrv_json_read_params(&p, jbuf);
+	ret = ublk_json_read_params(&p, cdev);
 	if (ret >= 0) {
 		ret = ublksrv_ctrl_set_params(cdev, &p);
 		if (ret)
@@ -132,21 +131,13 @@ static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 		const struct ublksrv_dev *dev, int evtfd, bool recover)
 {
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(cdev);
 	int dev_id = dinfo->dev_id;
 	int ret;
 
-	if (!j || !j->jbuf) {
-		fprintf(stderr, "json buffer is NULL, dev %d\n", dev_id);
-		return -EINVAL;
-	}
-
-	pthread_mutex_lock(&j->lock);
-	ublksrv_tgt_set_params(cdev, j->jbuf);
-	ublksrv_tgt_store_dev_data(dev, j->jbuf);
-	pthread_mutex_unlock(&j->lock);
+	ublk_tgt_set_params(cdev);
+	ublk_tgt_store_dev_data(dev);
 
 	if (recover)
 		ret = ublksrv_ctrl_end_recovery(cdev, getpid());
@@ -165,7 +156,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 
 	// dump dev info in case of foreground creation
 	if (evtfd == -1)
-		ublksrv_ctrl_dump(cdev, j->jbuf);
+		ublk_ctrl_dump(cdev);
 	else {
 		if (ublksrv_tgt_send_dev_event(evtfd, dev_id)) {
 			ublk_err("fail to write eventfd from target daemon\n");
