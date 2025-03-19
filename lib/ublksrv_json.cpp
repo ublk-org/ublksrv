@@ -509,6 +509,36 @@ int ublksrv_tgt_store_dev_data(const struct ublksrv_dev *dev,
 	return ret;
 }
 
+int ublk_tgt_store_dev_data(const struct ublksrv_dev *dev)
+{
+	int ret;
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	int fd;
+	const char *buf;
+	int len;
+
+	pthread_mutex_lock(&cdev->data->jbuf.lock);
+	buf = cdev->data->jbuf.jbuf;
+	len = ublksrv_json_get_length(buf);
+	fd = ublksrv_get_pidfile_fd(dev);
+
+	if (fd < 0) {
+		ublk_err( "fail to get fd of pid file, ret %d\n",
+				fd);
+		ret = fd;
+		goto finished;
+	}
+
+	ret = pwrite(fd, buf, len, JSON_OFFSET);
+	if (ret <= 0)
+		ublk_err( "fail to write json data to pid file, ret %d\n",
+				ret);
+
+ finished:
+	pthread_mutex_unlock(&cdev->data->jbuf.lock);
+	return ret;
+}
+
 char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev)
 {
 	const struct ublksrv_ctrl_dev_info *info =
