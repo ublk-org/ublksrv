@@ -461,10 +461,19 @@ extern int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev);
 /**
  * Dump this ublk device
  *
+ * DEPRECATED. Use ublk_ctrl_dump instead.
+ *
  * @param dev the ublksrv control device instance
  * @param buf ublk device json buffer, optional
  */
 extern void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *buf);
+
+/**
+ * Dump this ublk device
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern void ublk_ctrl_dump(struct ublksrv_ctrl_dev *dev);
 
 /**
  * Start this ublk device by sending command to ublk control device
