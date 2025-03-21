@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
 #include "config.h"
+#include <semaphore.h>
 #include "ublksrv_tgt.h"
 
 #define UBLKSRV_INTERNAL_H_
@@ -12,6 +13,7 @@ struct ublksrv_queue_info {
 	const struct ublksrv_dev *dev;
 	int qid;
 	pthread_t thread;
+	sem_t *queue_sem;
 };
 
 static void *ublksrv_queue_handler(void *data)
@@ -19,7 +21,6 @@ static void *ublksrv_queue_handler(void *data)
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
 	const struct ublksrv_dev *dev = info->dev;
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	struct ublksrv_ctrl_data *cdata = ublksrv_get_ctrl_data(cdev);
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(cdev);
 	unsigned dev_id = dinfo->dev_id;
@@ -28,7 +29,7 @@ static void *ublksrv_queue_handler(void *data)
 
 	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
 
-	sem_post(&cdata->queue_sem);
+	sem_post(info->queue_sem);
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
@@ -176,6 +177,7 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, 
 	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
 	int i, ret = -EINVAL;
+	sem_t queue_sem;
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
@@ -197,16 +199,19 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, 
 				struct ublksrv_queue_info),
 			dinfo->nr_hw_queues);
 
+	sem_init(&queue_sem, 0, 0);
+
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
 		info_array[i].dev = dev;
 		info_array[i].qid = i;
+		info_array[i].queue_sem = &queue_sem;
 		pthread_create(&info_array[i].thread, NULL,
 				ublksrv_queue_handler,
 				&info_array[i]);
 	}
 
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
-		sem_wait(&ctrl_dev->data->queue_sem);
+		sem_wait(&queue_sem);
 
 	ret = ublksrv_tgt_start_dev(ctrl_dev, dev, evtfd, recover);
 	if (ret) {
