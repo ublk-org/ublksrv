@@ -188,13 +188,6 @@ void ublksrv_print_std_opts(void);
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
-static inline bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev)
-{
-	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
-
-	return data->recover;
-}
-
 /* called after one cqe is received */
 static inline int ublksrv_tgt_process_cqe(const struct ublk_io_tgt *io, int *io_res)
 {
