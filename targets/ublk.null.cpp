@@ -10,17 +10,11 @@ static int null_setup_tgt(struct ublksrv_dev *dev)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	const struct ublksrv_ctrl_dev_info *info = ublksrv_ctrl_get_dev_info(cdev);
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	struct ublk_params p;
 	int ret;
 
-	if (!j)
-		return -EINVAL;
-
-	ublk_assert(j->jbuf);
-
-	ret = ublksrv_json_read_params(&p, j->jbuf);
+	ret = ublk_json_read_params(&p, cdev);
 	if (ret) {
 		ublk_err( "%s: read ublk params failed %d\n",
 				__func__, ret);

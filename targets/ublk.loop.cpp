@@ -116,21 +116,21 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
 static int loop_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	const char *jbuf = ublksrv_ctrl_get_jbuf(cdev);
 
-	if (!j)
+	if (!jbuf)
 		return -EINVAL;
 
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
-	return loop_setup_tgt(dev, type, true, j->jbuf);
+	return loop_setup_tgt(dev, type, true, jbuf);
 }
 
 static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		*argv[])
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	const char *jbuf = ublksrv_ctrl_get_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(cdev);
 	int buffered_io = 0;
@@ -256,7 +256,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
-	return loop_setup_tgt(dev, type, false, j->jbuf);
+	return loop_setup_tgt(dev, type, false, jbuf);
 }
 
 static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)

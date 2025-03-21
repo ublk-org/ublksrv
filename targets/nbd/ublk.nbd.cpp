@@ -885,18 +885,18 @@ static void nbd_parse_flags(struct ublk_params *p, uint16_t flags, uint32_t bs)
         }
 }
 
-static int nbd_recover_tgt(struct ublksrv_dev *dev, int type)
+static int nbd_recover_tgt(tstruct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	const char *jbuf = ublksrv_ctrl_get_jbuf(cdev);
 	uint16_t flags = 0;
 
-	if (!j)
+	if (!jbuf)
 		return -EINVAL;
 
 	dev->tgt.tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
-	return nbd_setup_tgt(dev, type, true, j->jbuf, &flags);
+	return nbd_setup_tgt(dev, type, true, jbuf, &flags);
 }
 
 static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
@@ -916,7 +916,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
+	const char *jbuf = ublksrv_ctrl_get_jbuf(cdev);
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	int opt;
 	int option_index = 0;
@@ -964,7 +964,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
-	ret = nbd_setup_tgt(dev, type, false, j->jbuf, &flags);
+	ret = nbd_setup_tgt(dev, type, false, jbuf, &flags);
 	if (ret)
 		return ret;
 
