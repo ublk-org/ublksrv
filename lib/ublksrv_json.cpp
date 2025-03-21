@@ -179,6 +179,12 @@ int ublksrv_json_read_params(struct ublk_params *p,
 	return 0;
 }
 
+int ublk_json_read_params(struct ublk_params *p,
+			  const struct ublksrv_ctrl_dev *cdev)
+{
+	return ublksrv_json_read_params(p, cdev->data->jbuf.jbuf);
+}
+  
 int ublksrv_json_dump_params(const char *jbuf)
 {
 	json j;
