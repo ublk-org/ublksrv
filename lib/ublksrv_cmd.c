@@ -141,7 +141,6 @@ static void ublksrv_ctrl_data_init(struct ublksrv_ctrl_dev *cdev,
 		bool recover)
 {
 	ublksrv_tgt_jbuf_init(cdev, &cdev->data->jbuf, recover);
-	sem_init(&cdev->data->queue_sem, 0, 0);
 	cdev->data->recover = recover;
 }
 
