@@ -37,9 +37,6 @@ struct demo_queue_info {
 static struct ublksrv_ctrl_dev *this_ctrl_dev;
 static const struct ublksrv_dev *this_dev;
 
-static pthread_mutex_t jbuf_lock;
-static char jbuf[4096];
-
 static void sig_handler(int sig)
 {
 	const struct ublksrv_queue *q = ublksrv_get_queue(this_dev, 0);
@@ -324,11 +321,8 @@ static void *demo_event_io_handler_fn(void *data)
 	unsigned short q_id = info->qid;
 	const struct ublksrv_queue *q;
 
-	pthread_mutex_lock(&jbuf_lock);
-	ublksrv_json_write_queue_info(ublksrv_get_ctrl_dev(dev), jbuf, sizeof jbuf,
-			q_id, ublksrv_gettid());
-	ublksrv_tgt_store_dev_data(dev, jbuf);
-	pthread_mutex_unlock(&jbuf_lock);
+	ublk_json_write_queue_info(ublksrv_get_ctrl_dev(dev), q_id, ublksrv_gettid());
+	ublk_tgt_store_dev_data(dev);
 
 	q = ublksrv_queue_init(dev, q_id, info);
 	if (!q) {
@@ -368,9 +362,7 @@ static void demo_event_set_parameters(struct ublksrv_ctrl_dev *cdev,
 	};
 	int ret;
 
-	pthread_mutex_lock(&jbuf_lock);
-	ublksrv_json_write_params(&p, jbuf, sizeof jbuf);
-	pthread_mutex_unlock(&jbuf_lock);
+	ublk_json_write_params(cdev, &p);
 
 	ret = ublksrv_ctrl_set_params(cdev, &p);
 	if (ret)
@@ -432,7 +424,7 @@ static int demo_event_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 		goto fail;
 
 	ublksrv_ctrl_get_info(ctrl_dev);
-	ublksrv_ctrl_dump(ctrl_dev, jbuf);
+	ublk_ctrl_dump(ctrl_dev);
 
 	/* wait until we are terminated */
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
@@ -493,8 +485,8 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
-	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, sizeof jbuf);
-	ublksrv_json_write_target_base_info(jbuf, sizeof jbuf, &tgt_json);
+	ublk_json_write_dev_info(ublksrv_get_ctrl_dev(dev));
+	ublk_json_write_target_base(ublksrv_get_ctrl_dev(dev), &tgt_json);
 
 	return 0;
 }
@@ -569,8 +561,6 @@ int main(int argc, char *argv[])
 		error(EXIT_FAILURE, errno, "signal");
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		error(EXIT_FAILURE, errno, "signal");
-
-	pthread_mutex_init(&jbuf_lock, NULL);
 
 	data.ublksrv_flags = UBLKSRV_F_NEED_EVENTFD;
 	dev = ublksrv_ctrl_init(&data);
