@@ -422,6 +422,20 @@ extern struct ublksrv_ctrl_dev *ublksrv_ctrl_recover_init(struct ublksrv_dev_dat
 extern bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *dev);
 
 /**
+ * Lock the json data for updates
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern void ublk_json_lock(const struct ublksrv_ctrl_dev *dev);
+
+/**
+ * Unlock the json data for updates
+ *
+ * @param dev the ublksrv control device instance
+ */
+extern void ublk_json_unlock(const struct ublksrv_ctrl_dev *dev);
+
+/**
  * Retrieve and store each queue's cpu affinity info into private data of the
  * control device by sending commands to ublk control device
  *

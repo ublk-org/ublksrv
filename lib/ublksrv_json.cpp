@@ -114,6 +114,20 @@ struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cde
 	return &data->jbuf;
 }
 
+void ublk_json_lock(const struct ublksrv_ctrl_dev *cdev)
+{
+	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
+
+	pthread_mutex_lock(&data->jbuf.lock);
+}
+
+void ublk_json_unlock(const struct ublksrv_ctrl_dev *cdev)
+{
+	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
+
+	pthread_mutex_unlock(&data->jbuf.lock);
+}
+
 int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *cdev)
 {
 	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
