@@ -18,7 +18,6 @@
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 #include <sys/poll.h>
-#include <semaphore.h>
 
 #include "ublk_cmd.h"
 #include "ublksrv_utils.h"
@@ -46,7 +45,6 @@ struct ublksrv_tgt_jbuf {
 
 struct ublksrv_ctrl_data {
 	struct ublksrv_tgt_jbuf jbuf;
-	sem_t queue_sem;
 	bool recover;
 };
 
