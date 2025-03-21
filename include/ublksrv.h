@@ -565,7 +565,7 @@ extern void ublksrv_ctrl_prep_recovery(struct ublksrv_ctrl_dev *dev,
 		const char *recovery_jbuf);
 
 /**
- * Return device's json buffer
+ * Return device's json recovery buffer
  *
  * Setup target type, run_dir and json buffer before starting to recovery device.
  *
@@ -948,11 +948,22 @@ extern int ublk_json_write_target_base(const struct ublksrv_ctrl_dev *dev,
 /**
  * Deserialize json buffer to ublk_params instance
  *
+ * DEPRECATED. Use ublk_json_read_params instead.
+ *
  * @param p ublk_params instance
  * @param jbuf json buffer
  */
 extern int ublksrv_json_read_params(struct ublk_params *p,
 		const char *jbuf);
+
+/**
+ * Deserialize json buffer to ublk_params instance
+ *
+ * @param p ublk_params instance
+ * @param dev the ublksrv control device instance
+ */
+extern int ublk_json_read_params(struct ublk_params *p,
+			  const struct ublksrv_ctrl_dev *dev);
 
 /**
  * Serialize json buffer from ublk_params instance
