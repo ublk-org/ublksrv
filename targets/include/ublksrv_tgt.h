@@ -18,7 +18,6 @@
 #include <coroutine>
 #include <iostream>
 #include <type_traits>
-#include <semaphore.h>
 
 #include "ublksrv_utils.h"
 #include "ublksrv.h"
@@ -151,14 +150,6 @@ static inline bool ublk_param_is_valid(const struct ublk_params *p)
 	return true;
 }
 
-int ublk_json_write_tgt_str(const struct ublksrv_ctrl_dev *dev, const char *name, const char *val);
-int ublk_json_write_tgt_long(const struct ublksrv_ctrl_dev *dev, const char *name, long val);
-int ublk_json_write_tgt_ulong(const struct ublksrv_ctrl_dev *dev, const char *name, unsigned long val);
-int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *dev);
-int ublk_json_write_params(const struct ublksrv_ctrl_dev *dev, const struct ublk_params *p);
-int ublk_json_write_target_base(const struct ublksrv_ctrl_dev *dev,
-		const struct ublksrv_tgt_base_json *tgt);
-
 static inline void ublk_get_sqe_pair(struct io_uring *r,
 		struct io_uring_sqe **sqe, struct io_uring_sqe **sqe2)
 {
@@ -184,78 +175,9 @@ static inline enum io_uring_op ublk_to_uring_fs_op(const struct ublksrv_io_desc 
 
 int ublksrv_tgt_send_dev_event(int evtfd, int dev_id);
 
-struct ublksrv_queue_info {
-	const struct ublksrv_dev *dev;
-	int qid;
-	pthread_t thread;
-};
-
 void ublksrv_print_std_opts(void);
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
-
-#define UBLK_TGT_MAX_JBUF_SZ 8192
-struct ublksrv_tgt_jbuf {
-	pthread_mutex_t lock;
-	int jbuf_size;
-	char *jbuf;
-};
-
-static inline bool tgt_realloc_jbuf(struct ublksrv_tgt_jbuf *j)
-{
-	if (j->jbuf == NULL)
-		j->jbuf_size = 512;
-	else
-		j->jbuf_size += 512;
-
-	if (j->jbuf_size < UBLK_TGT_MAX_JBUF_SZ) {
-		j->jbuf = (char *)realloc((void *)j->jbuf, j->jbuf_size);
-		return true;
-	}
-	return false;
-}
-
-static inline void ublksrv_tgt_jbuf_exit(struct ublksrv_tgt_jbuf *jbuf)
-{
-	free(jbuf->jbuf);
-}
-
-static inline void ublksrv_tgt_jbuf_init(struct ublksrv_ctrl_dev *cdev,
-		struct ublksrv_tgt_jbuf *j, bool recover)
-{
-	pthread_mutex_init(&j->lock, NULL);
-	if (recover) {
-		j->jbuf = ublksrv_tgt_get_dev_data(cdev);
-		if (j->jbuf)
-			j->jbuf_size = ublksrv_json_get_length(j->jbuf);
-	} else {
-		j->jbuf = NULL;
-		j->jbuf_size = 0;
-		tgt_realloc_jbuf(j);
-	}
-}
-
-struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
-
-struct ublksrv_ctrl_data {
-	struct ublksrv_tgt_jbuf jbuf;
-	sem_t queue_sem;
-	bool recover;
-};
-
-static inline struct ublksrv_ctrl_data *ublksrv_get_ctrl_data(const struct ublksrv_ctrl_dev *cdev)
-{
-	void *data = ublksrv_ctrl_get_priv_data(cdev);
-
-	return (struct ublksrv_ctrl_data *)data;
-}
-
-static inline bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev)
-{
-	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
-
-	return data->recover;
-}
 
 /* called after one cqe is received */
 static inline int ublksrv_tgt_process_cqe(const struct ublk_io_tgt *io, int *io_res)

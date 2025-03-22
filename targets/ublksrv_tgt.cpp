@@ -1,168 +1,23 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
 #include "config.h"
+#include <semaphore.h>
 #include "ublksrv_tgt.h"
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
-static void ublksrv_ctrl_data_init(struct ublksrv_ctrl_dev *cdev,
-		struct ublksrv_ctrl_data *data, bool recover)
-{
-	ublksrv_tgt_jbuf_init(cdev, &data->jbuf, recover);
-	sem_init(&data->queue_sem, 0, 0);
-	data->recover = recover;
-	ublksrv_ctrl_set_priv_data(cdev, data);
-}
-
-static void ublksrv_ctrl_data_exit(struct ublksrv_ctrl_dev *cdev,
-		struct ublksrv_ctrl_data *data)
-{
-	ublksrv_ctrl_set_priv_data(cdev, NULL);
-	ublksrv_tgt_jbuf_exit(&data->jbuf);
-}
-
-struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
-{
-	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
-
-	return &data->jbuf;
-}
-
-int ublk_json_write_dev_info(const struct ublksrv_ctrl_dev *cdev)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		ret = ublksrv_json_write_dev_info(cdev,
-				j->jbuf, j->jbuf_size);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-}
-
-int ublk_json_write_params(const struct ublksrv_ctrl_dev *cdev,
-		const struct ublk_params *p)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		ret = ublksrv_json_write_params(p, j->jbuf, j->jbuf_size);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-}
-
-int ublk_json_write_target_base(const struct ublksrv_ctrl_dev *cdev,
-		const struct ublksrv_tgt_base_json *tgt)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		ret = ublksrv_json_write_target_base_info(j->jbuf, j->jbuf_size, tgt);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-
-}
-
-int ublk_json_write_tgt_str(const struct ublksrv_ctrl_dev *cdev, const char *name, const char *val)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		if (val)
-			ret = ublksrv_json_write_target_str_info(j->jbuf,
-					j->jbuf_size, name, val);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-}
-
-int ublk_json_write_tgt_ulong(const struct ublksrv_ctrl_dev *cdev, const char *name, unsigned long val)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		ret = ublksrv_json_write_target_ulong_info(j->jbuf, j->jbuf_size,
-				name, val);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-}
-
-int ublk_json_write_tgt_long(const struct ublksrv_ctrl_dev *cdev, const char *name, long val)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		ret = ublksrv_json_write_target_long_info(j->jbuf, j->jbuf_size,
-				name, val);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-}
-
-static int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
-		unsigned int qid, int tid)
-{
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
-	int ret = 0;
-
-	if (!j)
-		return -EINVAL;
-
-	pthread_mutex_lock(&j->lock);
-	do {
-		ret = ublksrv_json_write_queue_info(cdev, j->jbuf, j->jbuf_size,
-				qid, tid);
-	} while (ret < 0 && tgt_realloc_jbuf(j));
-	pthread_mutex_unlock(&j->lock);
-
-	return ret;
-}
+struct ublksrv_queue_info {
+	const struct ublksrv_dev *dev;
+	int qid;
+	pthread_t thread;
+	sem_t *queue_sem;
+};
 
 static void *ublksrv_queue_handler(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
 	const struct ublksrv_dev *dev = info->dev;
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
-	struct ublksrv_ctrl_data *cdata = ublksrv_get_ctrl_data(cdev);
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(cdev);
 	unsigned dev_id = dinfo->dev_id;
@@ -171,7 +26,7 @@ static void *ublksrv_queue_handler(void *data)
 
 	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
 
-	sem_post(&cdata->queue_sem);
+	sem_post(info->queue_sem);
 
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
@@ -251,8 +106,7 @@ int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
 	return 0;
 }
 
-static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
-				   const char *jbuf)
+static void ublk_tgt_set_params(struct ublksrv_ctrl_dev *cdev)
 {
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(cdev);
@@ -260,7 +114,7 @@ static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 	struct ublk_params p;
 	int ret;
 
-	ret = ublksrv_json_read_params(&p, jbuf);
+	ret = ublk_json_read_params(&p, cdev);
 	if (ret >= 0) {
 		ret = ublksrv_ctrl_set_params(cdev, &p);
 		if (ret)
@@ -275,21 +129,15 @@ static void ublksrv_tgt_set_params(struct ublksrv_ctrl_dev *cdev,
 static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 		const struct ublksrv_dev *dev, int evtfd, bool recover)
 {
-	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(cdev);
 	int dev_id = dinfo->dev_id;
 	int ret;
 
-	if (!j || !j->jbuf) {
-		fprintf(stderr, "json buffer is NULL, dev %d\n", dev_id);
-		return -EINVAL;
-	}
-
-	pthread_mutex_lock(&j->lock);
-	ublksrv_tgt_set_params(cdev, j->jbuf);
-	ublksrv_tgt_store_dev_data(dev, j->jbuf);
-	pthread_mutex_unlock(&j->lock);
+	ublk_json_lock(cdev);
+	ublk_tgt_set_params(cdev);
+	ublk_tgt_store_dev_data(dev);
+	ublk_json_unlock(cdev);
 
 	if (recover)
 		ret = ublksrv_ctrl_end_recovery(cdev, getpid());
@@ -308,7 +156,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 
 	// dump dev info in case of foreground creation
 	if (evtfd == -1)
-		ublksrv_ctrl_dump(cdev, j->jbuf);
+		ublk_ctrl_dump(cdev);
 	else {
 		if (ublksrv_tgt_send_dev_event(evtfd, dev_id)) {
 			ublk_err("fail to write eventfd from target daemon\n");
@@ -321,7 +169,6 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 
 static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
 {
-	struct ublksrv_ctrl_data cdata;
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
 	int dev_id = dinfo->dev_id;
@@ -329,8 +176,7 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, 
 	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
 	int i, ret = -EINVAL;
-
-	ublksrv_ctrl_data_init(ctrl_dev, &cdata, recover);
+	sem_t queue_sem;
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
@@ -352,16 +198,19 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, 
 				struct ublksrv_queue_info),
 			dinfo->nr_hw_queues);
 
+	sem_init(&queue_sem, 0, 0);
+
 	for (i = 0; i < dinfo->nr_hw_queues; i++) {
 		info_array[i].dev = dev;
 		info_array[i].qid = i;
+		info_array[i].queue_sem = &queue_sem;
 		pthread_create(&info_array[i].thread, NULL,
 				ublksrv_queue_handler,
 				&info_array[i]);
 	}
 
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
-		sem_wait(&cdata.queue_sem);
+		sem_wait(&queue_sem);
 
 	ret = ublksrv_tgt_start_dev(ctrl_dev, dev, evtfd, recover);
 	if (ret) {
@@ -380,7 +229,6 @@ out:
 	if (ret)
 		ublksrv_ctrl_del_dev(ctrl_dev);
 	ublk_log("end ublksrv io daemon");
-	ublksrv_ctrl_data_exit(ctrl_dev, &cdata);
 	closelog();
 
 	return ret;
@@ -592,6 +440,7 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;
 	data.tgt_argv = argv;
+
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "can't init dev %d\n", data.dev_id);
@@ -659,7 +508,7 @@ static int __cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 	int ret;
 	unsigned elapsed = 0;
 
-	dev = ublksrv_ctrl_init(&data);
+	dev = ublksrv_ctrl_recover_init(&data);
 	if (!dev) {
 		fprintf(stderr, "ublksrv_ctrl_init failure dev %d\n", number);
 		ret = -EOPNOTSUPP;

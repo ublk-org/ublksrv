@@ -24,9 +24,6 @@ struct demo_queue_info {
 
 static struct ublksrv_ctrl_dev *this_dev;
 
-static pthread_mutex_t jbuf_lock;
-static char jbuf[4096];
-
 static void sig_handler(int sig)
 {
 	fprintf(stderr, "got signal %d\n", sig);
@@ -44,19 +41,17 @@ static void *demo_null_io_handler_fn(void *data)
 {
 	struct demo_queue_info *info = (struct demo_queue_info *)data;
 	const struct ublksrv_dev *dev = info->dev;
-	const struct ublksrv_ctrl_dev_info *dinfo =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const struct ublksrv_ctrl_dev_info *dinfo = ublksrv_ctrl_get_dev_info(cdev);
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
 	const struct ublksrv_queue *q;
 
 	sched_setscheduler(getpid(), SCHED_RR, NULL);
 
-	pthread_mutex_lock(&jbuf_lock);
-	ublksrv_json_write_queue_info(ublksrv_get_ctrl_dev(dev), jbuf, sizeof jbuf,
-			q_id, ublksrv_gettid());
-	ublksrv_tgt_store_dev_data(dev, jbuf);
-	pthread_mutex_unlock(&jbuf_lock);
+	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
+	ublk_tgt_store_dev_data(dev);
+
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
 		fprintf(stderr, "ublk dev %d queue %d init queue failed\n",
@@ -95,9 +90,7 @@ static void demo_null_set_parameters(struct ublksrv_ctrl_dev *cdev,
 	};
 	int ret;
 
-	pthread_mutex_lock(&jbuf_lock);
-	ublksrv_json_write_params(&p, jbuf, sizeof jbuf);
-	pthread_mutex_unlock(&jbuf_lock);
+	ublk_json_write_params(cdev, &p);
 
 	ret = ublksrv_ctrl_set_params(cdev, &p);
 	if (ret)
@@ -141,7 +134,7 @@ static int demo_null_io_handler(struct ublksrv_ctrl_dev *ctrl_dev)
 		goto fail;
 
 	ublksrv_ctrl_get_info(ctrl_dev);
-	ublksrv_ctrl_dump(ctrl_dev, jbuf);
+	ublk_ctrl_dump(ctrl_dev);
 
 	/* wait until we are terminated */
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
@@ -171,8 +164,8 @@ static int null_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev)
 static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
-	const struct ublksrv_ctrl_dev_info *info =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
+	const struct ublksrv_ctrl_dev_info *info = ublksrv_ctrl_get_dev_info(cdev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	struct ublksrv_tgt_base_json tgt_json = {
 		.type = type,
@@ -183,8 +176,8 @@ static int demo_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
 
-	ublksrv_json_write_dev_info(ublksrv_get_ctrl_dev(dev), jbuf, sizeof jbuf);
-	ublksrv_json_write_target_base_info(jbuf, sizeof jbuf, &tgt_json);
+	ublk_json_write_dev_info(cdev);
+	ublk_json_write_target_base(cdev, &tgt_json);
 
 	return 0;
 }
@@ -261,7 +254,6 @@ int main(int argc, char *argv[])
 		demo_tgt_type.free_io_buf = null_free_io_buf;
 	}
 
-	pthread_mutex_init(&jbuf_lock, NULL);
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev)
 		error(EXIT_FAILURE, ENODEV, "ublksrv_ctrl_init");

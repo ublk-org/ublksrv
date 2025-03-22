@@ -37,12 +37,24 @@
 extern "C" {
 #endif
 
+struct ublksrv_tgt_jbuf {
+	pthread_mutex_t lock;
+	int jbuf_size;
+	char *jbuf;
+};
+
+struct ublksrv_ctrl_data {
+	struct ublksrv_tgt_jbuf jbuf;
+	bool recover;
+};
+
 struct ublksrv_ctrl_dev {
 	struct io_uring ring;
 
 	int ctrl_fd;
 	unsigned bs_shift;
 	struct ublksrv_ctrl_dev_info  dev_info;
+	struct ublksrv_ctrl_data *data;
 
 	const char *tgt_type;
 	const struct ublksrv_tgt_type *tgt_ops;
@@ -164,6 +176,13 @@ struct _ublksrv_dev {
 #define local_to_tdev(d)	((struct ublksrv_dev *)(d))
 #define tdev_to_local(d)	((struct _ublksrv_dev *)(d))
 
+struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev);
+
+static inline struct ublksrv_ctrl_data *ublksrv_get_ctrl_data(const struct ublksrv_ctrl_dev *cdev)
+{
+	return cdev->data;
+}
+
 static inline bool ublk_is_unprivileged(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	return !!(ctrl_dev->dev_info.flags & UBLK_F_UNPRIVILEGED_DEV);
@@ -283,6 +302,43 @@ struct ublksrv_aio_ctx {
 
 	unsigned long reserved[8];
 };
+
+#define UBLK_TGT_MAX_JBUF_SZ 8192
+
+static inline bool tgt_realloc_jbuf(struct ublksrv_tgt_jbuf *j)
+{
+	if (j->jbuf == NULL)
+		j->jbuf_size = 512;
+	else
+		j->jbuf_size += 512;
+
+	if (j->jbuf_size < UBLK_TGT_MAX_JBUF_SZ) {
+		j->jbuf = (char *)realloc((void *)j->jbuf, j->jbuf_size);
+		return true;
+	}
+	return false;
+}
+
+static inline void ublksrv_tgt_jbuf_init(struct ublksrv_ctrl_dev *cdev,
+		struct ublksrv_tgt_jbuf *j, bool recover)
+{
+	pthread_mutex_init(&j->lock, NULL);
+	if (recover) {
+		j->jbuf = ublksrv_tgt_get_dev_data(cdev);
+		if (j->jbuf)
+			j->jbuf_size = ublksrv_json_get_length(j->jbuf);
+	} else {
+		j->jbuf = NULL;
+		j->jbuf_size = 0;
+		tgt_realloc_jbuf(j);
+	}
+}
+
+static inline void ublksrv_tgt_jbuf_exit(struct ublksrv_tgt_jbuf *jbuf)
+{
+	free(jbuf->jbuf);
+}
+
 
 #ifdef __cplusplus
 }

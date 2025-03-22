@@ -137,15 +137,29 @@ static int __ublksrv_ctrl_cmd(struct ublksrv_ctrl_dev *dev,
 	return cqe->res;
 }
 
+static void ublksrv_ctrl_data_init(struct ublksrv_ctrl_dev *cdev,
+		bool recover)
+{
+	ublksrv_tgt_jbuf_init(cdev, &cdev->data->jbuf, recover);
+	cdev->data->recover = recover;
+}
+
+static void ublksrv_ctrl_data_exit(struct ublksrv_ctrl_dev *cdev)
+{
+	ublksrv_tgt_jbuf_exit(&cdev->data->jbuf);
+}
+
 void ublksrv_ctrl_deinit(struct ublksrv_ctrl_dev *dev)
 {
 	close(dev->ring.ring_fd);
 	close(dev->ctrl_fd);
 	free(dev->queues_cpuset);
+	ublksrv_ctrl_data_exit(dev);
+	free(dev->data);
 	free(dev);
 }
 
-struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
+struct ublksrv_ctrl_dev *__ublksrv_ctrl_init(struct ublksrv_dev_data *data, bool recover)
 {
 	struct io_uring_params p;
 	struct ublksrv_ctrl_dev *dev = (struct ublksrv_ctrl_dev *)calloc(1,
@@ -183,7 +197,32 @@ struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
 		return NULL;
 	}
 
+	dev->data = calloc(1, sizeof(struct ublksrv_ctrl_data));
+	if (dev->data == NULL) {
+		fprintf(stderr, "failed to allocate dev data\n");
+		free(dev);
+		return NULL;
+	}
+	ublksrv_ctrl_data_init(dev, recover);
+
 	return dev;
+}
+
+struct ublksrv_ctrl_dev *ublksrv_ctrl_init(struct ublksrv_dev_data *data)
+{
+	return __ublksrv_ctrl_init(data, false);
+}
+
+struct ublksrv_ctrl_dev *ublksrv_ctrl_recover_init(struct ublksrv_dev_data *data)
+{
+	return __ublksrv_ctrl_init(data, true);
+}
+
+bool ublksrv_tgt_is_recovering(const struct ublksrv_ctrl_dev *cdev)
+{
+	struct ublksrv_ctrl_data *data = ublksrv_get_ctrl_data(cdev);
+
+	return data->recover;
 }
 
 /* queues_cpuset is only used for setting up queue pthread daemon */
@@ -505,6 +544,11 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 		ublksrv_json_read_target_info(jbuf, buf, 512);
 		printf("\ttarget %s\n", buf);
 	}
+}
+
+void ublk_ctrl_dump(struct ublksrv_ctrl_dev *dev)
+{
+	return ublksrv_ctrl_dump(dev, dev->data->jbuf.jbuf);
 }
 
 int ublksrv_ctrl_set_params(struct ublksrv_ctrl_dev *dev,
