@@ -928,7 +928,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	int ret;
 	unsigned int attrs = UBLK_ATTR_VOLATILE_CACHE;
 
-	if (ublksrv_tgt_is_recovering(cdev))
+	if (ublksrv_is_recovering(cdev))
 		return nbd_recover_tgt(dev, 0);
 
 	if (read_only)

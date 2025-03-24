@@ -58,7 +58,7 @@ static int null_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
 		return -1;
 
-	if (ublksrv_tgt_is_recovering(cdev))
+	if (ublksrv_is_recovering(cdev))
 		return null_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "null");
