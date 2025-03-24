@@ -164,7 +164,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	bool can_discard = false;
 	unsigned long offset = 0;
 
-	if (ublksrv_tgt_is_recovering(cdev))
+	if (ublksrv_is_recovering(cdev))
 		return loop_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "loop");

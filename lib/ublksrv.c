@@ -10,7 +10,7 @@
 
 bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
-	return ctrl_dev->tgt_argc == -1;
+	return ctrl_dev->tgt_argc == -1 || ctrl_dev->data->recover;
 }
 
 static inline struct ublksrv_io_desc *ublksrv_get_iod(
