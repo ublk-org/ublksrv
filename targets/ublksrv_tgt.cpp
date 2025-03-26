@@ -127,7 +127,7 @@ static void ublk_tgt_set_params(struct ublksrv_ctrl_dev *cdev)
 }
 
 static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
-		const struct ublksrv_dev *dev, int evtfd, bool recover)
+		const struct ublksrv_dev *dev, int evtfd)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(cdev);
@@ -137,7 +137,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 	ublk_tgt_set_params(cdev);
 	ublk_tgt_store_dev_data(dev);
 
-	if (recover)
+	if (ublksrv_is_recovering(cdev))
 		ret = ublksrv_ctrl_end_recovery(cdev, getpid());
 	else
 		ret = ublksrv_ctrl_start_dev(cdev, getpid());
@@ -165,7 +165,7 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 	return 0;
 }
 
-static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
+static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
@@ -210,7 +210,7 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, 
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
 		sem_wait(&queue_sem);
 
-	ret = ublksrv_tgt_start_dev(ctrl_dev, dev, evtfd, recover);
+	ret = ublksrv_tgt_start_dev(ctrl_dev, dev, evtfd);
 	if (ret) {
 		fprintf(stderr, "dev-%d start dev failed, ret %d\n", dev_id, ret);
 		goto free;
@@ -253,7 +253,7 @@ static void ublksrv_check_dev(const struct ublksrv_ctrl_dev_info *info)
 	}
 }
 
-static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bool recover)
+static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 {
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
@@ -268,7 +268,7 @@ static int ublksrv_start_daemon(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd, bo
 		return ret;
 	}
 
-	return ublksrv_device_handler(ctrl_dev, evtfd, recover);
+	return ublksrv_device_handler(ctrl_dev, evtfd);
 }
 
 //todo: resolve stack usage warning for mkpath/__mkpath
@@ -457,7 +457,7 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 			ublksrv_ctrl_get_dev_info(dev);
 		data.dev_id = info->dev_id;
 	}
-	ret = ublksrv_start_daemon(dev, evtfd, false);
+	ret = ublksrv_start_daemon(dev, evtfd);
 	if (ret < 0) {
 		fprintf(stderr, "start dev %d daemon failed, ret %d\n",
 				data.dev_id, ret);
@@ -558,7 +558,7 @@ static int __cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 		goto fail;
 	}
 
-	ret = ublksrv_start_daemon(dev, evtfd, true);
+	ret = ublksrv_start_daemon(dev, evtfd);
 	if (ret < 0) {
 		fprintf(stderr, "start daemon %d failed\n", number);
 		goto fail;
