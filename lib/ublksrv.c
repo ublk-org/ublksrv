@@ -83,10 +83,15 @@ static int __ublksrv_tgt_init(struct _ublksrv_dev *dev, const char *type_name,
 		else
 			ret = 0;
 	} else {
+		/* driver can recover via ->init_tgt() */
 		if (ops->recovery_tgt)
 			ret = ops->recovery_tgt(local_to_tdev(dev), type);
-		else
-			ret = -ENOTSUP;
+		else {
+			if (ops->init_tgt)
+				ret = ops->init_tgt(local_to_tdev(dev), type, argc, argv);
+			else
+				ret = -ENOTSUP;
+		}
 	}
 	if (ret) {
 		tgt->ops = NULL;
