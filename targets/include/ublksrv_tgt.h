@@ -196,8 +196,8 @@ static inline int ublksrv_tgt_process_cqe(const struct ublk_io_tgt *io, int *io_
 	const struct io_uring_cqe *cqe = io->tgt_io_cqe;
 
 	assert(cqe);
-	if (cqe->res != -EAGAIN && is_ublk_io_cmd(user_data_to_op(cqe->user_data)))
-			*io_res = cqe->res;
+	if (is_ublk_io_cmd(user_data_to_op(cqe->user_data)))
+		*io_res = cqe->res;
 	return cqe->res;
 }
 

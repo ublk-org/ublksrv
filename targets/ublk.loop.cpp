@@ -427,13 +427,17 @@ static co_io_job __loop_handle_io_async(const struct ublksrv_queue *q,
  again:
 	ret = loop_queue_tgt_io(q, data, tag);
 	if (ret > 0) {
-		int io_res = -EIO;
+		int io_res = 0;
 		while (ret-- > 0) {
-			co_await__suspend_always(tag);
+			int res;
 
-			if (ublksrv_tgt_process_cqe(io, &io_res) == -EAGAIN)
-				goto again;
+			co_await__suspend_always(tag);
+			res = ublksrv_tgt_process_cqe(io, &io_res);
+			if (res < 0 && io_res >= 0)
+				io_res = res;
 		}
+		if (io_res == -EAGAIN)
+			goto again;
 		ublksrv_complete_io(q, tag, io_res);
 	} else if (ret < 0) {
 		ublk_err( "fail to queue io %d, ret %d\n", tag, tag);
