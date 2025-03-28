@@ -150,16 +150,22 @@ static inline bool ublk_param_is_valid(const struct ublk_params *p)
 	return true;
 }
 
-static inline void ublk_get_sqe_pair(struct io_uring *r,
-		struct io_uring_sqe **sqe, struct io_uring_sqe **sqe2)
+static inline int ublk_queue_alloc_sqes(const struct ublksrv_queue *q,
+		struct io_uring_sqe *sqes[], int nr_sqes)
 {
-	unsigned left = io_uring_sq_space_left(r);
+	struct io_uring *r = q->ring_ptr;
+	int i;
 
-	if (left < 2)
+	if (io_uring_sq_space_left(r) < nr_sqes)
 		io_uring_submit(r);
-	*sqe = io_uring_get_sqe(r);
-	if (sqe2)
-		*sqe2 = io_uring_get_sqe(r);
+
+	for (i = 0; i < nr_sqes; i++) {
+		sqes[i] = io_uring_get_sqe(r);
+		if (!sqes[i])
+			return i;
+	}
+
+	return nr_sqes;
 }
 
 static inline enum io_uring_op ublk_to_uring_fs_op(const struct ublksrv_io_desc *iod)
