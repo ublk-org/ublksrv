@@ -151,11 +151,12 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	const struct ublksrv_io_desc *iod = data->iod;
-	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned ublk_op = ublksrv_get_op(iod);
 	unsigned msg_flags = MSG_NOSIGNAL;
+	struct io_uring_sqe *sqe[1];
 
-	if (!sqe) {
+       ublk_queue_alloc_sqes(q, sqe, 1);
+	if (!sqe[0]) {
 		nbd_err("%s: get sqe failed, tag %d op %d\n",
 				__func__, data->tag, ublk_op);
 		return -ENOMEM;
@@ -172,28 +173,28 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	msg_flags |= MSG_WAITALL;
 
 	if (q_data->use_send_zc)
-		io_uring_prep_sendmsg_zc(sqe, q->q_id + 1, msg, msg_flags);
+		io_uring_prep_sendmsg_zc(sqe[0], q->q_id + 1, msg, msg_flags);
 	else
-		io_uring_prep_sendmsg(sqe, q->q_id + 1, msg, msg_flags);
+		io_uring_prep_sendmsg(sqe[0], q->q_id + 1, msg, msg_flags);
 
 	/*
 	 * The encoded nr_sectors should only be used for validating write req
 	 * when its cqe is completed, since iod data isn't available at that time
 	 * because request can be reused.
 	 */
-	sqe->user_data = build_user_data(data->tag, ublk_op, ublk_op ==
+	sqe[0]->user_data = build_user_data(data->tag, ublk_op, ublk_op ==
 			UBLK_IO_OP_WRITE ? data->iod->nr_sectors : 0, 1);
-	io_uring_sqe_set_flags(sqe, /*IOSQE_CQE_SKIP_SUCCESS |*/
+	io_uring_sqe_set_flags(sqe[0], /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
-	q_data->last_send_sqe = sqe;
+	q_data->last_send_sqe = sqe[0];
 	q_data->chained_send_ios += 1;
 
 	NBD_IO_DBG("%s: queue io op %d(%llu %x %llx) ios(%u %u)"
 			" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
 		__func__, ublk_op, data->iod->start_sector,
-		data->iod->nr_sectors, sqe->addr,
+		data->iod->nr_sectors, sqe[0]->addr,
 		q_data->in_flight_ios, q_data->chained_send_ios,
-		q->q_id, data->tag, ublk_op, 1, sqe->user_data);
+		q->q_id, data->tag, ublk_op, 1, sqe[0]->user_data);
 
 	return 1;
 }
@@ -365,29 +366,29 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
 		bool reply, unsigned done)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
-	struct io_uring_sqe *sqe = io_uring_get_sqe(q->ring_ptr);
 	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
 	unsigned int tag = q->q_depth;	//recv always use this extra tag
+	struct io_uring_sqe *sqe[1];
 
-	if (!sqe) {
+       ublk_queue_alloc_sqes(q, sqe, 1);
+	if (!sqe[0]) {
 		nbd_err("%s: get sqe failed, len %d reply %d done %d\n",
 				__func__, len, reply, done);
 		return -ENOMEM;
 	}
 
 	nbd_data->done = done;
-	io_uring_prep_recv(sqe, q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
-	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+	io_uring_prep_recv(sqe[0], q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
+	io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE);
 
 	/* bit63 marks us as tgt io */
-	sqe->user_data = build_user_data(tag, op, 0, 1);
+	sqe[0]->user_data = build_user_data(tag, op, 0, 1);
 
 	ublk_assert(q_data->in_flight_ios);
 	NBD_IO_DBG("%s: q_inflight %d queue recv %s"
 				"(qid %d tag %u, target: %d, user_data %llx)\n",
 			__func__, q_data->in_flight_ios, reply ? "reply" : "io",
-			q->q_id, tag, 1, sqe->user_data);
-
+			q->q_id, tag, 1, sqe[0]->user_data);
 	return 0;
 }
 
