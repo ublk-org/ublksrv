@@ -314,6 +314,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 	int user_recovery_fail_io = 0;
 	int user_recovery_reissue = 0;
 	int unprivileged = 0;
+	int zero_copy = 0;
 	int option_index = 0;
 	unsigned int debug_mask = 0;
 	static const struct option longopts[] = {
@@ -330,6 +331,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "unprivileged",	0,	NULL, 0},
 		{ "usercopy",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
+		{ "zerocopy",	0,	NULL, 'z'},
 		{ NULL }
 	};
 
@@ -340,7 +342,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 
 	mkpath(data->run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -350,7 +352,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 			data->tgt_type = optarg;
 			break;
 		case 'z':
-			data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
+			zero_copy = 1;
 			break;
 		case 'q':
 			data->nr_hw_queues = strtol(optarg, NULL, 10);
@@ -403,6 +405,8 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
 	if (unprivileged)
 		data->flags |= UBLK_F_UNPRIVILEGED_DEV;
+	if (zero_copy)
+		data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
 
 	ublk_set_debug_mask(debug_mask);
 
@@ -444,6 +448,16 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 		fprintf(stderr, "can't init dev %d\n", data.dev_id);
 		ret = -EOPNOTSUPP;
 		goto fail_send_event;
+	}
+
+	if (data.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+		__u64 features = 0;
+
+		ret = ublksrv_ctrl_get_features(dev, &features);
+		if (ret)
+			return ret;
+		if (!(features & UBLK_F_SUPPORT_ZERO_COPY))
+			return -ENOTSUP;
 	}
 
 	ret = ublksrv_ctrl_add_dev(dev);
