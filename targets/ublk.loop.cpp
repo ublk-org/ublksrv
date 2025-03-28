@@ -294,20 +294,20 @@ static int lo_rw_user_copy(const struct ublksrv_queue *q,
 				iod->nr_sectors << 9,
 				(iod->start_sector + tgt_data->offset) << 9);
 		io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE | IOSQE_IO_LINK);
-		sqe[0]->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
+		sqe[0]->user_data = build_user_data(tag, ublk_op, 0, 1);
 
 		/* copy io buffer to ublkc device */
 		io_uring_prep_write(sqe[1], 0 /*fds[0]*/,
 				buf, iod->nr_sectors << 9, pos);
 		io_uring_sqe_set_flags(sqe[1], IOSQE_FIXED_FILE);
 		/* bit63 marks us as tgt io */
-		sqe[1]->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_BUF, 1);
+		sqe[1]->user_data = build_user_data(tag, UBLK_USER_COPY_WRITE, 0, 1);
 	} else {
 		/* copy ublkc device data to io buffer */
 		io_uring_prep_read(sqe[0], 0 /*fds[0]*/,
 			buf, iod->nr_sectors << 9, pos);
 		io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE | IOSQE_IO_LINK);
-		sqe[0]->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_BUF, 1);
+		sqe[0]->user_data = build_user_data(tag, UBLK_USER_COPY_READ, 0, 1);
 
 		/* write data in io buffer to backing file */
 		io_uring_prep_write(sqe[1], 1 /*fds[1]*/,
@@ -316,7 +316,7 @@ static int lo_rw_user_copy(const struct ublksrv_queue *q,
 		io_uring_sqe_set_flags(sqe[1], IOSQE_FIXED_FILE);
 		lo_rw_handle_fua(sqe[1], iod);
 		/* bit63 marks us as tgt io */
-		sqe[1]->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
+		sqe[1]->user_data = build_user_data(tag, ublk_op, 0, 1);
 	}
 	return 2;
 }
@@ -339,7 +339,7 @@ static int lo_rw(const struct ublksrv_queue *q,
 	io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE);
 	lo_rw_handle_fua(sqe[0], iod);
 
-	sqe[0]->user_data = build_user_data(tag, ublksrv_get_op(iod), UBLK_IO_TGT_IO, 1);
+	sqe[0]->user_data = build_user_data(tag, ublksrv_get_op(iod), 0, 1);
 	return 1;
 }
 
@@ -365,7 +365,7 @@ static int loop_handle_flush(const struct ublksrv_queue *q,
 			IORING_FSYNC_DATASYNC);
 	io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE);
 	/* bit63 marks us as tgt io */
-	sqe[0]->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
+	sqe[0]->user_data = build_user_data(tag, ublk_op, 0, 1);
 
 	return 1;
 }
@@ -384,7 +384,7 @@ static int loop_handle_discard(const struct ublksrv_queue *q,
 				iod->nr_sectors << 9);
 	io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE);
 	/* bit63 marks us as tgt io */
-	sqe[0]->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_IO, 1);
+	sqe[0]->user_data = build_user_data(tag, ublk_op, 0, 1);
 	return 1;
 }
 
