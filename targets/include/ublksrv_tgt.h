@@ -97,10 +97,9 @@ struct ublk_io_tgt {
 	int queued_tgt_io;	/* obsolete */
 };
 
-enum {
-	UBLK_IO_TGT_BUF = 1, 	/* buffer operation */
-	UBLK_IO_TGT_IO, 	/* io operation */
-};
+/* don't overlap with _IO_NR(UBLK_U_IO_*) and UBLK_IO_OP_* */
+#define  UBLK_USER_COPY_READ 	0x80
+#define  UBLK_USER_COPY_WRITE   0x81
 
 static inline struct ublk_io_tgt *__ublk_get_io_tgt_data(const struct ublk_io_data *io)
 {
@@ -185,15 +184,19 @@ void ublksrv_print_std_opts(void);
 char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
+/* if the OP is in the space of UBLK_IO_OP_* */
+static inline int is_ublk_io_cmd(unsigned int op)
+{
+	return op < UBLK_IO_FETCH_REQ;
+}
+
 /* called after one cqe is received */
 static inline int ublksrv_tgt_process_cqe(const struct ublk_io_tgt *io, int *io_res)
 {
 	const struct io_uring_cqe *cqe = io->tgt_io_cqe;
 
 	assert(cqe);
-
-	if (cqe->res != -EAGAIN &&
-		user_data_to_tgt_data(cqe->user_data) == UBLK_IO_TGT_IO)
+	if (cqe->res != -EAGAIN && is_ublk_io_cmd(user_data_to_op(cqe->user_data)))
 			*io_res = cqe->res;
 	return cqe->res;
 }
