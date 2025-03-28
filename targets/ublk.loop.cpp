@@ -106,6 +106,8 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery)
 	if (tgt_data->user_copy)
 		tgt->tgt_ring_depth *= 2;
 
+	if (info->flags & UBLK_F_SUPPORT_ZERO_COPY)
+		return -EINVAL;
 
 	return 0;
 }
