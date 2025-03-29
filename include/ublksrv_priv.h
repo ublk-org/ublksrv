@@ -118,7 +118,7 @@ struct _ublksrv_queue {
 	 * ublksrv writes the iod into this array, and notify ublksrv daemon
 	 * by issued io_uring command beforehand.
 	 * */
-	char *io_cmd_buf;
+	struct ublksrv_io_desc *io_cmd_buf;
 	char *io_buf;
 
 	unsigned cmd_inflight, tgt_io_inflight;	//obsolete
