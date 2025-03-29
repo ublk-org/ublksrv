@@ -16,8 +16,7 @@ bool ublksrv_is_recovering(const struct ublksrv_ctrl_dev *ctrl_dev)
 static inline struct ublksrv_io_desc *ublksrv_get_iod(
 		const struct _ublksrv_queue *q, int tag)
 {
-        return (struct ublksrv_io_desc *)
-                &(q->io_cmd_buf[tag * sizeof(struct ublksrv_io_desc)]);
+        return &q->io_cmd_buf[tag];
 }
 
 /*
@@ -577,7 +576,7 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 
 	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
 	off = UBLKSRV_CMD_BUF_OFFSET + q_id * queue_max_cmd_buf_sz();
-	q->io_cmd_buf = (char *)mmap(0, cmd_buf_size, PROT_READ,
+	q->io_cmd_buf = mmap(0, cmd_buf_size, PROT_READ,
 			MAP_SHARED | MAP_POPULATE, dev->cdev_fd, off);
 	if (q->io_cmd_buf == MAP_FAILED) {
 		ublk_err("ublk dev %d queue %d map io_cmd_buf failed",
