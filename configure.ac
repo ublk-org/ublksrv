@@ -98,6 +98,34 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 [AC_MSG_RESULT([no])
  AM_CONDITIONAL([HAVE_LIBURING_SEND_ZC], false)])
 
+dnl Check for libnfs api v2
+AC_ARG_WITH([libnfs],
+	[AS_HELP_STRING([--without-libnfs],
+		[do not use libnfs])],
+	[],
+	[with_libnfs=check]
+)
+if test "x$with_libnfs" != "xno"; then
+    	AC_MSG_CHECKING([for libfs api v2])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <stddef.h>
+#include <nfsc/libnfs.h>
+	]], [[
+#ifndef LIBNFS_API_V2
+		does not compile
+#endif
+		nfs_mt_service_thread_start(NULL);
+	]])],
+	[AC_MSG_RESULT([yes])
+	 AM_CONDITIONAL([HAVE_LIBNFS], true)
+	 AC_DEFINE([HAVE_LIBNFS], [1], [Define to 1 if libnfs api v2 is available])],
+	[AC_MSG_RESULT([no])
+	 AM_CONDITIONAL([HAVE_LIBNFS], false)])
+else
+	 AM_CONDITIONAL([HAVE_LIBNFS], false)
+fi
+AM_CONDITIONAL([LIBNFS], [test "x$HAVE_LIBNFS" = "x1"])
+
 #gnutls is only for nbd target, borrowed from nbd-client project
 AC_ARG_WITH([gnutls],
 	[AS_HELP_STRING([--without-gnutls],
