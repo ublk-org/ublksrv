@@ -162,7 +162,7 @@ static int __cmd_dev_del(int number, bool log, bool async)
 		ret = ublksrv_ctrl_del_dev_async(dev);
 	else
 		ret = ublksrv_ctrl_del_dev(dev);
-	if (ret < 0) {
+	if (ret < 0 && ret != -ENODEV) {
 		fprintf(stderr, "delete dev %d failed %d\n", number, ret);
 		goto fail;
 	}
