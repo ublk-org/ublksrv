@@ -46,6 +46,7 @@
     [{-e, --user_recovery_fail_io} {0|1}]
     [--debug_mask=0x{DBG_MASK}] [--unprivileged]
     [--usercopy]
+    [{-z, --zerocopy}]
     [&lt;type specific options&gt;]
   </command>
 </para>
@@ -161,6 +162,16 @@
   <listitem>
     <para>
       Copy between request and user buffer by pread()/pwrite()
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-z, --zerocopy</option></term>
+  <listitem>
+    <para>
+      Zero-copy is based on io-uring uring_cmd of REGISTER_IO_BUF &amp; UNREGISTER_IO_BUF, which avoids data copy between ublk frontend request buffer and ublk server buffer, so memory bandwidth is saved, and throughput &amp; latency improvement can be often observed on large I/O size
+    </para>
+    <para>
+      This requires Linux kernel 6.15 or later.
     </para>
   </listitem>
   </varlistentry>
