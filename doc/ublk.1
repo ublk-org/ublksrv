@@ -2,12 +2,12 @@
 .\"     Title: ublk
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 03/05/2025
+.\"      Date: 04/14/2025
 .\"    Manual: ublk: manage ublk devices
 .\"    Source: ublk
 .\"  Language: English
 .\"
-.TH "UBLK" "1" "03/05/2025" "ublk" "ublk: manage ublk devices"
+.TH "UBLK" "1" "04/14/2025" "ublk" "ublk: manage ublk devices"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -43,7 +43,7 @@ The following commands are supported:
 .PP
 Command to add a ublk device\&.
 .PP
-\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} {0|1}] [{\-i, \-\-user_recovery_reissue} {0|1}] [{\-e, \-\-user_recovery_fail_io} {0|1}] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [<type specific options>] \fR
+\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} {0|1}] [{\-i, \-\-user_recovery_reissue} {0|1}] [{\-e, \-\-user_recovery_fail_io} {0|1}] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [{\-z, \-\-zerocopy}] [<type specific options>] \fR
 .PP
 \fB\-t, \-\-type\fR
 .RS 4
@@ -111,6 +111,13 @@ Then ublk server can be run as unprivileged user, and /dev/ublkbN can be accesse
 \fB\-\-user_copy\fR
 .RS 4
 Copy between request and user buffer by pread()/pwrite()
+.RE
+.PP
+\fB\-z, \-\-zerocopy\fR
+.RS 4
+Zero\-copy is based on io\-uring uring_cmd of REGISTER_IO_BUF & UNREGISTER_IO_BUF, which avoids data copy between ublk frontend request buffer and ublk server buffer, so memory bandwidth is saved, and throughput & latency improvement can be often observed on large I/O size
+.sp
+This requires Linux kernel 6\&.15 or later\&.
 .RE
 .SS "NULL"
 .PP
