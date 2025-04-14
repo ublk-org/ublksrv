@@ -5,7 +5,29 @@
 
 #include "ublksrv_tgt.h"
 #include <nfsc/libnfs.h>
+#include <sys/eventfd.h>
 
+#define NFS_EVTFD_OP  0xff
+
+//#define NFS_DEBUG_IO  1
+//#define NFS_DEBUG_EVT  1
+
+#ifdef NFS_DEBUG_IO
+#define NFS_IO_DBG  printf
+#else
+#define NFS_IO_DBG(...)
+#endif
+
+#ifdef NFS_DEBUG_EVT
+#define NFS_EVT_DBG  printf
+#else
+#define NFS_EVT_DBG(...)
+#endif
+
+#define BUF_BGID 	1
+#define BUF_SIZE        8
+#define NR_BUFS         128
+#define BR_MASK         (NR_BUFS - 1)
 
 struct nfs_tgt_data {
         char url[4096];
@@ -24,8 +46,19 @@ typedef struct nfs_cb_data {
 struct nfs_queue_data {
         nfs_cb_data_t *io_list;
         pthread_spinlock_t io_list_lock;
-        int has_sent_event;
+	uint64_t  evt_data[NR_BUFS];
+	int evtfd;
+	uint32_t events;
+	struct io_uring_buf_ring *br;
 };
+
+static void nfs_submit_event_read_mshot(const struct ublksrv_queue *q);
+
+static inline bool is_evtfd_io(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data)
+{
+	return data->tag >= q->q_depth;
+}
 
 static inline struct nfs_queue_data *
 nfs_get_queue_data(const struct ublksrv_queue *q)
@@ -33,15 +66,28 @@ nfs_get_queue_data(const struct ublksrv_queue *q)
 	return (struct nfs_queue_data *)q->private_data;
 }
 
+static int nfs_send_event(struct nfs_queue_data *q_data)
+{
+	uint64_t data = 1;
+	const int cnt = sizeof(uint64_t);
+
+	if (write(q_data->evtfd, &data, cnt) != cnt) {
+		ublk_err("%s: wrote wrong bytes to eventfd\n",
+				__func__);
+		return -EPIPE;
+	}
+	return 0;
+}
 
 static void nfs_handle_event(const struct ublksrv_queue *q)
 {
 	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
         nfs_cb_data_t *cb_data, *tmp;
-        
+
 	pthread_spin_lock(&q_data->io_list_lock);
         cb_data = q_data->io_list;
         q_data->io_list = NULL;
+        q_data->events = 0;
 	pthread_spin_unlock(&q_data->io_list_lock);
 
         while (cb_data) {
@@ -51,11 +97,24 @@ static void nfs_handle_event(const struct ublksrv_queue *q)
                 free(cb_data);
                 cb_data = tmp;
         }
+}
 
-	pthread_spin_lock(&q_data->io_list_lock);
-        ublksrv_queue_handled_event(q);
-        q_data->has_sent_event = 0;
-	pthread_spin_unlock(&q_data->io_list_lock);
+static void nfs_tgt_io_done(const struct ublksrv_queue *q,
+		const struct ublk_io_data *data,
+		const struct io_uring_cqe *cqe)
+{
+	int tag = user_data_to_tag(cqe->user_data);
+	ublk_assert(tag == data->tag);
+
+	NFS_EVT_DBG("%s: queue %d tag %d cqe(res %d flags %x user data %llx)\n",
+			__func__, q->q_id, tag,
+			cqe->res, cqe->flags, cqe->user_data);
+
+	if (cqe->res == -ENOBUFS)
+		nfs_submit_event_read_mshot(q);
+
+	if (is_evtfd_io(q, data))
+		nfs_handle_event(q);
 }
 
 void rw_async_cb(int status, struct nfs_context *nfs,
@@ -64,7 +123,8 @@ void rw_async_cb(int status, struct nfs_context *nfs,
         nfs_cb_data_t *cb_data = (nfs_cb_data_t *)private_data;
         const struct ublksrv_queue *q = cb_data->q;
 	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
-        
+	int send_event;
+
         if (status < 0) {
                 fprintf(stderr, "pread/pwrite failed with \"%s\"\n", (char *)data);
                 status = -EIO;
@@ -74,12 +134,15 @@ void rw_async_cb(int status, struct nfs_context *nfs,
 	pthread_spin_lock(&q_data->io_list_lock);
         cb_data->next = q_data->io_list;
         q_data->io_list = cb_data;
+	send_event = (q_data->events == 0);
+        q_data->events++;
 	pthread_spin_unlock(&q_data->io_list_lock);
 
-        if (!q_data->has_sent_event) {
-                q_data->has_sent_event = 1;
-                ublksrv_queue_send_event(q);
-        }
+	NFS_EVT_DBG("%s: queue %u tag %u nfs io done(%d), events %d / %d\n",
+			__func__, q->q_id, cb_data->tag, status,
+			q_data->events, send_event);
+        if (send_event)
+		nfs_send_event(q_data);
 }
 
 static int nfs_tgt_read(const struct ublksrv_queue *q,
@@ -176,6 +239,8 @@ static int nfs_handle_io_async(const struct ublksrv_queue *q,
         unsigned ublk_op = ublksrv_get_op(iod);
         int ret = -ENOTSUP;
         
+	NFS_IO_DBG("%s: queue %d tag %d op %d\n", __func__,
+			q->q_id, data->tag, ublk_op);
         switch (ublk_op) {
         case UBLK_IO_OP_READ:
                 ret = nfs_tgt_read(q, iod, data->tag);
@@ -291,7 +356,9 @@ static int nfs_setup_tgt(struct ublksrv_dev *dev)
 	}
 
 	tgt->dev_size = p.basic.dev_sectors << 9;
-	tgt->tgt_ring_depth = info->queue_depth;
+	tgt->tgt_ring_depth = info->queue_depth + 1;
+	tgt->extra_ios = 1;	//one extra slot for handling eventfd
+				//notification
 	tgt->nr_fds = 0;
 	ublksrv_tgt_set_io_data_size(tgt);
 
@@ -375,17 +442,61 @@ static void nfs_deinit_tgt(const struct ublksrv_dev *dev)
         nfs_exit(nfs_data);
 }
 
+static void nfs_deinit_queue(const struct ublksrv_queue *q)
+{
+	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+
+	close(q_data->evtfd);
+	free(q_data);
+}
+
+static void __nfs_submit_event_read_mshot(const struct ublksrv_queue *q,
+		struct nfs_queue_data *data)
+{
+	struct io_uring *r = q->ring_ptr;
+	struct io_uring_sqe *sqe[1];
+
+	/* submit read_multishot for covering eventfd notification */
+	ublk_queue_alloc_sqes(q, sqe, 1);
+	io_uring_prep_read_multishot(sqe[0], data->evtfd, 0, 0, BUF_BGID);
+	sqe[0]->user_data = build_user_data(q->q_depth, NFS_EVTFD_OP, 0, 1);
+	io_uring_submit_and_wait(r, 0);
+}
+
+static void nfs_submit_event_read_mshot(const struct ublksrv_queue *q)
+{
+	__nfs_submit_event_read_mshot(q, nfs_get_queue_data(q));
+}
+
 static int nfs_init_queue(const struct ublksrv_queue *q,
 		void **queue_data_ptr)
 {
 	struct nfs_queue_data *data =
 		(struct nfs_queue_data *)calloc(sizeof(*data), 1);
+	struct io_uring *r = q->ring_ptr;
+	int ret, i;
 
 	if (!data)
 		return -ENOMEM;
 
 	pthread_spin_init(&data->io_list_lock, PTHREAD_PROCESS_PRIVATE);
 
+        data->br = io_uring_setup_buf_ring(r, NR_BUFS, BUF_BGID, 0, &ret);
+        if (!data->br) {
+             fprintf(stderr, "Buffer ring register failed %d\n", ret);
+             return ret;
+        }
+
+	for (i = 0; i < NR_BUFS; i++)
+		io_uring_buf_ring_add(data->br, &data->evt_data[i],
+				sizeof(data->evt_data[i]), i + 1,
+				BR_MASK, i);
+	io_uring_buf_ring_advance(data->br, NR_BUFS);
+
+	data->evtfd = eventfd(0, 0);
+	__nfs_submit_event_read_mshot(q, data);
+
+	NFS_EVT_DBG("%s: queue %d submit eventfd sqe\n", __func__, q->q_id);
 	*queue_data_ptr = (void *)data;
         return 0;
 }
@@ -401,13 +512,13 @@ static void nfs_cmd_usage()
 
 static const struct ublksrv_tgt_type  nfs_tgt_type = {
 	.handle_io_async = nfs_handle_io_async,
-	.handle_event = nfs_handle_event,
+	.tgt_io_done = nfs_tgt_io_done,
 	.usage_for_add = nfs_cmd_usage,
 	.init_tgt = nfs_init_tgt,
 	.deinit_tgt = nfs_deinit_tgt,
-        .ublksrv_flags = UBLKSRV_F_NEED_EVENTFD,
 	.name	=  "nfs",
 	.init_queue = nfs_init_queue,
+	.deinit_queue = nfs_deinit_queue,
 };
 
 int main(int argc, char *argv[])
