@@ -756,7 +756,7 @@ static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
 	}
 }
 
-static int nbd_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery,
+static int nbd_setup_tgt(struct ublksrv_dev *dev, int type,
 		uint16_t *flags)
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
@@ -875,7 +875,7 @@ static int nbd_recover_tgt(struct ublksrv_dev *dev, int type)
 
 	dev->tgt.tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
-	return nbd_setup_tgt(dev, type, true, &flags);
+	return nbd_setup_tgt(dev, type, &flags);
 }
 
 static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
@@ -942,7 +942,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
-	ret = nbd_setup_tgt(dev, type, false, &flags);
+	ret = nbd_setup_tgt(dev, type, &flags);
 	if (ret)
 		return ret;
 

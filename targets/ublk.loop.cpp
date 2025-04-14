@@ -38,7 +38,7 @@ static bool backing_supports_discard(char *name)
 	return false;
 }
 
-static int loop_setup_tgt(struct ublksrv_dev *dev, int type, bool recovery)
+static int loop_setup_tgt(struct ublksrv_dev *dev, int type)
 {
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
@@ -116,7 +116,7 @@ static int loop_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
-	return loop_setup_tgt(dev, type, true);
+	return loop_setup_tgt(dev, type);
 }
 
 static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
@@ -252,7 +252,7 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 
 	dev->tgt.tgt_data = calloc(sizeof(struct loop_tgt_data), 1);
 
-	return loop_setup_tgt(dev, type, false);
+	return loop_setup_tgt(dev, type);
 }
 
 static inline int loop_fallocate_mode(const struct ublksrv_io_desc *iod)
