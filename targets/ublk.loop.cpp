@@ -530,10 +530,6 @@ static void loop_deinit_tgt(const struct ublksrv_dev *dev)
 
 static void loop_cmd_usage()
 {
-	const char *name = "loop";
-
-	printf("ublk.%s add -t %s\n", name, name);
-	ublksrv_print_std_opts();
 	printf("\t-f backing_file [--buffered_io] [--offset NUM]\n");
 	printf("\t\tdefault is direct IO to backing file\n");
 	printf("\t\toffset skips first NUM sectors on backing file\n");

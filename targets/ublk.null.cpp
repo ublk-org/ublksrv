@@ -163,18 +163,9 @@ static void null_tgt_io_done(const struct ublksrv_queue *q,
 	ublksrv_tgt_io_done(q, data, cqe);
 }
 
-static void null_cmd_usage()
-{
-	const char *name = "null";
-
-	printf("ublk.%s add -t %s\n", name, name);
-	ublksrv_print_std_opts();
-}
-
 static const struct ublksrv_tgt_type  null_tgt_type = {
 	.handle_io_async = null_handle_io_async,
 	.tgt_io_done = null_tgt_io_done,
-	.usage_for_add = null_cmd_usage,
 	.init_tgt = null_init_tgt,
 	.name	=  "null",
 };
