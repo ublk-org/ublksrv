@@ -418,7 +418,7 @@ void ublksrv_print_std_opts(void)
 	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
 	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
 	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
-	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n\n");
+	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
 }
 
 static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
@@ -620,8 +620,12 @@ static int ublksrv_cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 
 static void cmd_usage(const struct ublksrv_tgt_type *tgt_type)
 {
+	printf("ublk.%s add -t %s\n", tgt_type->name, tgt_type->name);
+	ublksrv_print_std_opts();
 	if (tgt_type->usage_for_add)
 		tgt_type->usage_for_add();
+	printf("ublk.%s del -n DEV_ID\n", tgt_type->name);
+	printf("ublk.%s help -t %s\n", tgt_type->name, tgt_type->name);
 }
 
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])

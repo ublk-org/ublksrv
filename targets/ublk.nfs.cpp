@@ -404,10 +404,6 @@ static int nfs_init_queue(const struct ublksrv_queue *q,
 
 static void nfs_cmd_usage()
 {
-	const char *name = "nfs";
-
-	printf("ublk.%s add -t %s\n", name, name);
-	ublksrv_print_std_opts();
 	printf("\t--nfs NFS-URL\n");
 }
 

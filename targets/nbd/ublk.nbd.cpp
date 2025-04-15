@@ -970,10 +970,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 
 static void nbd_cmd_usage()
 {
-	const char *name = "nbd";
-
-	printf("ublk.%s add -t %s\n", name, name);
-	ublksrv_print_std_opts();
 	printf("\t--host=$HOST [--port=$PORT] | --unix=$UNIX_PATH\n");
 }
 
