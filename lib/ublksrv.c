@@ -628,8 +628,7 @@ skip_alloc_buf:
 		//ublk_assert(io_data_size ^ (unsigned long)q->ios[i].data.private_data);
 	}
 
-	ublksrv_setup_ring_params(&p, cq_depth,
-			IORING_SETUP_SQE128 | IORING_SETUP_COOP_TASKRUN);
+	ublksrv_setup_ring_params(&p, cq_depth, IORING_SETUP_COOP_TASKRUN);
 	ret = io_uring_queue_init_params(ring_depth, &q->ring, &p);
 	if (ret < 0) {
 		ublk_err("ublk dev %d queue %d setup io_uring failed %d",
