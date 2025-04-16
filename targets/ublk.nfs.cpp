@@ -287,7 +287,6 @@ static int nfs_setup_tgt(struct ublksrv_dev *dev)
 	tgt->dev_size = p.basic.dev_sectors << 9;
 	tgt->tgt_ring_depth = info->queue_depth;
 	tgt->nr_fds = 0;
-	ublksrv_tgt_set_io_data_size(tgt);
 
 	return 0;
 }
