@@ -18,6 +18,7 @@
 #include <coroutine>
 #include <iostream>
 #include <type_traits>
+#include <sched.h>
 
 #include "ublksrv_utils.h"
 #include "ublksrv.h"
