@@ -5,6 +5,7 @@ lib_LTLIBRARIES = libublksrv.la
 libublksrv_la_SOURCES = \
 	ublksrv_cmd.c \
 	ublksrv_json.cpp \
+	ublksrv_main.cpp \
 	ublksrv.c \
 	utils.c \
 	ublksrv_aio.c
@@ -13,7 +14,7 @@ libublksrv_la_CFLAGS = \
 	$(LIBURING_CFLAGS) \
 	$(PTHREAD_CFLAGS) -DUBLKSRV_INTERNAL_H_
 libublksrv_la_CPPFLAGS = \
-	-I$(top_srcdir)/include -DUBLKSRV_INTERNAL_H_
+	-I$(top_srcdir)/include -I$(top_srcdir)/targets/include -DUBLKSRV_INTERNAL_H_
 libublksrv_la_LIBADD = \
 	$(LIBURING_LIBS) \
 	$(PTHREAD_LIBS)

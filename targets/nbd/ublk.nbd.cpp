@@ -987,5 +987,5 @@ static const struct ublksrv_tgt_type  nbd_tgt_type = {
 
 int main(int argc, char *argv[])
 {
-	return ublksrv_tgt_cmd_main(&nbd_tgt_type, argc, argv);
+	return ublksrv_main(&nbd_tgt_type, argc, argv);
 }

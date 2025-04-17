@@ -173,5 +173,5 @@ static const struct ublksrv_tgt_type  null_tgt_type = {
 
 int main(int argc, char *argv[])
 {
-	return ublksrv_tgt_cmd_main(&null_tgt_type, argc, argv);
+	return ublksrv_main(&null_tgt_type, argc, argv);
 }

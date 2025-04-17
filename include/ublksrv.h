@@ -1141,6 +1141,24 @@ extern int ublksrv_queue_reap_events(const struct ublksrv_queue *tq);
 
 /** @} */ // end of ublksrv_queue group
 
+/*
+ * This is a helper function that performs all of the normal setup for creating,
+ * and recovering, simple targets that do not require to do any special setup.
+ *
+ * As this helper will also parse the command line arguments for standard arguments
+ * out-of-tree targets must take care that the built-in arguments (see
+ * lib/ublksrv_main.cpp:ublksrv_parse_add_opts() ) do not overlap with the arguments
+ * unique to the actual target.
+ * The set of standard arguments may change over time so an out-of-tree may consider
+ * only building at specific release-versions of ublksrv where it is known to not
+ * be an overlap or it might restrict itself to only use long-form command-line
+ * arguments to reduce the chance of a collission.
+ *
+ * See targets/ublk.nfs.cpp for an example on how to use this function as well
+ * as how to use long-form arguments only.
+ */
+int ublksrv_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
+
 #ifdef __cplusplus
 }
 #endif
