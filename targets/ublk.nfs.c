@@ -2,7 +2,13 @@
 
 #include <config.h>
 
-#include "ublksrv_tgt.h"
+#include <getopt.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "ublksrv.h"
+#include "ublksrv_utils.h"
 #include <nfsc/libnfs.h>
 
 

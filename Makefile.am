@@ -43,9 +43,8 @@ ublk_nbd_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_nbd_CPPFLAGS = $(ublk_nbd_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_nbd_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
-ublk_nfs_SOURCES = $(TGT_DIR)/ublk.nfs.cpp
-ublk_nfs_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
-ublk_nfs_CPPFLAGS = $(ublk_nfs_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
+ublk_nfs_SOURCES = $(TGT_DIR)/ublk.nfs.c
+ublk_nfs_CFLAGS = -I$(top_srcdir)/include $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_nfs_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS) -lnfs
 
 demo_null_SOURCES = demo_null.c
