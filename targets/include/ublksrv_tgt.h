@@ -156,10 +156,6 @@ static inline enum io_uring_op ublk_to_uring_fs_op(
 	assert(0);
 }
 
-int ublksrv_tgt_send_dev_event(int evtfd, int dev_id);
-
-void ublksrv_print_std_opts(void);
-char *ublksrv_pop_cmd(int *argc, char *argv[]);
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
 static inline unsigned short ublk_cmd_op_nr(unsigned int op)
@@ -242,6 +238,47 @@ static inline void io_uring_prep_buf_unregister(struct io_uring_sqe *sqe,
 static inline bool ublksrv_tgt_queue_zc(const struct ublksrv_queue *q)
 {
 	return ublksrv_queue_state(q) & UBLKSRV_ZERO_COPY;
+}
+
+static inline void ublksrv_print_std_opts(void)
+{
+	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
+	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
+	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
+	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
+}
+
+static inline char *ublksrv_pop_cmd(int *argc, char *argv[])
+{
+	char *cmd = argv[1];
+	if (*argc < 2) {
+		return NULL;
+	}
+
+	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
+	(*argc)--;
+
+	return cmd;
+}
+
+#define ERROR_EVTFD_DEVID   0xfffffffffffffffe
+
+static inline int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
+{
+	uint64_t id;
+
+	if (evtfd < 0)
+		return -EBADF;
+
+	if (dev_id >= 0)
+		id = dev_id + 1;
+	else
+		id = ERROR_EVTFD_DEVID;
+
+	if (write(evtfd, &id, sizeof(id)) != sizeof(id))
+		return -EINVAL;
+
+	return 0;
 }
 
 #endif
