@@ -13,6 +13,32 @@ struct ublksrv_queue_info {
 	sem_t *queue_sem;
 };
 
+static void ublk_set_queue_pthread_affinity(const struct ublksrv_ctrl_dev *cdev,
+					    unsigned qid)
+{
+	cpu_set_t set;
+	int idx, i, j = 0;
+
+	CPU_ZERO(&set);
+	if (sched_getaffinity(0, sizeof(set), &set) == -1) {
+		ublk_err("sched_getaffinity, %s\n", strerror(errno));
+		return;
+	}
+
+	srand(ublksrv_gettid());
+	idx = rand() % CPU_COUNT(&set);
+
+	for (i = 0; i < CPU_SETSIZE; i++) {
+		if (CPU_ISSET(i, &set)) {
+			if (j++ == idx)
+				continue;
+			CPU_CLR(i, &set);
+		}
+	}
+
+	sched_setaffinity(0, sizeof(set), &set);
+}
+
 static void *ublksrv_queue_handler(void *data)
 {
 	struct ublksrv_queue_info *info = (struct ublksrv_queue_info *)data;
@@ -26,14 +52,17 @@ static void *ublksrv_queue_handler(void *data)
 
 	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
 
-	sem_post(info->queue_sem);
-
 	q = ublksrv_queue_init(dev, q_id, NULL);
 	if (!q) {
 		ublk_err("ublk dev %d queue %d init queue failed",
 				dev_id, q_id);
+		sem_post(info->queue_sem);
 		return NULL;
 	}
+
+	/* override the queue affinity by just selecting one cpu */
+	ublk_set_queue_pthread_affinity(cdev, q_id);
+	sem_post(info->queue_sem);
 
 	ublk_log("tid %d: ublk dev %d queue %d started", ublksrv_gettid(),
 			dev_id, q->q_id);
