@@ -22,28 +22,28 @@ if HAVE_LIBNFS
 sbin_PROGRAMS += ublk.nfs
 endif
 
-ublk_SOURCES = $(TGT_DIR)/ublk.cpp $(TGT_DIR)/ublksrv_tgt.cpp
+ublk_SOURCES = $(TGT_DIR)/ublk.cpp
 
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
-ublk_null_SOURCES = $(TGT_DIR)/ublk.null.cpp $(TGT_DIR)/ublksrv_tgt.cpp
+ublk_null_SOURCES = $(TGT_DIR)/ublk.null.cpp
 ublk_null_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_null_CPPFLAGS = $(ublk_null_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_null_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
-ublk_loop_SOURCES = $(TGT_DIR)/ublk.loop.cpp $(TGT_DIR)/ublksrv_tgt.cpp
+ublk_loop_SOURCES = $(TGT_DIR)/ublk.loop.cpp
 ublk_loop_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_loop_CPPFLAGS = $(ublk_loop_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_loop_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
-ublk_nbd_SOURCES = $(TGT_DIR)/nbd/ublk.nbd.cpp $(TGT_DIR)/nbd/cliserv.c $(TGT_DIR)/nbd/nbd-client.c $(TGT_DIR)/ublksrv_tgt.cpp
+ublk_nbd_SOURCES = $(TGT_DIR)/nbd/ublk.nbd.cpp $(TGT_DIR)/nbd/cliserv.c $(TGT_DIR)/nbd/nbd-client.c
 ublk_nbd_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_nbd_CPPFLAGS = $(ublk_nbd_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_nbd_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
-ublk_nfs_SOURCES = $(TGT_DIR)/ublk.nfs.cpp $(TGT_DIR)/ublksrv_tgt.cpp
+ublk_nfs_SOURCES = $(TGT_DIR)/ublk.nfs.cpp
 ublk_nfs_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_nfs_CPPFLAGS = $(ublk_nfs_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_nfs_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS) -lnfs
