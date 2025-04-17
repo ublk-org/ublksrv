@@ -134,13 +134,14 @@ static int ublksrv_tgt_start_dev(struct ublksrv_ctrl_dev *cdev,
 	int dev_id = dinfo->dev_id;
 	int ret;
 
-	ublk_tgt_set_params(cdev);
 	ublk_tgt_store_dev_data(dev);
 
 	if (ublksrv_is_recovering(cdev))
 		ret = ublksrv_ctrl_end_recovery(cdev, getpid());
-	else
+	else {
+		ublk_tgt_set_params(cdev);
 		ret = ublksrv_ctrl_start_dev(cdev, getpid());
+	}
 	if (ret < 0) {
 		fprintf(stderr, "fail to start dev %d, ret %d\n", dev_id, ret);
 		return ret;
