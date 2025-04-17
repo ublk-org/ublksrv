@@ -50,9 +50,7 @@ static void nfs_handle_event(const struct ublksrv_queue *q)
 		cb_data = tmp;
 	}
 
-	pthread_spin_lock(&q_data->io_list_lock);
 	ublksrv_queue_handled_event(q);
-	pthread_spin_unlock(&q_data->io_list_lock);
 }
 
 void rw_async_cb(int status, struct nfs_context *nfs,
