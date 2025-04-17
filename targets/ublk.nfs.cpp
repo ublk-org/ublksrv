@@ -16,13 +16,13 @@ struct nfs_tgt_data {
 typedef struct nfs_cb_data {
 	struct nfs_cb_data *next;
 	const struct ublksrv_queue *q;
-	int tag;
 	ssize_t count;
 } nfs_cb_data_t;
 
 struct nfs_queue_data {
 	nfs_cb_data_t *io_list;
 	pthread_spinlock_t io_list_lock;
+	nfs_cb_data_t ios[];
 };
 
 static inline struct nfs_queue_data *
@@ -31,6 +31,14 @@ nfs_get_queue_data(const struct ublksrv_queue *q)
 	return (struct nfs_queue_data *)q->private_data;
 }
 
+static inline int cb_data_to_tag(nfs_cb_data_t *cb)
+{
+	struct nfs_queue_data *q_data = nfs_get_queue_data(cb->q);
+	int tag;
+
+	tag = ((unsigned long)cb - (unsigned long)&q_data->ios[0]) / sizeof(*cb);
+	return tag;
+}
 
 static void nfs_handle_event(const struct ublksrv_queue *q)
 {
@@ -43,10 +51,12 @@ static void nfs_handle_event(const struct ublksrv_queue *q)
 	pthread_spin_unlock(&q_data->io_list_lock);
 
 	while (cb_data) {
+		unsigned int tag;
+
 		tmp = cb_data->next;
 
-		ublksrv_complete_io(cb_data->q, cb_data->tag, cb_data->count);
-		free(cb_data);
+		tag = cb_data_to_tag(cb_data);
+		ublksrv_complete_io(cb_data->q, tag, cb_data->count);
 		cb_data = tmp;
 	}
 
@@ -79,26 +89,18 @@ static int nfs_tgt_read(const struct ublksrv_queue *q,
 {
 	const struct ublksrv_dev *dev = q->dev;
 	struct nfs_tgt_data *nfs_data = (struct nfs_tgt_data *)dev->tgt.tgt_data;
-	nfs_cb_data_t *cb_data;
+	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+	nfs_cb_data_t *cb_data = &q_data->ios[tag];
 
 	if ((iod->nr_sectors + iod->start_sector) * 512 > nfs_data->capacity) {
 		return -EINVAL;
 	}
-
-	cb_data = (nfs_cb_data_t *)malloc(sizeof(*cb_data));
-	if (cb_data == NULL) {
-		ublk_err("Malloc failed in nfs_tgt_read");
-		return -ENOMEM;
-	}
-	cb_data->q = q;
-	cb_data->tag = tag;
 
 	if (nfs_pread_async(nfs_data->nfs, nfs_data->nfsfh,
 			    (void *)iod->addr,
 			    iod->nr_sectors * 512, iod->start_sector * 512,
 			    rw_async_cb, cb_data) < 0) {
 		ublk_err("Failed to read from nfs file. %s\n", nfs_get_error(nfs_data->nfs));
-		free(cb_data);
 		return -ENOMEM;
 	}
 
@@ -110,26 +112,18 @@ static int nfs_tgt_write(const struct ublksrv_queue *q,
 {
 	const struct ublksrv_dev *dev = q->dev;
 	struct nfs_tgt_data *nfs_data = (struct nfs_tgt_data *)dev->tgt.tgt_data;
-	nfs_cb_data_t *cb_data;
+	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+	nfs_cb_data_t *cb_data = &q_data->ios[tag];
 
 	if ((iod->nr_sectors + iod->start_sector) * 512 > nfs_data->capacity) {
 		return -EINVAL;
 	}
-
-	cb_data = (nfs_cb_data_t *)malloc(sizeof(*cb_data));
-	if (cb_data == NULL) {
-		ublk_err("Malloc failed in nfs_tgt_read");
-		return -ENOMEM;
-	}
-	cb_data->q = q;
-	cb_data->tag = tag;
 
 	if (nfs_pwrite_async(nfs_data->nfs, nfs_data->nfsfh,
 			     (void *)iod->addr,
 			     iod->nr_sectors * 512, iod->start_sector * 512,
 			     rw_async_cb, cb_data) < 0) {
 		ublk_err("Failed to write to nfs file. %s\n", nfs_get_error(nfs_data->nfs));
-		free(cb_data);
 		return -ENOMEM;
 	}
 
@@ -141,20 +135,12 @@ static int nfs_tgt_flush(const struct ublksrv_queue *q,
 {
 	const struct ublksrv_dev *dev = q->dev;
 	struct nfs_tgt_data *nfs_data = (struct nfs_tgt_data *)dev->tgt.tgt_data;
-	nfs_cb_data_t *cb_data;
-
-	cb_data = (nfs_cb_data_t *)malloc(sizeof(*cb_data));
-	if (cb_data == NULL) {
-		ublk_err("Malloc failed in nfs_tgt_read");
-		return -ENOMEM;
-	}
-	cb_data->q = q;
-	cb_data->tag = tag;
+	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+	nfs_cb_data_t *cb_data = &q_data->ios[tag];
 
 	if (nfs_fsync_async(nfs_data->nfs, nfs_data->nfsfh,
 			    rw_async_cb, cb_data) < 0) {
 		ublk_err("Failed to fsync nfs file. %s\n", nfs_get_error(nfs_data->nfs));
-		free(cb_data);
 		return -ENOMEM;
 	}
 
@@ -387,13 +373,16 @@ static void nfs_deinit_tgt(const struct ublksrv_dev *dev)
 static int nfs_init_queue(const struct ublksrv_queue *q,
 		void **queue_data_ptr)
 {
-	struct nfs_queue_data *data =
-		(struct nfs_queue_data *)calloc(sizeof(*data), 1);
+	struct nfs_queue_data *data = (struct nfs_queue_data *)calloc(sizeof(*data) +
+				sizeof(data->ios[0]) * q->q_depth, 1);
+	int i;
 
 	if (!data)
 		return -ENOMEM;
 
 	pthread_spin_init(&data->io_list_lock, PTHREAD_PROCESS_PRIVATE);
+	for (i = 0; i < q->q_depth; i++)
+		data->ios[i].q = q;
 
 	*queue_data_ptr = (void *)data;
 	return 0;
