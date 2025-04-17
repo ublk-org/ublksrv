@@ -486,6 +486,25 @@ static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 	};
 }
 
+static int ublksrv_fill_q_thread_affinity(int tid, char *buf, unsigned size)
+{
+	unsigned done = 0;
+	cpu_set_t set;
+	unsigned i;
+
+	CPU_ZERO(&set);
+	if (sched_getaffinity(tid, sizeof(set), &set) == -1) {
+		ublk_err("sched_getaffinity, %s\n", strerror(errno));
+		return -1;
+	}
+
+	for (i = 0; i < CPU_SETSIZE; i++) {
+		if (CPU_ISSET(i, &set))
+			done += snprintf(&buf[done], size - done, "%u ", i);
+	}
+	return 0;
+}
+
 void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 {
 	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
@@ -524,12 +543,14 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 			info->owner_uid, info->owner_gid);
 
 	if (jbuf) {
-		char buf[512];
+		char buf[4096];
 
 		for(i = 0; i < info->nr_hw_queues; i++) {
 			unsigned tid;
 
-			ublksrv_json_read_queue_info(jbuf, i, &tid, buf, 512);
+			ublksrv_json_read_queue_info(jbuf, i, &tid, buf, sizeof(buf));
+			/* try to retrieve queue pthread's affinity directly */
+			ublksrv_fill_q_thread_affinity(tid, buf, sizeof(buf));
 			printf("\tqueue %u: tid %d affinity(%s)\n",
 					i, tid, buf);
 		}
