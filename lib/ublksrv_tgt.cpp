@@ -4,8 +4,6 @@
 #include <semaphore.h>
 #include "ublksrv_tgt.h"
 
-#define ERROR_EVTFD_DEVID   0xfffffffffffffffe
-
 struct ublksrv_queue_info {
 	const struct ublksrv_dev *dev;
 	int qid;
@@ -86,24 +84,6 @@ static void ublksrv_drain_fetch_commands(const struct ublksrv_dev *dev,
 
 	for (i = 0; i < nr_queues; i++)
 		pthread_join(info[i].thread, &ret);
-}
-
-int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
-{
-	uint64_t id;
-
-	if (evtfd < 0)
-		return -EBADF;
-
-	if (dev_id >= 0)
-		id = dev_id + 1;
-	else
-		id = ERROR_EVTFD_DEVID;
-
-	if (write(evtfd, &id, sizeof(id)) != sizeof(id))
-		return -EINVAL;
-
-	return 0;
 }
 
 static void ublk_tgt_set_params(struct ublksrv_ctrl_dev *cdev)
@@ -413,14 +393,6 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 	return 0;
 }
 
-void ublksrv_print_std_opts(void)
-{
-	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
-	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
-	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
-	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
-}
-
 static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
@@ -489,19 +461,6 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	ublksrv_tgt_send_dev_event(evtfd, -1);
 
 	return ret;
-}
-
-char *ublksrv_pop_cmd(int *argc, char *argv[])
-{
-	char *cmd = argv[1];
-	if (*argc < 2) {
-		return NULL;
-	}
-
-	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
-	(*argc)--;
-
-	return cmd;
 }
 
 static int __cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
