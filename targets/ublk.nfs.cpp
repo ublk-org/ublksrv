@@ -315,6 +315,11 @@ static int nfs_recover_tgt(struct ublksrv_dev *dev, int type)
 	return nfs_setup_tgt(dev);
 }
 
+static const struct option nfs_longopts[] = {
+	{ "nfs",	     1,	NULL, 1024 },
+	{ NULL }
+};
+
 static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			char *argv[])
 {
@@ -331,10 +336,6 @@ static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			.io_min_shift		= 9,
 		},
 	};
-	static const struct option lo_longopts[] = {
-		{ "nfs",	     1,	NULL, 1024 },
-		{ NULL }
-	};
 	int opt;
 	struct nfs_tgt_data *nfs_data = NULL;
 	const char *nfsurl = NULL;
@@ -348,7 +349,7 @@ static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	strcpy(tgt_json.name, "nfs");
 
 	while ((opt = getopt_long(argc, argv, "-:",
-				  lo_longopts, NULL)) != -1) {
+				  nfs_longopts, NULL)) != -1) {
 		switch (opt) {
 		case 1024:
 			nfsurl = optarg;
@@ -415,6 +416,7 @@ static const struct ublksrv_tgt_type  nfs_tgt_type = {
 	.ublksrv_flags = UBLKSRV_F_NEED_EVENTFD,
 	.name	=  "nfs",
 	.init_queue = nfs_init_queue,
+	.options = nfs_longopts,
 };
 
 int main(int argc, char *argv[])

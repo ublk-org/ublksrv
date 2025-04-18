@@ -329,7 +329,17 @@ struct ublksrv_tgt_type {
 	/** deinit queue data, counter pair of ->init_queue */
 	void (*deinit_queue)(const struct ublksrv_queue *);
 
-	unsigned long reserved[5];
+	/**
+	 * A pointer to the targets longopts used when parsing the command-line
+	 * arguments.
+	 * This is used to detect collisions between arguments private to and parsed
+	 * by the target itself and the standard built-in arguments used in
+	 * ublksrv_main().
+	 * This field must be provided if ublksrv_main() is used.
+	 */
+	const struct option *options;
+
+	unsigned long reserved[4];
 };
 
 /**

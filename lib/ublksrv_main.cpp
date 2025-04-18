@@ -285,9 +285,10 @@ static int mkpath(const char *dir)
  * This function parses all the standard options that all targets support
  * and populates ublksrv_dev_data.
  */
-static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
+static int ublksrv_parse_add_opts(const struct ublksrv_tgt_type *tgt_type,
+		struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
 {
-	int opt;
+	int i, opt;
 	int uring_comp = 0;
 	int need_get_data = 0;
 	int user_recovery = 0;
@@ -324,6 +325,17 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 
 	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
 				  longopts, &option_index)) != -1) {
+		if (tgt_type->options) {
+			for (i = 0; tgt_type->options[i].name; i++) {
+				if (tgt_type->options[i].val == opt) {
+					fprintf(stderr, "ERROR. The target uses an option %c (%d) "
+						" that is also used by the standard options.\n",
+						opt, opt);
+					return -1;
+				}
+			}
+		}
+
 		switch (opt) {
 		case 'n':
 			data->dev_id = strtol(optarg, NULL, 10);
@@ -399,7 +411,7 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	struct ublksrv_ctrl_dev *dev;
 	int ret, evtfd = -1;
 
-	ublksrv_parse_add_opts(&data, &evtfd, argc, argv);
+	ublksrv_parse_add_opts(tgt_type, &data, &evtfd, argc, argv);
 
 	if (data.tgt_type && strcmp(data.tgt_type, tgt_type->name)) {
 		fprintf(stderr, "Wrong tgt_type specified\n");
