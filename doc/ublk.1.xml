@@ -25,7 +25,7 @@
   ublk is a utility that allows you to create, recover, view or delete user-space block devices.
 </para>
 <para>
-  ublk by default comes with several different types of devices, such as nbd, nfs, null and loop.
+  ublk by default comes with several different types of devices, such as iscsi, nbd, nfs, null and loop.
 </para>
 <para>
   The following commands are supported:
@@ -54,8 +54,8 @@
   <varlistentry><term><option>-t, --type</option></term>
   <listitem>
     <para>
-      Specifies the type of device to create. The four types of supported
-      devices are nbd, nfs, null and loop.
+      Specifies the type of device to create. The five types of supported
+      devices are iscsi, nbd, nfs, null and loop.
     </para>
   </listitem>
   </varlistentry>
@@ -291,7 +291,7 @@
   <varlistentry><term><option>--nfs NFS-URL</option></term>
   <listitem>
     <para>
-      URL to tne NFS file to use as the block device.
+      URL to the NFS file to use as the block device.
     </para>
     <para>
       The NFS-URL format is describe in the libnfs README:
@@ -304,6 +304,43 @@
   Example: Create a nfs block device
   <screen format="linespecific">
     # ublk add -t nfs -n 0 --nfs nfs://10.0.0.1/export/10M.raw
+  </screen>
+</para>
+</refsect2>
+
+<refsect2><title>iSCSI</title>
+<para>
+  Extra options for the iSCSI device type:
+</para>
+<para>
+  <command>
+    add -t iscsi ... --iscsi ISCSI-URL --initiator-name NAME
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>--iscsi ISCSI-URL</option></term>
+  <listitem>
+    <para>
+      URL to the iSCSI device to use as the block device.
+    </para>
+    <para>
+      The ISCSI-URL format is describe in the libiscsi README:
+      https://github.com/sahlberg/libiscsi/blob/eb19863f77e2bad4799ceb90e47fa3bc6205233e/README.md?plain=1#L37
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--initiator-name NAME</option></term>
+  <listitem>
+    <para>
+      The initiator name to use when logging in to the target.
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+<para>
+  Example: Create an iSCSI block device
+  <screen format="linespecific">
+    # ublk add -t iscsi -n 0 --iscsi iscsi://iscsi-stgt/iqn.2001-04.com.ronnie.sr0/1 --initiator-name iqn.ronnie.test
   </screen>
 </para>
 </refsect2>

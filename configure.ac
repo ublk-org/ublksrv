@@ -106,7 +106,7 @@ AC_ARG_WITH([libnfs],
 	[with_libnfs=check]
 )
 if test "x$with_libnfs" != "xno"; then
-    	AC_MSG_CHECKING([for libfs api v2])
+    	AC_MSG_CHECKING([for libnfs api v2])
 	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <stddef.h>
 #include <nfsc/libnfs.h>
@@ -125,6 +125,31 @@ else
 	 AM_CONDITIONAL([HAVE_LIBNFS], false)
 fi
 AM_CONDITIONAL([LIBNFS], [test "x$HAVE_LIBNFS" = "x1"])
+
+dnl Check for libiscsi
+AC_ARG_WITH([libiscsi],
+	[AS_HELP_STRING([--without-libiscsi],
+		[do not use libiscsi])],
+	[],
+	[with_libiscsi=check]
+)
+if test "x$with_libiscsi" != "xno"; then
+    	AC_MSG_CHECKING([for libiscsi])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <stddef.h>
+#include <iscsi/iscsi.h>
+	]], [[
+		iscsi_mt_service_thread_start(NULL);
+	]])],
+	[AC_MSG_RESULT([yes])
+	 AM_CONDITIONAL([HAVE_LIBISCSI], true)
+	 AC_DEFINE([HAVE_LIBISCSI], [1], [Define to 1 if libiscsi is available])],
+	[AC_MSG_RESULT([no])
+	 AM_CONDITIONAL([HAVE_LIBISCSI], false)])
+else
+	 AM_CONDITIONAL([HAVE_LIBISCSI], false)
+fi
+AM_CONDITIONAL([LIBISCSI], [test "x$HAVE_LIBISCSI" = "x1"])
 
 #gnutls is only for nbd target, borrowed from nbd-client project
 AC_ARG_WITH([gnutls],
