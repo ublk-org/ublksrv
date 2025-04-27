@@ -25,7 +25,7 @@
   ublk is a utility that allows you to create, recover, view or delete user-space block devices.
 </para>
 <para>
-  ublk by default comes with three different types of devices, null, loop and nbd.
+  ublk by default comes with several different types of devices, such as nbd, nfs, null and loop.
 </para>
 <para>
   The following commands are supported:
@@ -54,8 +54,8 @@
   <varlistentry><term><option>-t, --type</option></term>
   <listitem>
     <para>
-      Specifies the type of device to create. The three types of supported
-      devices are null, loop and bnd.
+      Specifies the type of device to create. The four types of supported
+      devices are nbd, nfs, null and loop.
     </para>
   </listitem>
   </varlistentry>
@@ -276,6 +276,36 @@
   </listitem>
   </varlistentry>
 </variablelist>
+</refsect2>
+
+<refsect2><title>NFS</title>
+<para>
+  Extra options for the nfs device type:
+</para>
+<para>
+  <command>
+    add -t nfs ... --nfs NFS-URL
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>--nfs NFS-URL</option></term>
+  <listitem>
+    <para>
+      URL to tne NFS file to use as the block device.
+    </para>
+    <para>
+      The NFS-URL format is describe in the libnfs README:
+      https://github.com/sahlberg/libnfs/blob/9fa155bfa9d34347a669fbecf4a64259cc573724/README#L55
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+<para>
+  Example: Create a nfs block device
+  <screen format="linespecific">
+    # ublk add -t nfs -n 0 --nfs nfs://10.0.0.1/export/10M.raw
+  </screen>
+</para>
 </refsect2>
 
 </refsect1>

@@ -2,12 +2,12 @@
 .\"     Title: ublk
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 04/14/2025
+.\"      Date: 04/27/2025
 .\"    Manual: ublk: manage ublk devices
 .\"    Source: ublk
 .\"  Language: English
 .\"
-.TH "UBLK" "1" "04/14/2025" "ublk" "ublk: manage ublk devices"
+.TH "UBLK" "1" "04/27/2025" "ublk" "ublk: manage ublk devices"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -36,7 +36,7 @@ ublk \- Utility to manage ublk devices
 .PP
 ublk is a utility that allows you to create, recover, view or delete user\-space block devices\&.
 .PP
-ublk by default comes with three different types of devices, null, loop and nbd\&.
+ublk by default comes with several different types of devices, such as nbd, nfs, null and loop\&.
 .PP
 The following commands are supported:
 .SH "ADD COMMAND"
@@ -47,7 +47,7 @@ Command to add a ublk device\&.
 .PP
 \fB\-t, \-\-type\fR
 .RS 4
-Specifies the type of device to create\&. The three types of supported devices are null, loop and bnd\&.
+Specifies the type of device to create\&. The four types of supported devices are nbd, nfs, null and loop\&.
 .RE
 .PP
 \fB\-n, \-\-number\fR
@@ -191,6 +191,32 @@ Use Zero\-Copy\&.
 .RS 4
 Read\-only device\&.
 .RE
+.SS "NFS"
+.PP
+Extra options for the nfs device type:
+.PP
+\fB add \-t nfs \&.\&.\&. \-\-nfs NFS\-URL \fR
+.PP
+\fB\-\-nfs NFS\-URL\fR
+.RS 4
+URL to tne NFS file to use as the block device\&.
+.sp
+The NFS\-URL format is describe in the libnfs README: https://github\&.com/sahlberg/libnfs/blob/9fa155bfa9d34347a669fbecf4a64259cc573724/README#L55
+.RE
+.PP
+Example: Create a nfs block device
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+    # ublk add \-t nfs \-n 0 \-\-nfs nfs://10\&.0\&.0\&.1/export/10M\&.raw
+  
+.fi
+.if n \{\
+.RE
+.\}
+.sp
 .SH "DEL COMMAND"
 .PP
 Command to delete a ublk device\&.
