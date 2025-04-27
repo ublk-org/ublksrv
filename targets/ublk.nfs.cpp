@@ -388,6 +388,13 @@ static int nfs_init_queue(const struct ublksrv_queue *q,
 	return 0;
 }
 
+static void nfs_deinit_queue(const struct ublksrv_queue *q)
+{
+	struct nfs_queue_data *data = nfs_get_queue_data(q);
+
+	free(data);
+}
+
 static void nfs_cmd_usage()
 {
 	printf("\t--nfs NFS-URL\n");
@@ -402,6 +409,7 @@ static const struct ublksrv_tgt_type  nfs_tgt_type = {
 	.ublksrv_flags = UBLKSRV_F_NEED_EVENTFD,
 	.name	=  "nfs",
 	.init_queue = nfs_init_queue,
+	.deinit_queue = nfs_deinit_queue,
 };
 
 int main(int argc, char *argv[])
