@@ -236,7 +236,7 @@ int ublksrv_ctrl_get_affinity(struct ublksrv_ctrl_dev *ctrl_dev)
 		path_len = 0;
 
 	len = (sizeof(cpu_set_t) + path_len) * ctrl_dev->dev_info.nr_hw_queues;
-	buf = malloc(len);
+	buf = calloc(1, len);
 
 	if (!buf)
 		return -ENOMEM;
