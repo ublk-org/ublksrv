@@ -9,10 +9,9 @@ static int list_one_dev(int number, bool log, bool verbose);
 /*
  * returns 0 on success and -errno on failure
  */
-static int ublksrv_execve_helper(const char *op, const char *type, int argc, char *argv[])
+static int ublksrv_execv_helper(const char *op, const char *type, int argc, char *argv[])
 {
-	char *cmd, *fp, *ldlp, **nargv, *evtfd_str;
-	char *nenv[] = { NULL, NULL };
+	char *cmd, *fp, **nargv, *evtfd_str;
 	char full_path[256];
 	ssize_t fp_len;
 	int daemon = strcmp(op, "help");
@@ -52,22 +51,10 @@ static int ublksrv_execve_helper(const char *op, const char *type, int argc, cha
 		nargv[argc + 2] = evtfd_str;
 	}
 
-	/*
-	 * We need to copy LD_LIBRARY_PATH if we run ublk from the build directory
-	 * as the binary .libs/ublk.<type> might otherwise not find the locally
-	 * built library.
-	 * In this case libtool will set the LD_LIBRARY_PATH env for us before it
-	 * runs the main .libs/ublk binary.
-	 */
-	if (getenv("LD_LIBRARY_PATH")) {
-		asprintf(&ldlp, "LD_LIBRARY_PATH=%s", getenv("LD_LIBRARY_PATH"));
-		nenv[0] = ldlp;
-	}
-
 	if (!daemon) {
 exec:
 		close(pfd[0]);
-		execve(fp, nargv, nenv);
+		execv(fp, nargv);
 
 		/* only reach here is execve failed */
 		fprintf(stderr, "Failed to execve() %s. %s\n", fp, strerror(errno));
@@ -403,7 +390,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		fprintf(stderr, "no dev type specified\n");
 		return -EINVAL;
 	}
-	return ublksrv_execve_helper("add", data.tgt_type, argc, argv);
+	return ublksrv_execv_helper("add", data.tgt_type, argc, argv);
 }
 
 static int cmd_dev_help(int argc, char *argv[])
@@ -417,7 +404,7 @@ static int cmd_dev_help(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	return ublksrv_execve_helper("help", data.tgt_type, argc, argv);
+	return ublksrv_execv_helper("help", data.tgt_type, argc, argv);
 }
 
 static int cmd_dev_recover(int argc, char *argv[])
@@ -456,7 +443,7 @@ static int cmd_dev_recover(int argc, char *argv[])
 
 	free(buf);
 
-	return ublksrv_execve_helper("recover", tgt_type, argc, argv);
+	return ublksrv_execv_helper("recover", tgt_type, argc, argv);
 }
 
 int main(int argc, char *argv[])
