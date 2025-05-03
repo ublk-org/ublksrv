@@ -366,6 +366,8 @@ static int __ublksrv_ctrl_get_info_no_trans(struct ublksrv_ctrl_dev *dev,
 	};
 	bool has_dev_path = false;
 	int ret;
+	
+	memset(buf, 0, sizeof(buf));
 
 	if (ublk_is_unprivileged(dev) && _IOC_NR(data.cmd_op) == UBLK_CMD_GET_DEV_INFO)
 		return -EINVAL;
@@ -603,6 +605,8 @@ int ublksrv_ctrl_get_params(struct ublksrv_ctrl_dev *dev,
 	char buf[UBLKC_PATH_MAX + sizeof(*params)];
 	int ret;
 
+	memset(buf, 0, sizeof(buf));
+
 	params->len = sizeof(*params);
 
 	if (ublk_is_unprivileged(dev)) {
@@ -662,6 +666,8 @@ int ublksrv_ctrl_get_features(struct ublksrv_ctrl_dev *dev,
 		.len = sizeof(*features),
 	};
 
+	memset(features, 0, sizeof(*features));
+	
 	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
