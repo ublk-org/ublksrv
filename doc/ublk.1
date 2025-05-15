@@ -2,12 +2,12 @@
 .\"     Title: ublk
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 05/03/2025
+.\"      Date: 05/15/2025
 .\"    Manual: ublk: manage ublk devices
 .\"    Source: ublk
 .\"  Language: English
 .\"
-.TH "UBLK" "1" "05/03/2025" "ublk" "ublk: manage ublk devices"
+.TH "UBLK" "1" "05/15/2025" "ublk" "ublk: manage ublk devices"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -271,6 +271,40 @@ Example: Deleting a loop block device
 .\}
 .nf
     # ublk del \-n 0
+  
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+.SH "SET_AFFINITY COMMAND"
+.PP
+Command to change queue affinity\&.
+.PP
+\fB set_affinity {\-n, \-\-number} DEV_ID [\-q, \-\-queue] QID \-\-cpuset="[SET]" \fR
+.PP
+\fB\-n, \-\-number\fR
+.RS 4
+Change the affinity on this device\&.
+.RE
+.PP
+\fB\-q, \-\-queue\fR
+.RS 4
+Which queue to change the affinity for\&.
+.RE
+.PP
+\fB\-\-cpuset="[SET]"\fR
+.RS 4
+The new cpuset for this device/queue\&. Format is a comma\-separated list of CPUs within squre brackets\&.
+.RE
+.PP
+Example: Set affinity to core 7 for device 0, queue 1
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+    # ublk set_affinity \-n 0 \-q 1 \-\-cpuset="[7]"
   
 .fi
 .if n \{\

@@ -204,6 +204,63 @@ static void cmd_dev_del_usage(const char *cmd)
 	printf("%s del -n DEV_ID [-a | --all]\n", cmd);
 }
 
+static int cmd_dev_set_affinity(int argc, char *argv[])
+{
+	static const struct option longopts[] = {
+		{ "number",		1,	NULL, 'n' },
+		{ "queue",		1,	NULL, 'q' },
+		{ "cpuset",		1,	NULL, 0},
+		{ NULL }
+	};
+	int number = -1, qid = -1;
+	int opt, ret;
+	int option_index = 0;
+	const char *cpuset = NULL;
+	cpu_set_t *set = NULL;
+
+	while ((opt = getopt_long(argc, argv, "n:q:",
+				  longopts, &option_index)) != -1) {
+		switch (opt) {
+		case 'n':
+			number = strtol(optarg, NULL, 10);
+			break;
+		case 'q':
+			qid = strtol(optarg, NULL, 10);
+			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "cpuset")) {
+				cpuset = optarg;
+			}
+		}
+	}
+
+	if (number < 0) {
+		fprintf(stderr, "Must specify -n / --number\n");
+		return -EINVAL;
+	}
+	if (qid < 0) {
+		fprintf(stderr, "Must specify -q / --queue\n");
+		return -EINVAL;
+	}
+	if (!cpuset) {
+		fprintf(stderr, "Must specify --cpuset\n");
+		return -EINVAL;
+	}
+	/*
+	 * The cpuset string for set_affinity is a single set
+	 */
+	set = ublk_make_cpuset(1, cpuset);
+  
+	ret = ublk_queue_set_affinity(number, qid, set);
+	free(set);
+	return ret;
+}
+
+static void cmd_dev_set_affinity_usage(const char *cmd)
+{
+	printf("%s set_affinity [ -n | --number] DEV_ID [ -q | --queue] QID --cpuset SET\n", cmd);
+}
+
 static int list_one_dev(int number, bool log, bool verbose)
 {
 	struct ublksrv_dev_data data = {
@@ -351,6 +408,7 @@ static void cmd_usage(const char *cmd)
 	cmd_dev_del_usage(cmd);
 	cmd_dev_list_usage(cmd);
 	cmd_dev_recover_usage(cmd);
+	cmd_dev_set_affinity_usage(cmd);
 	cmd_dev_get_features_help(cmd);
 
 	printf("%s help -t <target>\n", cmd);
@@ -468,6 +526,8 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_add(argc, argv);
 	else if (!strcmp(cmd, "del"))
 		ret = cmd_dev_del(argc, argv);
+	else if (!strcmp(cmd, "set_affinity"))
+		ret = cmd_dev_set_affinity(argc, argv);
 	else if (!strcmp(cmd, "help"))
 		ret = cmd_dev_help(argc, argv);
 	else if (!strcmp(cmd, "list"))

@@ -381,6 +381,46 @@
 </para>
 </refsect1>
 
+<refsect1><title>SET_AFFINITY COMMAND</title>
+<para>
+  Command to change queue affinity.
+</para>
+<para>
+  <command>
+    set_affinity {-n, --number} DEV_ID [-q, --queue] QID --cpuset="[SET]"
+  </command>
+</para>
+<variablelist>
+  <varlistentry><term><option>-n, --number</option></term>
+  <listitem>
+    <para>
+      Change the affinity on this device.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-q, --queue</option></term>
+  <listitem>
+    <para>
+      Which queue to change the affinity for.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--cpuset="[SET]"</option></term>
+  <listitem>
+    <para>
+      The new cpuset for this device/queue. Format is a comma-separated list of CPUs within squre brackets.
+    </para>
+  </listitem>
+  </varlistentry>
+</variablelist>
+<para>
+  Example: Set affinity to core 7 for device 0, queue 1
+  <screen format="linespecific">
+    # ublk set_affinity -n 0 -q 1 --cpuset="[7]"
+  </screen>
+</para>
+</refsect1>
+
 <refsect1><title>LIST COMMAND</title>
 <para>
   List one or all devices and show their configutaion. 

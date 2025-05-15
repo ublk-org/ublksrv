@@ -96,3 +96,59 @@ unsigned ublk_get_debug_mask(unsigned mask)
 	return ublk_debug_mask;
 }
 #endif
+
+cpu_set_t *ublk_make_cpuset(int num_sets, const char *cpuset)
+{
+	int i;
+	char *ptr, *next, *tmp, *str = NULL;
+	cpu_set_t *sets = NULL, *ret = NULL;
+
+	if (!cpuset)
+		return NULL;
+	if (!(str = strdup(cpuset)))
+		return NULL;
+
+	for(i = 0, ptr = str; ptr = strchr(ptr, '['); i++) {
+		if (!(ptr = strchr(ptr, ']')))
+			break;
+	}
+	if (i != num_sets)
+		goto finished;
+
+	if (!(sets = calloc(sizeof(cpu_set_t), i)))
+		goto finished;
+
+	for (i = 0; i < num_sets; i++) {
+		CPU_ZERO(&sets[i]);
+	}
+	for (i = 0, ptr = str;
+	     i < num_sets;
+	     i++, ptr = next) {
+		if (!(ptr = strchr(ptr, '[')))
+			goto finished;
+		ptr++;
+		if (!(next = strchr(ptr, ']')))
+			goto finished;
+		*next++ = '\0';
+		/*
+		 * ptr -> end now contains the cpuset string for
+		 * the queue with index i
+		 */
+
+		do {
+			tmp = strchr(ptr, ',');
+			if (tmp)
+				*tmp++ = '\0';
+			CPU_SET(strtol(ptr, NULL, 10), &sets[i]);
+			ptr = tmp;
+		} while (ptr && *ptr);
+	}
+
+	ret = sets;
+	sets = NULL;
+	
+ finished:
+	free(sets);
+	free(str);
+	return ret;
+}

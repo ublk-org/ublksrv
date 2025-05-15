@@ -12,6 +12,8 @@
 extern "C" {
 #endif
 
+cpu_set_t *ublk_make_cpuset(int num_sets, const char *cpuset);
+
 static inline int ublksrv_gettid(void)
 {
 	return syscall(SYS_gettid);
