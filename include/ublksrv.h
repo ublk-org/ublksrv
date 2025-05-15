@@ -1008,6 +1008,12 @@ extern int ublksrv_json_get_length(const char *jbuf);
  *  @{
  */
 
+
+/**
+ * Set affinity for a queue
+ */
+extern int ublk_queue_set_affinity(int number, int qid, cpu_set_t *cpuset);
+
 /**
  * Return the specified io private data
  *
