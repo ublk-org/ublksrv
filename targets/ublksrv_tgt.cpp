@@ -52,7 +52,8 @@ static void *ublksrv_queue_handler(void *data)
 
 	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
 
-	q = ublksrv_queue_init(dev, q_id, NULL);
+	q = ublksrv_queue_init_flags(dev, q_id, NULL, IORING_SETUP_COOP_TASKRUN |
+		IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_DEFER_TASKRUN);
 	if (!q) {
 		ublk_err("ublk dev %d queue %d init queue failed",
 				dev_id, q_id);

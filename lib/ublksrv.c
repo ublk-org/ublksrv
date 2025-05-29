@@ -533,8 +533,8 @@ static void ublksrv_calculate_depths(const struct _ublksrv_dev *dev, int
 	*cq_depth = dev->cq_depth ? dev->cq_depth : depth;
 }
 
-const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
-		unsigned short q_id, void *queue_data)
+const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *tdev,
+		unsigned short q_id, void *queue_data, int flags)
 {
 	struct io_uring_params p;
 	struct _ublksrv_dev *dev = tdev_to_local(tdev);
@@ -628,9 +628,7 @@ skip_alloc_buf:
 		//ublk_assert(io_data_size ^ (unsigned long)q->ios[i].data.private_data);
 	}
 
-	ublksrv_setup_ring_params(&p, cq_depth, IORING_SETUP_COOP_TASKRUN |
-			IORING_SETUP_SINGLE_ISSUER |
-			IORING_SETUP_DEFER_TASKRUN);
+	ublksrv_setup_ring_params(&p, cq_depth, flags);
 	ret = io_uring_queue_init_params(ring_depth, &q->ring, &p);
 	if (ret < 0) {
 		ublk_err("ublk dev %d queue %d setup io_uring failed %d",
@@ -700,6 +698,12 @@ skip_alloc_buf:
 	ublk_err("ublk dev %d queue %d failed",
 			ctrl_dev->dev_info.dev_id, q_id);
 	return NULL;
+}
+
+const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
+		unsigned short q_id, void *queue_data)
+{
+	return ublksrv_queue_init_flags(tdev, q_id, queue_data, IORING_SETUP_COOP_TASKRUN);
 }
 
 static int ublksrv_create_pid_file(struct _ublksrv_dev *dev)
