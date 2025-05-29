@@ -1085,6 +1085,16 @@ extern const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *
 		unsigned short q_id, void *queue_data);
 
 /**
+ * Allocate and initialize ublksrv queue instance specifying queue flags
+ *
+ * @param dev the ublksrv device instance
+ * @param q_id queue id
+ * @param queue_data queue private data
+ */
+extern const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *dev,
+		unsigned short q_id, void *queue_data, int flags);
+
+/**
  * Deinit & free ublksrv queue instance
  *
  * @param q the ublksrv queue instance
