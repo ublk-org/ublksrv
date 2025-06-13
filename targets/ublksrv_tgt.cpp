@@ -651,12 +651,23 @@ static int ublksrv_cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 
 static void cmd_usage(const struct ublksrv_tgt_type *tgt_type)
 {
-	printf("ublk.%s add -t %s\n", tgt_type->name, tgt_type->name);
+	const char *type = tgt_type ? tgt_type->name : "TYPE";
+
+	printf("ublk[.%s] add -t %s\n", type, type);
 	ublksrv_print_std_opts();
-	if (tgt_type->usage_for_add)
+	if (tgt_type && tgt_type->usage_for_add)
 		tgt_type->usage_for_add();
-	printf("ublk.%s del -n DEV_ID\n", tgt_type->name);
-	printf("ublk.%s help -t %s\n", tgt_type->name, tgt_type->name);
+	else {
+		printf("\tFor additional arguments specific to %s, run:\n", type);
+		printf("\t\tublk help -t %s\n", type);
+	}
+	printf("ublk[.%s] recover -n DEV_ID\n", type);
+	printf("ublk[.%s] help -t %s\n", type, type);
+	printf("ublk del -n DEV_ID [ -a | --all]\n");
+	printf("ublk list -n DEV_ID -v\n");
+	printf("ublk set_affinity -n DEV_ID -q QID --cpuset SET\n");
+	printf("ublk features\n");
+	printf("ublk -v | --version\n");
 }
 
 int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
