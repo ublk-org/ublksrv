@@ -539,5 +539,5 @@ static const struct ublksrv_tgt_type  iscsi_tgt_type = {
 
 int main(int argc, char *argv[])
 {
-	return ublksrv_tgt_cmd_main(&iscsi_tgt_type, argc, argv);
+	return ublksrv_main(&iscsi_tgt_type, argc, argv);
 }

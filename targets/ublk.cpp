@@ -413,7 +413,7 @@ static int cmd_dev_help(int argc, char *argv[])
 	if (data.tgt_type == NULL) {
 		char *av[2] = { (char *)"ublk", (char *)"help"};
 
-		ublksrv_tgt_cmd_main(NULL, 2, av);
+		ublksrv_main(NULL, 2, av);
 		return EXIT_SUCCESS;
 	}
 
