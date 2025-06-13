@@ -670,7 +670,7 @@ static void cmd_usage(const struct ublksrv_tgt_type *tgt_type)
 	printf("ublk -v | --version\n");
 }
 
-int ublksrv_tgt_cmd_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
+int ublksrv_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
 {
 	const char *cmd;
 	int ret;
