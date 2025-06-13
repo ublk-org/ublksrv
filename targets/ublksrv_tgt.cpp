@@ -444,7 +444,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 	return 0;
 }
 
-void ublksrv_print_std_opts(void)
+static void ublksrv_print_std_opts(void)
 {
 	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
 	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
