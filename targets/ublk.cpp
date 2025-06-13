@@ -85,14 +85,6 @@ exec:
 	return res;
 }
 
-static void cmd_dev_add_usage(const char *cmd)
-{
-	printf("%s add -t TYPE\n", cmd);
-	ublksrv_print_std_opts();
-	printf("\tFor type specific options, run:\n");
-	printf("\t\tublk help -t <type>\n");
-}
-
 static int ublksrv_stop_io_daemon(const struct ublksrv_ctrl_dev *ctrl_dev)
 {
 	int daemon_pid, cnt = 0;
@@ -199,11 +191,6 @@ static int cmd_dev_del(int argc, char *argv[])
 	return ret;
 }
 
-static void cmd_dev_del_usage(const char *cmd)
-{
-	printf("%s del -n DEV_ID [-a | --all]\n", cmd);
-}
-
 static int cmd_dev_set_affinity(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
@@ -254,11 +241,6 @@ static int cmd_dev_set_affinity(int argc, char *argv[])
 	ret = ublk_queue_set_affinity(number, qid, set);
 	free(set);
 	return ret;
-}
-
-static void cmd_dev_set_affinity_usage(const char *cmd)
-{
-	printf("%s set_affinity [ -n | --number] DEV_ID [ -q | --queue] QID --cpuset SET\n", cmd);
 }
 
 static int list_one_dev(int number, bool log, bool verbose)
@@ -332,11 +314,6 @@ static int cmd_list_dev_info(int argc, char *argv[])
 	return 0;
 }
 
-static void cmd_dev_list_usage(const char *cmd)
-{
-	printf("%s list [-n DEV_ID]\n", cmd);
-}
-
 #define const_ilog2(x) (63 - __builtin_clzll(x))
 
 static int cmd_dev_get_features(int argc, char *argv[])
@@ -392,30 +369,6 @@ static int cmd_dev_get_features(int argc, char *argv[])
 	return ret;
 }
 
-static void cmd_dev_get_features_help(const char *cmd)
-{
-	printf("%s features\n", cmd);
-}
-
-static void cmd_dev_recover_usage(const char *cmd)
-{
-	printf("%s recover [-n DEV_ID]\n", cmd);
-}
-
-static void cmd_usage(const char *cmd)
-{
-	cmd_dev_add_usage(cmd);
-	cmd_dev_del_usage(cmd);
-	cmd_dev_list_usage(cmd);
-	cmd_dev_recover_usage(cmd);
-	cmd_dev_set_affinity_usage(cmd);
-	cmd_dev_get_features_help(cmd);
-
-	printf("%s help -t <target>\n", cmd);
-	printf("%s -v [--version]\n", cmd);
-	printf("%s -h [--help]\n", cmd);
-}
-
 static void args_parse_number_type(struct ublksrv_dev_data *data, int argc, char *argv[])
 {
 	static const struct option longopts[] = {
@@ -456,9 +409,11 @@ static int cmd_dev_help(int argc, char *argv[])
 	struct ublksrv_dev_data data = {0};
 
 	args_parse_number_type(&data, argc, argv);
-  
+
 	if (data.tgt_type == NULL) {
-		cmd_usage("ublk");
+		char *av[2] = { (char *)"ublk", (char *)"help"};
+
+		ublksrv_tgt_cmd_main(NULL, 2, av);
 		return EXIT_SUCCESS;
 	}
 
@@ -506,7 +461,6 @@ static int cmd_dev_recover(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-	const char *prog_name = "ublk";
 	char *cmd;
 	int ret;
 	char exe[PATH_MAX];
@@ -518,7 +472,7 @@ int main(int argc, char *argv[])
 	cmd = ublksrv_pop_cmd(&argc, argv);
 	if (cmd == NULL) {
 		printf("%s: missing command\n", argv[0]);
-		cmd_usage(prog_name);
+		cmd_dev_help(argc, argv);
 		return EXIT_FAILURE;
 	}
 
@@ -528,8 +482,6 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_del(argc, argv);
 	else if (!strcmp(cmd, "set_affinity"))
 		ret = cmd_dev_set_affinity(argc, argv);
-	else if (!strcmp(cmd, "help"))
-		ret = cmd_dev_help(argc, argv);
 	else if (!strcmp(cmd, "list"))
 		ret = cmd_list_dev_info(argc, argv);
 	else if (!strcmp(cmd, "recover"))
@@ -537,14 +489,13 @@ int main(int argc, char *argv[])
 	else if (!strcmp(cmd, "features"))
 		ret = cmd_dev_get_features(argc, argv);
 	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
-		cmd_usage(prog_name);
-		ret = EXIT_SUCCESS;
+		ret = cmd_dev_help(argc, argv);
 	} else if (!strcmp(cmd, "-v") || !strcmp(cmd, "--version")) {
 		fprintf(stdout, "%s\n", PACKAGE_STRING);
 		ret = EXIT_SUCCESS;
 	} else {
 		fprintf(stderr, "unknown command: %s\n", cmd);
-		cmd_usage(prog_name);
+		cmd_dev_help(argc, argv);
 		ret = EXIT_FAILURE;
 	}
 
