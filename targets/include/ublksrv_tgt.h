@@ -244,4 +244,9 @@ static inline bool ublksrv_tgt_queue_zc(const struct ublksrv_queue *q)
 	return ublksrv_queue_state(q) & UBLKSRV_ZERO_COPY;
 }
 
+static inline bool ublksrv_tgt_queue_auto_zc(const struct ublksrv_queue *q)
+{
+	return ublksrv_queue_state(q) & UBLKSRV_AUTO_ZC;
+}
+
 #endif
