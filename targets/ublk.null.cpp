@@ -86,6 +86,19 @@ static int null_submit_io(const struct ublksrv_queue *q,
 	unsigned ublk_op = ublksrv_get_op(data->iod);
 	struct io_uring_sqe *sqe[3];
 
+	if (ublksrv_tgt_queue_auto_zc(q)) {
+		ublk_queue_alloc_sqes(q, sqe, 1);
+
+		io_uring_prep_nop(sqe[0]);
+		sqe[0]->buf_index = tag;
+		sqe[0]->flags |= IOSQE_FIXED_FILE;
+		sqe[0]->rw_flags = IORING_NOP_FIXED_BUFFER | IORING_NOP_INJECT_RESULT;
+		sqe[0]->len = data->iod->nr_sectors << 9; 	/* injected result */
+		sqe[0]->user_data = build_user_data(tag, ublk_op, 0, 1);
+
+		return 1;
+	}
+
 	if (!ublksrv_tgt_queue_zc(q))
 		return 0;
 

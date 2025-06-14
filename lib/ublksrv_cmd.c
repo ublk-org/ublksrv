@@ -527,9 +527,10 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
                         info->max_io_buf_bytes,
 			info->ublksrv_pid,
 			ublksrv_dev_state_desc(dev));
-        printf("\tflags 0x%llx [%s%s%s%s%s%s%s%s%s%s ]\n",
+        printf("\tflags 0x%llx [%s%s%s%s%s%s%s%s%s%s%s ]\n",
                         info->flags,
                         info->flags & UBLK_F_SUPPORT_ZERO_COPY ? " SUPPORT_ZERO_COPY" : "",
+                        info->flags & UBLK_F_AUTO_BUF_REG ? " AUTO_ZC" : "",
                         info->flags & UBLK_F_URING_CMD_COMP_IN_TASK ? " URING_CMD_COMP_IN_TASK" : "",
                         info->flags & UBLK_F_NEED_GET_DATA ? " NEED_GET_DATA" : "",
                         info->flags & UBLK_F_UNPRIVILEGED_DEV ? " UNPRIVILEGED_DEV" : "",

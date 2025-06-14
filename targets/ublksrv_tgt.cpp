@@ -474,6 +474,10 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	data.tgt_argc = argc;
 	data.tgt_argv = argv;
 
+	/* try UBLK_F_AUTO_BUF_REG at default */
+	if (data.flags & UBLK_F_SUPPORT_ZERO_COPY)
+		data.flags |= UBLK_F_AUTO_BUF_REG;
+
 	dev = ublksrv_ctrl_init(&data);
 	if (!dev) {
 		fprintf(stderr, "can't init dev %d\n", data.dev_id);
@@ -489,6 +493,12 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 			return ret;
 		if (!(features & UBLK_F_SUPPORT_ZERO_COPY))
 			return -ENOTSUP;
+		/* disable UBLK_F_AUTO_BUF_REG if it isn't supported yet */
+		if (!(features & UBLK_F_AUTO_BUF_REG)) {
+			data.flags &= ~UBLK_F_AUTO_BUF_REG;
+			ublksrv_ctrl_deinit(dev);
+			dev = ublksrv_ctrl_init(&data);
+		}
 	}
 
 	ret = ublksrv_ctrl_add_dev(dev);

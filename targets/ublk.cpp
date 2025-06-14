@@ -340,6 +340,8 @@ static int cmd_dev_get_features(int argc, char *argv[])
 		[const_ilog2(UBLK_F_USER_COPY)] = "USER_COPY",
 		[const_ilog2(UBLK_F_ZONED)] = "ZONED",
 		[const_ilog2(UBLK_F_USER_RECOVERY_FAIL_IO)] = "RECOVERY_FAIL_IO",
+		[const_ilog2(UBLK_F_UPDATE_SIZE)] = "UPDATE_SIZE",
+		[const_ilog2(UBLK_F_AUTO_BUF_REG)] = "AUTO_ZC",
 	};
 
 	if (!dev) {
