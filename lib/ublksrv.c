@@ -141,6 +141,18 @@ static inline bool ublksrv_queue_alloc_buf(const struct _ublksrv_queue *q)
 	return !(q->state & UBLKSRV_ZERO_COPY);
 }
 
+static void ublk_set_auto_buf_reg(struct io_uring_sqe *sqe,
+				  unsigned short buf_idx,
+				  unsigned char flags)
+{
+       struct ublk_auto_buf_reg buf = {
+               .index = buf_idx,
+               .flags = flags,
+       };
+
+       sqe->addr = ublk_auto_buf_reg_to_sqe_addr(&buf);
+}
+
 static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 		struct ublk_io *io, unsigned tag)
 {
@@ -193,6 +205,9 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 	else
 		cmd->addr	= 0;
 	cmd->q_id	= q->q_id;
+
+	if (q->state & UBLKSRV_AUTO_ZC)
+		ublk_set_auto_buf_reg(sqe, tag, 0);
 
 	user_data = build_user_data(tag, _IOC_NR(cmd_op), 0, 0);
 	io_uring_sqe_set_data64(sqe, user_data);
@@ -568,15 +583,16 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 		q->state = 0;
 	if (ctrl_dev->dev_info.flags & UBLK_F_USER_COPY)
 		q->state |= UBLKSRV_USER_COPY;
+	if (ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY)
+		q->state |= UBLKSRV_ZERO_COPY;
+	if (ctrl_dev->dev_info.flags & UBLK_F_AUTO_BUF_REG)
+		q->state |= UBLKSRV_AUTO_ZC;
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
 	q->io_cmd_buf = NULL;
 	q->cmd_inflight = 0;
 	q->tid = ublksrv_gettid();
-
-	if (ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY)
-		q->state |= UBLKSRV_ZERO_COPY;
 
 	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
 	off = UBLKSRV_CMD_BUF_OFFSET + q_id * queue_max_cmd_buf_sz();
@@ -646,7 +662,8 @@ skip_alloc_buf:
 		goto fail;
 	}
 
-	if (ctrl_dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+	if (ctrl_dev->dev_info.flags & (UBLK_F_SUPPORT_ZERO_COPY |
+				UBLK_F_AUTO_BUF_REG)) {
 		ret = io_uring_register_buffers_sparse(&q->ring, q->q_depth);
 		if (ret) {
 			ublk_err("ublk dev %d queue %d register spare buffers failed %d",
