@@ -8,6 +8,7 @@
 
 struct loop_tgt_data {
 	bool user_copy;
+	bool auto_zc;
 	bool zero_copy;
 	bool block_device;
 	unsigned long offset;
@@ -104,6 +105,7 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type)
 	tgt->nr_fds = 1;
 	tgt->fds[1] = fd;
 
+	tgt_data->auto_zc = info->flags & UBLK_F_AUTO_BUF_REG;
 	tgt_data->zero_copy = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 	tgt_data->user_copy = info->flags & UBLK_F_USER_COPY;
 	if (tgt_data->zero_copy || tgt_data->user_copy)
@@ -331,8 +333,8 @@ static int lo_rw(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *tgt_data)
 {
-	enum io_uring_op uring_op = ublk_to_uring_fs_op(iod, false);
-	void *buf = (void *)iod->addr;
+	enum io_uring_op uring_op = ublk_to_uring_fs_op(iod, tgt_data->auto_zc);
+	void *buf = tgt_data->auto_zc ? NULL : (void *)iod->addr;
 	struct io_uring_sqe *sqe[1];
 
 	ublk_queue_alloc_sqes(q, sqe, 1);
@@ -342,6 +344,9 @@ static int lo_rw(const struct ublksrv_queue *q,
 		buf,
 		iod->nr_sectors << 9,
 		(iod->start_sector + tgt_data->offset) << 9);
+	if (tgt_data->auto_zc)
+		sqe[0]->buf_index = tag;
+
 	io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE);
 	lo_rw_handle_fua(sqe[0], iod);
 
@@ -391,7 +396,9 @@ static int loop_queue_tgt_rw(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *data)
 {
-	/* zero_copy has top priority */
+	/* auto_zc has top priority */
+	if (data->auto_zc)
+		return lo_rw(q, iod, tag, data);
 	if (data->zero_copy)
 		return lo_rw_zero_copy(q, iod, tag, data);
 	if (data->user_copy)
