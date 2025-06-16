@@ -104,8 +104,31 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_discard,
 	max_write_zeroes_sectors,
 	max_discard_segments,
 	reserved0)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_devt,
+	char_major,
+	char_minor,
+	disk_major,
+	disk_minor)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_zoned,
+	max_open_zones,
+	max_active_zones,
+	max_zone_append_sectors,
+	reserved[20])
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_dma_align,
+	alignment,
+	pad[4])
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_segment,
+	seg_boundary_mask,
+	max_segment_size,
+	max_segments,
+	pad[2])
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
-	len, types, basic, discard)
+	len, types, basic, discard, devt, zoned, dma, seg)
 
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
 {
