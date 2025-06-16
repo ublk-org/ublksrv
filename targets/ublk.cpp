@@ -9,16 +9,21 @@ static int list_one_dev(int number, bool log, bool verbose);
 /*
  * returns 0 on success and -errno on failure
  */
-static int ublksrv_execv_helper(const char *op, const char *type, int argc, char *argv[])
+static int ublksrv_execv_helper(const char *type, int argc, char *argv[])
 {
 	char *cmd, *fp, **nargv, *evtfd_str;
 	char full_path[256];
 	ssize_t fp_len;
-	int daemon = strcmp(op, "help");
+	int daemon = strcmp(argv[1], "help");
 	int res, i;
 	int pfd[2] = { -1, -1};
 
 	asprintf(&cmd, "ublk.%s", type);
+
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--eventfd"))
+			return -EINVAL;
+	}
 
 	/*
 	 * Create full path to the ublk.<type> binary. It must be in the
@@ -30,16 +35,11 @@ static int ublksrv_execv_helper(const char *op, const char *type, int argc, char
 		return -EINVAL;
 	asprintf(&fp, "%s.%s", full_path, type);
 
-	nargv = (char **)calloc(argc + 4, sizeof(char *));
+	nargv = (char **)calloc(argc + 3, sizeof(char *));
 	if (!nargv)
 		return -ENOMEM;
+	memcpy(&nargv[1], &argv[1], (argc - 1) * sizeof(char *));
 	nargv[0] = cmd;
-	nargv[1] = (char *)op;
-	for (i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "--eventfd"))
-			return -EINVAL;
-		nargv[i + 1] = argv[i];
-	}
 
 	if (daemon) {
 		if (pipe(pfd)) {
@@ -47,8 +47,8 @@ static int ublksrv_execv_helper(const char *op, const char *type, int argc, char
 			return -errno;
 		}
 		asprintf(&evtfd_str, "%d", pfd[1]);
-		nargv[argc + 1] = strdup("--eventfd");
-		nargv[argc + 2] = evtfd_str;
+		nargv[argc] = strdup("--eventfd");
+		nargv[argc + 1] = evtfd_str;
 	}
 
 	if (!daemon) {
@@ -401,7 +401,7 @@ static int cmd_dev_add(int argc, char *argv[])
 		fprintf(stderr, "no dev type specified\n");
 		return -EINVAL;
 	}
-	return ublksrv_execv_helper("add", data.tgt_type, argc, argv);
+	return ublksrv_execv_helper(data.tgt_type, argc, argv);
 }
 
 static int cmd_dev_help(int argc, char *argv[])
@@ -417,7 +417,7 @@ static int cmd_dev_help(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	return ublksrv_execv_helper("help", data.tgt_type, argc, argv);
+	return ublksrv_execv_helper(data.tgt_type, argc, argv);
 }
 
 static int cmd_dev_recover(int argc, char *argv[])
@@ -456,7 +456,7 @@ static int cmd_dev_recover(int argc, char *argv[])
 
 	free(buf);
 
-	return ublksrv_execv_helper("recover", tgt_type, argc, argv);
+	return ublksrv_execv_helper(tgt_type, argc, argv);
 }
 
 int main(int argc, char *argv[])
@@ -466,12 +466,12 @@ int main(int argc, char *argv[])
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
-	cmd = ublksrv_pop_cmd(&argc, argv);
-	if (cmd == NULL) {
+	if (argc < 2) {
 		printf("%s: missing command\n", argv[0]);
 		cmd_dev_help(argc, argv);
 		return EXIT_FAILURE;
 	}
+	cmd = argv[1];
 
 	if (!strcmp(cmd, "add"))
 		ret = cmd_dev_add(argc, argv);

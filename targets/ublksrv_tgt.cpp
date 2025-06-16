@@ -522,7 +522,7 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	return ret;
 }
 
-char *ublksrv_pop_cmd(int *argc, char *argv[])
+static char *ublksrv_pop_cmd(int *argc, char *argv[])
 {
 	char *cmd = argv[1];
 	if (*argc < 2) {
