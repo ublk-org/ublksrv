@@ -463,9 +463,6 @@ int main(int argc, char *argv[])
 {
 	char *cmd;
 	int ret;
-	char exe[PATH_MAX];
-
-	strncpy(exe, argv[0], PATH_MAX - 1);
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
