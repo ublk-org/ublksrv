@@ -157,8 +157,6 @@ static inline enum io_uring_op ublk_to_uring_fs_op(
 	assert(0);
 }
 
-int ublksrv_tgt_send_dev_event(int evtfd, int dev_id);
-
 int ublksrv_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
 static inline unsigned short ublk_cmd_op_nr(unsigned int op)

@@ -118,7 +118,7 @@ static void ublksrv_drain_fetch_commands(const struct ublksrv_dev *dev,
 		pthread_join(info[i].thread, &ret);
 }
 
-int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
+static int ublksrv_tgt_send_dev_event(int evtfd, int dev_id)
 {
 	uint64_t id;
 

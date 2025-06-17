@@ -58,8 +58,6 @@ exec:
 
 		/* only reach here is execve failed */
 		fprintf(stderr, "Failed to execve() %s. %s\n", fp, strerror(errno));
-		if (pfd[1] >= 0)
-			ublksrv_tgt_send_dev_event(pfd[1], -1);
 		return -errno;
 	}
 
