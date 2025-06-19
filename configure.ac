@@ -139,7 +139,7 @@ if test "x$with_libiscsi" != "xno"; then
 #include <stddef.h>
 #include <iscsi/iscsi.h>
 	]], [[
-		iscsi_mt_service_thread_start(NULL);
+		int (*ptr)(struct iscsi_context *) = iscsi_mt_service_thread_start;
 	]])],
 	[AC_MSG_RESULT([yes])
 	 AM_CONDITIONAL([HAVE_LIBISCSI], true)
