@@ -5,6 +5,7 @@
 #include "ublksrv_tgt.h"
 #include <nfsc/libnfs.h>
 
+static const char *nfsurl;
 
 struct nfs_tgt_data {
 	char url[4096];
@@ -315,13 +316,7 @@ static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			.io_min_shift		= 9,
 		},
 	};
-	static const struct option lo_longopts[] = {
-		{ "nfs",	     1,	NULL, 1024 },
-		{ NULL }
-	};
-	int opt;
 	struct nfs_tgt_data *nfs_data = NULL;
-	const char *nfsurl = NULL;
 
 	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
 		return -1;
@@ -330,20 +325,6 @@ static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		return nfs_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "nfs");
-
-	while ((opt = getopt_long(argc, argv, "-:",
-				  lo_longopts, NULL)) != -1) {
-		switch (opt) {
-		case 1024:
-			nfsurl = optarg;
-			break;
-		}
-	}
-
-	if (nfsurl == NULL) {
-		fprintf(stderr, "Must specify --nfs=NFS_URL\n");
-		return -EINVAL;
-	}
 
 	nfs_data = nfs_init(nfsurl);
 	dev->tgt.tgt_data = nfs_data;
@@ -419,6 +400,8 @@ static int nfs_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc,
 		{ "usercopy",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
+
+		{ "nfs",		1,	NULL, 1024 },
 		{ NULL }
 	};
 
@@ -480,7 +463,16 @@ static int nfs_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc,
 			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
 				*efd = strtol(optarg, NULL, 10);
 			break;
+
+		case 1024:
+			nfsurl = optarg;
+			break;
 		}
+	}
+
+	if (nfsurl == NULL) {
+		fprintf(stderr, "Must specify --nfs NFS_URL\n");
+		return -EINVAL;
 	}
 
 	return 0;
