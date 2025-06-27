@@ -6,6 +6,7 @@
 #include <iscsi/iscsi.h>
 #include <iscsi/scsi-lowlevel.h>
 
+static const char *iscsiurl, *initiator;
 
 struct iscsi_tgt_data {
 	char url[4096];
@@ -417,14 +418,7 @@ static int iscsi_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			.io_min_shift		= 9,
 		},
 	};
-	static const struct option lo_longopts[] = {
-		{ "iscsi",                          1, NULL, 1024 },
-		{ "initiator-name", required_argument, NULL, 1025 },
-		{ NULL }
-	};
-	int opt;
 	struct iscsi_tgt_data *iscsi_data = NULL;
-	const char *iscsiurl = NULL, *initiator = NULL;
 
 	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
 		return -1;
@@ -433,27 +427,6 @@ static int iscsi_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		return iscsi_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "iscsi");
-
-	while ((opt = getopt_long(argc, argv, "-:",
-				  lo_longopts, NULL)) != -1) {
-		switch (opt) {
-		case 1024:
-			iscsiurl = optarg;
-			break;
-		case 1025:
-			initiator = optarg;
-			break;
-		}
-	}
-
-	if (iscsiurl == NULL) {
-		fprintf(stderr, "Must specify --iscsi=ISCSI_URL\n");
-		return -EINVAL;
-	}
-	if (initiator == NULL) {
-		fprintf(stderr, "Must specify --initiator-name=STRING\n");
-		return -EINVAL;
-	}
 
 	iscsi_data = iscsi_init(iscsiurl, initiator);
 	switch (iscsi_data->block_size) {
@@ -544,6 +517,9 @@ static int iscsi_parser_for_add(struct ublksrv_dev_data *data, int *efd, int arg
 		{ "usercopy",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
+
+		{ "iscsi",                          1, NULL, 1024 },
+		{ "initiator-name", required_argument, NULL, 1025 },
 		{ NULL }
 	};
 
@@ -605,7 +581,23 @@ static int iscsi_parser_for_add(struct ublksrv_dev_data *data, int *efd, int arg
 			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
 				*efd = strtol(optarg, NULL, 10);
 			break;
+
+		case 1024:
+			iscsiurl = optarg;
+			break;
+		case 1025:
+			initiator = optarg;
+			break;
 		}
+	}
+
+	if (iscsiurl == NULL) {
+		fprintf(stderr, "Must specify --iscsi=ISCSI_URL\n");
+		return -EINVAL;
+	}
+	if (initiator == NULL) {
+		fprintf(stderr, "Must specify --initiator-name=STRING\n");
+		return -EINVAL;
 	}
 
 	return 0;
