@@ -6,6 +6,10 @@
 #include <sys/epoll.h>
 #include "ublksrv_tgt.h"
 
+static char *file;
+static int buffered_io;
+static unsigned long offset;
+
 struct loop_tgt_data {
 	bool user_copy;
 	bool auto_zc;
@@ -127,17 +131,9 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(cdev);
-	int buffered_io = 0;
-	static const struct option lo_longopts[] = {
-		{ "file",		1,	NULL, 'f' },
-		{ "buffered_io",	no_argument, &buffered_io, 1},
-		{ "offset",		required_argument, NULL, 'o'},
-		{ NULL }
-	};
 	unsigned long long bytes;
 	struct stat st;
-	int fd, opt;
-	char *file = NULL;
+	int fd;
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD |
@@ -160,27 +156,11 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		},
 	};
 	bool can_discard = false;
-	unsigned long offset = 0;
 
 	if (ublksrv_is_recovering(cdev))
 		return loop_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "loop");
-
-	while ((opt = getopt_long(argc, argv, "-:f:o:",
-				  lo_longopts, NULL)) != -1) {
-		switch (opt) {
-		case 'f':
-			file = strdup(optarg);
-			break;
-		case 'o':
-			offset = strtoul(optarg, NULL, 10);
-			break;
-		}
-	}
-
-	if (!file)
-		return -1;
 
 	fd = open(file, O_RDWR);
 	if (fd < 0) {
@@ -561,6 +541,10 @@ static int loop_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc
 		{ "usercopy",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
+
+		{ "file",		1,	NULL, 'f' },
+		{ "buffered_io",	no_argument, &buffered_io, 1},
+		{ "offset",		required_argument, NULL, 'o'},
 		{ NULL }
 	};
 
@@ -570,7 +554,7 @@ static int loop_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc
 	data->dev_id = -1;
 	data->run_dir = ublksrv_get_pid_dir();
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:zf:o:",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -622,7 +606,19 @@ static int loop_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc
 			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
 				*efd = strtol(optarg, NULL, 10);
 			break;
+
+		case 'f':
+			file = strdup(optarg);
+			break;
+		case 'o':
+			offset = strtoul(optarg, NULL, 10);
+			break;
 		}
+	}
+
+	if (!file) {
+		fprintf(stderr, "Must specify -f FILE\n");
+		return -EINVAL;
 	}
 
 	return 0;
