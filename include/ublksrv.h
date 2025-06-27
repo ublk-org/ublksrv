@@ -352,7 +352,7 @@ static inline __u64 build_user_data(unsigned tag, unsigned op,
 {
 	assert(!(tag >> 16) && !(op >> 8) && !(tgt_data >> 16));
 
-	return tag | (op << 16) | (tgt_data << 24) | (__u64)is_target_io << 63;
+	return tag | (op << 16) | ((__u64)tgt_data << 24) | (__u64)is_target_io << 63;
 }
 
 static inline unsigned int user_data_to_tag(__u64 user_data)
