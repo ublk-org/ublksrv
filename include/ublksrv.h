@@ -1164,6 +1164,8 @@ extern int ublksrv_queue_reap_events(const struct ublksrv_queue *tq);
 
 /** @} */ // end of ublksrv_queue group
 
+int ublksrv_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
+
 #ifdef __cplusplus
 }
 #endif
