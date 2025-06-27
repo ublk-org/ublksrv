@@ -6,6 +6,10 @@
 #include <sys/epoll.h>
 #include "ublksrv_tgt.h"
 
+static char *file;
+static int buffered_io;
+static unsigned long offset;
+
 struct loop_tgt_data {
 	bool user_copy;
 	bool auto_zc;
@@ -127,17 +131,9 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(cdev);
-	int buffered_io = 0;
-	static const struct option lo_longopts[] = {
-		{ "file",		1,	NULL, 'f' },
-		{ "buffered_io",	no_argument, &buffered_io, 1},
-		{ "offset",		required_argument, NULL, 'o'},
-		{ NULL }
-	};
 	unsigned long long bytes;
 	struct stat st;
-	int fd, opt;
-	char *file = NULL;
+	int fd;
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	struct ublk_params p = {
 		.types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD |
@@ -160,27 +156,11 @@ static int loop_init_tgt(struct ublksrv_dev *dev, int type, int argc, char
 		},
 	};
 	bool can_discard = false;
-	unsigned long offset = 0;
 
 	if (ublksrv_is_recovering(cdev))
 		return loop_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "loop");
-
-	while ((opt = getopt_long(argc, argv, "-:f:o:",
-				  lo_longopts, NULL)) != -1) {
-		switch (opt) {
-		case 'f':
-			file = strdup(optarg);
-			break;
-		case 'o':
-			offset = strtoul(optarg, NULL, 10);
-			break;
-		}
-	}
-
-	if (!file)
-		return -1;
 
 	fd = open(file, O_RDWR);
 	if (fd < 0) {
@@ -542,6 +522,108 @@ static void loop_cmd_usage()
 	printf("\t\toffset skips first NUM sectors on backing file\n");
 }
 
+static int loop_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
+{
+	int opt;
+	int option_index = 0;
+	static const struct option longopts[] = {
+		{ "type",		1,	NULL, 't' },
+		{ "number",		1,	NULL, 'n' },
+		{ "queues",		1,	NULL, 'q' },
+		{ "depth",		1,	NULL, 'd' },
+		{ "uring_comp",		1,	NULL, 'u' },
+		{ "need_get_data",	1,	NULL, 'g' },
+		{ "user_recovery",	1,	NULL, 'r'},
+		{ "user_recovery_fail_io",	1,	NULL, 'e'},
+		{ "user_recovery_reissue",	1,	NULL, 'i'},
+		{ "debug_mask",	1,	NULL, 0},
+		{ "unprivileged",	0,	NULL, 0},
+		{ "usercopy",	0,	NULL, 0},
+		{ "eventfd",	1,	NULL, 0},
+		{ "zerocopy",	0,	NULL, 'z'},
+
+		{ "file",		1,	NULL, 'f' },
+		{ "buffered_io",	no_argument, &buffered_io, 1},
+		{ "offset",		required_argument, NULL, 'o'},
+		{ NULL }
+	};
+
+	data->queue_depth = DEF_QD;
+	data->nr_hw_queues = DEF_NR_HW_QUEUES;
+	data->max_io_buf_bytes = DEF_BUF_SIZE;
+	data->dev_id = -1;
+	data->run_dir = ublksrv_get_pid_dir();
+
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:zf:o:",
+				  longopts, &option_index)) != -1) {
+		switch (opt) {
+		case 'n':
+			data->dev_id = strtol(optarg, NULL, 10);
+			break;
+		case 't':
+			data->tgt_type = optarg;
+			break;
+		case 'z':
+			data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
+			break;
+		case 'q':
+			data->nr_hw_queues = strtol(optarg, NULL, 10);
+			if (data->nr_hw_queues > MAX_NR_HW_QUEUES)
+				data->nr_hw_queues = MAX_NR_HW_QUEUES;
+			break;
+		case 'd':
+			data->queue_depth = strtol(optarg, NULL, 10);
+			if (data->queue_depth > MAX_QD)
+				data->queue_depth = MAX_QD;
+			break;
+		case 'u':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
+			break;
+		case 'g':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_NEED_GET_DATA;
+			break;
+		case 'r':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY;
+			break;
+		case 'e':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_FAIL_IO;
+			break;
+		case 'i':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
+			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "debug_mask"))
+				ublk_set_debug_mask(strtol(optarg, NULL, 16));
+			if (!strcmp(longopts[option_index].name, "unprivileged"))
+				data->flags |= UBLK_F_UNPRIVILEGED_DEV;
+			if (!strcmp(longopts[option_index].name, "usercopy"))
+				data->flags |= UBLK_F_USER_COPY;
+			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
+				*efd = strtol(optarg, NULL, 10);
+			break;
+
+		case 'f':
+			file = strdup(optarg);
+			break;
+		case 'o':
+			offset = strtoul(optarg, NULL, 10);
+			break;
+		}
+	}
+
+	if (!file) {
+		fprintf(stderr, "Must specify -f FILE\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct ublksrv_tgt_type  loop_tgt_type = {
 	.handle_io_async = loop_handle_io_async,
 	.tgt_io_done = loop_tgt_io_done,
@@ -549,6 +631,7 @@ static const struct ublksrv_tgt_type  loop_tgt_type = {
 	.init_tgt = loop_init_tgt,
 	.deinit_tgt	=  loop_deinit_tgt,
 	.name	=  "loop",
+	.parser_for_add = loop_parser_for_add,
 };
 
 int main(int argc, char *argv[])

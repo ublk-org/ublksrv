@@ -5,6 +5,7 @@
 #include "ublksrv_tgt.h"
 #include <nfsc/libnfs.h>
 
+static const char *nfsurl;
 
 struct nfs_tgt_data {
 	char url[4096];
@@ -315,13 +316,7 @@ static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			.io_min_shift		= 9,
 		},
 	};
-	static const struct option lo_longopts[] = {
-		{ "nfs",	     1,	NULL, 1024 },
-		{ NULL }
-	};
-	int opt;
 	struct nfs_tgt_data *nfs_data = NULL;
-	const char *nfsurl = NULL;
 
 	if (info->flags & UBLK_F_UNPRIVILEGED_DEV)
 		return -1;
@@ -330,20 +325,6 @@ static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		return nfs_recover_tgt(dev, 0);
 
 	strcpy(tgt_json.name, "nfs");
-
-	while ((opt = getopt_long(argc, argv, "-:",
-				  lo_longopts, NULL)) != -1) {
-		switch (opt) {
-		case 1024:
-			nfsurl = optarg;
-			break;
-		}
-	}
-
-	if (nfsurl == NULL) {
-		fprintf(stderr, "Must specify --nfs=NFS_URL\n");
-		return -EINVAL;
-	}
 
 	nfs_data = nfs_init(nfsurl);
 	dev->tgt.tgt_data = nfs_data;
@@ -400,6 +381,103 @@ static void nfs_cmd_usage()
 	printf("\t--nfs NFS-URL\n");
 }
 
+static int nfs_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
+{
+	int opt;
+	int option_index = 0;
+	static const struct option longopts[] = {
+		{ "type",		1,	NULL, 't' },
+		{ "number",		1,	NULL, 'n' },
+		{ "queues",		1,	NULL, 'q' },
+		{ "depth",		1,	NULL, 'd' },
+		{ "uring_comp",		1,	NULL, 'u' },
+		{ "need_get_data",	1,	NULL, 'g' },
+		{ "user_recovery",	1,	NULL, 'r'},
+		{ "user_recovery_fail_io",	1,	NULL, 'e'},
+		{ "user_recovery_reissue",	1,	NULL, 'i'},
+		{ "debug_mask",	1,	NULL, 0},
+		{ "unprivileged",	0,	NULL, 0},
+		{ "usercopy",	0,	NULL, 0},
+		{ "eventfd",	1,	NULL, 0},
+		{ "zerocopy",	0,	NULL, 'z'},
+
+		{ "nfs",		1,	NULL, 1024 },
+		{ NULL }
+	};
+
+	data->queue_depth = DEF_QD;
+	data->nr_hw_queues = DEF_NR_HW_QUEUES;
+	data->max_io_buf_bytes = DEF_BUF_SIZE;
+	data->dev_id = -1;
+	data->run_dir = ublksrv_get_pid_dir();
+
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
+				  longopts, &option_index)) != -1) {
+		switch (opt) {
+		case 'n':
+			data->dev_id = strtol(optarg, NULL, 10);
+			break;
+		case 't':
+			data->tgt_type = optarg;
+			break;
+		case 'z':
+			data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
+			break;
+		case 'q':
+			data->nr_hw_queues = strtol(optarg, NULL, 10);
+			if (data->nr_hw_queues > MAX_NR_HW_QUEUES)
+				data->nr_hw_queues = MAX_NR_HW_QUEUES;
+			break;
+		case 'd':
+			data->queue_depth = strtol(optarg, NULL, 10);
+			if (data->queue_depth > MAX_QD)
+				data->queue_depth = MAX_QD;
+			break;
+		case 'u':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
+			break;
+		case 'g':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_NEED_GET_DATA;
+			break;
+		case 'r':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY;
+			break;
+		case 'e':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_FAIL_IO;
+			break;
+		case 'i':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
+			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "debug_mask"))
+				ublk_set_debug_mask(strtol(optarg, NULL, 16));
+			if (!strcmp(longopts[option_index].name, "unprivileged"))
+				data->flags |= UBLK_F_UNPRIVILEGED_DEV;
+			if (!strcmp(longopts[option_index].name, "usercopy"))
+				data->flags |= UBLK_F_USER_COPY;
+			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
+				*efd = strtol(optarg, NULL, 10);
+			break;
+
+		case 1024:
+			nfsurl = optarg;
+			break;
+		}
+	}
+
+	if (nfsurl == NULL) {
+		fprintf(stderr, "Must specify --nfs NFS_URL\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct ublksrv_tgt_type  nfs_tgt_type = {
 	.handle_io_async = nfs_handle_io_async,
 	.handle_event = nfs_handle_event,
@@ -410,6 +488,7 @@ static const struct ublksrv_tgt_type  nfs_tgt_type = {
 	.name	=  "nfs",
 	.init_queue = nfs_init_queue,
 	.deinit_queue = nfs_deinit_queue,
+	.parser_for_add = nfs_parser_for_add,
 };
 
 int main(int argc, char *argv[])

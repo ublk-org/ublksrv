@@ -7,6 +7,12 @@
 #include "cliserv.h"
 #include "nbd.h"
 
+static int send_zc;
+static int read_only;
+static const char *host_name;
+static const char *unix_path;
+static const char *exp_name;
+
 //#define NBD_DEBUG_HANDSHAKE 1
 //#define NBD_DEBUG_IO 1
 //#define NBD_DEBUG_CQE 1
@@ -881,27 +887,12 @@ static int nbd_recover_tgt(struct ublksrv_dev *dev, int type)
 static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
-	int send_zc = 0;
-	int read_only = 0;
-	static const struct option nbd_longopts[] = {
-		{ "host",	required_argument, 0, 0},
-		{ "unix",	required_argument, 0, 0},
-		{ "export_name",	required_argument, 0, 0},
-		{ "send_zc",  0,  &send_zc, 1},
-		{ "read_only",  0,  &read_only, 1},
-		{ NULL }
-	};
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
-	int opt;
-	int option_index = 0;
 	unsigned char bs_shift = 9;
-	const char *host_name = NULL;
-	const char *unix_path = NULL;
-	const char *exp_name = NULL;
 	uint16_t flags = 0;
 	int ret;
 	unsigned int attrs = UBLK_ATTR_VOLATILE_CACHE;
@@ -913,21 +904,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		attrs |= UBLK_ATTR_READ_ONLY;
 
 	strcpy(tgt_json.name, "nbd");
-
-	while ((opt = getopt_long(argc, argv, "-:f:",
-				  nbd_longopts, &option_index)) != -1) {
-		if (opt < 0)
-			break;
-		if (opt > 0)
-			continue;
-
-		if (!strcmp(nbd_longopts[option_index].name, "host"))
-		      host_name = optarg;
-		if (!strcmp(nbd_longopts[option_index].name, "unix"))
-		      unix_path = optarg;
-		if (!strcmp(nbd_longopts[option_index].name, "export_name"))
-			exp_name = optarg;
-	}
 
 #ifndef HAVE_LIBURING_SEND_ZC
 	if (send_zc)
@@ -973,6 +949,105 @@ static void nbd_cmd_usage()
 	printf("\t--host=$HOST [--port=$PORT] | --unix=$UNIX_PATH\n");
 }
 
+static int nbd_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
+{
+	int opt;
+	int option_index = 0;
+	static const struct option longopts[] = {
+		{ "type",		1,	NULL, 't' },
+		{ "number",		1,	NULL, 'n' },
+		{ "queues",		1,	NULL, 'q' },
+		{ "depth",		1,	NULL, 'd' },
+		{ "uring_comp",		1,	NULL, 'u' },
+		{ "need_get_data",	1,	NULL, 'g' },
+		{ "user_recovery",	1,	NULL, 'r'},
+		{ "user_recovery_fail_io",	1,	NULL, 'e'},
+		{ "user_recovery_reissue",	1,	NULL, 'i'},
+		{ "debug_mask",	1,	NULL, 0},
+		{ "unprivileged",	0,	NULL, 0},
+		{ "usercopy",	0,	NULL, 0},
+		{ "eventfd",	1,	NULL, 0},
+		{ "zerocopy",	0,	NULL, 'z'},
+
+		{ "host",	required_argument, 0, 0},
+		{ "unix",	required_argument, 0, 0},
+		{ "export_name",	required_argument, 0, 0},
+		{ "send_zc",  0,  &send_zc, 1},
+		{ "read_only",  0,  &read_only, 1},
+		{ NULL }
+	};
+
+	data->queue_depth = DEF_QD;
+	data->nr_hw_queues = DEF_NR_HW_QUEUES;
+	data->max_io_buf_bytes = DEF_BUF_SIZE;
+	data->dev_id = -1;
+	data->run_dir = ublksrv_get_pid_dir();
+
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:zf:",
+				  longopts, &option_index)) != -1) {
+		switch (opt) {
+		case 'n':
+			data->dev_id = strtol(optarg, NULL, 10);
+			break;
+		case 't':
+			data->tgt_type = optarg;
+			break;
+		case 'z':
+			data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
+			break;
+		case 'q':
+			data->nr_hw_queues = strtol(optarg, NULL, 10);
+			if (data->nr_hw_queues > MAX_NR_HW_QUEUES)
+				data->nr_hw_queues = MAX_NR_HW_QUEUES;
+			break;
+		case 'd':
+			data->queue_depth = strtol(optarg, NULL, 10);
+			if (data->queue_depth > MAX_QD)
+				data->queue_depth = MAX_QD;
+			break;
+		case 'u':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
+			break;
+		case 'g':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_NEED_GET_DATA;
+			break;
+		case 'r':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY;
+			break;
+		case 'e':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_FAIL_IO;
+			break;
+		case 'i':
+			if (strtol(optarg, NULL, 10))
+				data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
+			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "debug_mask"))
+				ublk_set_debug_mask(strtol(optarg, NULL, 16));
+			if (!strcmp(longopts[option_index].name, "unprivileged"))
+				data->flags |= UBLK_F_UNPRIVILEGED_DEV;
+			if (!strcmp(longopts[option_index].name, "usercopy"))
+				data->flags |= UBLK_F_USER_COPY;
+			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
+				*efd = strtol(optarg, NULL, 10);
+
+			if (!strcmp(longopts[option_index].name, "host"))
+				host_name = optarg;
+			if (!strcmp(longopts[option_index].name, "unix"))
+				unix_path = optarg;
+			if (!strcmp(longopts[option_index].name, "export_name"))
+				exp_name = optarg;
+			break;
+		}
+	}
+
+	return 0;
+}
+
 static const struct ublksrv_tgt_type  nbd_tgt_type = {
 	.handle_io_async = nbd_handle_io_async,
 	.tgt_io_done = nbd_tgt_io_done,
@@ -983,6 +1058,7 @@ static const struct ublksrv_tgt_type  nbd_tgt_type = {
 	.name	=  "nbd",
 	.init_queue = nbd_init_queue,
 	.deinit_queue = nbd_deinit_queue,
+	.parser_for_add = nbd_parser_for_add,
 };
 
 int main(int argc, char *argv[])
