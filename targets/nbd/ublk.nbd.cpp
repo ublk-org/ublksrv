@@ -7,6 +7,12 @@
 #include "cliserv.h"
 #include "nbd.h"
 
+static int send_zc;
+static int read_only;
+static const char *host_name;
+static const char *unix_path;
+static const char *exp_name;
+
 //#define NBD_DEBUG_HANDSHAKE 1
 //#define NBD_DEBUG_IO 1
 //#define NBD_DEBUG_CQE 1
@@ -881,27 +887,12 @@ static int nbd_recover_tgt(struct ublksrv_dev *dev, int type)
 static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		char *argv[])
 {
-	int send_zc = 0;
-	int read_only = 0;
-	static const struct option nbd_longopts[] = {
-		{ "host",	required_argument, 0, 0},
-		{ "unix",	required_argument, 0, 0},
-		{ "export_name",	required_argument, 0, 0},
-		{ "send_zc",  0,  &send_zc, 1},
-		{ "read_only",  0,  &read_only, 1},
-		{ NULL }
-	};
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	struct ublksrv_tgt_info *tgt = &dev->tgt;
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
-	int opt;
-	int option_index = 0;
 	unsigned char bs_shift = 9;
-	const char *host_name = NULL;
-	const char *unix_path = NULL;
-	const char *exp_name = NULL;
 	uint16_t flags = 0;
 	int ret;
 	unsigned int attrs = UBLK_ATTR_VOLATILE_CACHE;
@@ -913,21 +904,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		attrs |= UBLK_ATTR_READ_ONLY;
 
 	strcpy(tgt_json.name, "nbd");
-
-	while ((opt = getopt_long(argc, argv, "-:f:",
-				  nbd_longopts, &option_index)) != -1) {
-		if (opt < 0)
-			break;
-		if (opt > 0)
-			continue;
-
-		if (!strcmp(nbd_longopts[option_index].name, "host"))
-		      host_name = optarg;
-		if (!strcmp(nbd_longopts[option_index].name, "unix"))
-		      unix_path = optarg;
-		if (!strcmp(nbd_longopts[option_index].name, "export_name"))
-			exp_name = optarg;
-	}
 
 #ifndef HAVE_LIBURING_SEND_ZC
 	if (send_zc)
@@ -992,6 +968,12 @@ static int nbd_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc,
 		{ "usercopy",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
+
+		{ "host",	required_argument, 0, 0},
+		{ "unix",	required_argument, 0, 0},
+		{ "export_name",	required_argument, 0, 0},
+		{ "send_zc",  0,  &send_zc, 1},
+		{ "read_only",  0,  &read_only, 1},
 		{ NULL }
 	};
 
@@ -1001,7 +983,7 @@ static int nbd_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc,
 	data->dev_id = -1;
 	data->run_dir = ublksrv_get_pid_dir();
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:zf:",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -1052,6 +1034,13 @@ static int nbd_parser_for_add(struct ublksrv_dev_data *data, int *efd, int argc,
 				data->flags |= UBLK_F_USER_COPY;
 			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
 				*efd = strtol(optarg, NULL, 10);
+
+			if (!strcmp(longopts[option_index].name, "host"))
+				host_name = optarg;
+			if (!strcmp(longopts[option_index].name, "unix"))
+				unix_path = optarg;
+			if (!strcmp(longopts[option_index].name, "export_name"))
+				exp_name = optarg;
 			break;
 		}
 	}
