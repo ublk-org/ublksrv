@@ -5,6 +5,7 @@ lib_LTLIBRARIES = libublksrv.la
 libublksrv_la_SOURCES = \
 	ublksrv_cmd.c \
 	ublksrv_json.cpp \
+	ublksrv_main.cpp \
 	ublksrv.c \
 	utils.c \
 	ublksrv_aio.c

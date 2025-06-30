@@ -330,7 +330,13 @@ struct ublksrv_tgt_type {
 	/** deinit queue data, counter pair of ->init_queue */
 	void (*deinit_queue)(const struct ublksrv_queue *);
 
-	unsigned long reserved[5];
+	/**
+	 * command line parser for the add command.
+	 * This method must be provided when using ublksrv_main().
+	 */
+	int (*parser_for_add)(struct ublksrv_dev_data *data, int *evtfd, int argc, char *argv[]);
+  
+	unsigned long reserved[4];
 };
 
 /**
@@ -1157,6 +1163,8 @@ extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int 
 extern int ublksrv_queue_reap_events(const struct ublksrv_queue *tq);
 
 /** @} */ // end of ublksrv_queue group
+
+int ublksrv_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
 #ifdef __cplusplus
 }

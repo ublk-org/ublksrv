@@ -1,8 +1,26 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
 #include "config.h"
+#include <getopt.h>
+#include <limits.h>
+#include <pthread.h>
 #include <semaphore.h>
-#include "ublksrv_tgt.h"
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+
+#include <libgen.h>
+#include <coroutine>
+#include <iostream>
+#include <type_traits>
+#include <sched.h>
+
+#include "ublksrv_utils.h"
+#include "ublksrv.h"
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
 
@@ -332,118 +350,6 @@ static int mkpath(const char *dir)
 }
 #pragma GCC diagnostic pop
 
-/*
- * This function parses all the standard options that all targets support
- * and populates ublksrv_dev_data.
- */
-static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int argc, char *argv[])
-{
-	int opt;
-	int uring_comp = 0;
-	int need_get_data = 0;
-	int user_recovery = 0;
-	int user_recovery_fail_io = 0;
-	int user_recovery_reissue = 0;
-	int unprivileged = 0;
-	int zero_copy = 0;
-	int option_index = 0;
-	unsigned int debug_mask = 0;
-	static const struct option longopts[] = {
-		{ "type",		1,	NULL, 't' },
-		{ "number",		1,	NULL, 'n' },
-		{ "queues",		1,	NULL, 'q' },
-		{ "depth",		1,	NULL, 'd' },
-		{ "uring_comp",		1,	NULL, 'u' },
-		{ "need_get_data",	1,	NULL, 'g' },
-		{ "user_recovery",	1,	NULL, 'r'},
-		{ "user_recovery_fail_io",	1,	NULL, 'e'},
-		{ "user_recovery_reissue",	1,	NULL, 'i'},
-		{ "debug_mask",	1,	NULL, 0},
-		{ "unprivileged",	0,	NULL, 0},
-		{ "usercopy",	0,	NULL, 0},
-		{ "eventfd",	1,	NULL, 0},
-		{ "zerocopy",	0,	NULL, 'z'},
-		{ NULL }
-	};
-
-	data->queue_depth = DEF_QD;
-	data->nr_hw_queues = DEF_NR_HW_QUEUES;
-	data->dev_id = -1;
-	data->run_dir = ublksrv_get_pid_dir();
-
-	mkpath(data->run_dir);
-
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
-				  longopts, &option_index)) != -1) {
-		switch (opt) {
-		case 'n':
-			data->dev_id = strtol(optarg, NULL, 10);
-			break;
-		case 't':
-			data->tgt_type = optarg;
-			break;
-		case 'z':
-			zero_copy = 1;
-			break;
-		case 'q':
-			data->nr_hw_queues = strtol(optarg, NULL, 10);
-			break;
-		case 'd':
-			data->queue_depth = strtol(optarg, NULL, 10);
-			break;
-		case 'u':
-			uring_comp = strtol(optarg, NULL, 10);
-			break;
-		case 'g':
-			need_get_data = strtol(optarg, NULL, 10);
-			break;
-		case 'r':
-			user_recovery = strtol(optarg, NULL, 10);
-			break;
-		case 'e':
-			user_recovery_fail_io = strtol(optarg, NULL, 10);
-			break;
-		case 'i':
-			user_recovery_reissue = strtol(optarg, NULL, 10);
-			break;
-		case 0:
-			if (!strcmp(longopts[option_index].name, "debug_mask"))
-				debug_mask = strtol(optarg, NULL, 16);
-			if (!strcmp(longopts[option_index].name, "unprivileged"))
-				unprivileged = 1;
-			if (!strcmp(longopts[option_index].name, "usercopy"))
-				data->flags |= UBLK_F_USER_COPY;
-			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
-				*efd = strtol(optarg, NULL, 10);
-			break;
-		}
-	}
-
-	data->max_io_buf_bytes = DEF_BUF_SIZE;
-	if (data->nr_hw_queues > MAX_NR_HW_QUEUES)
-		data->nr_hw_queues = MAX_NR_HW_QUEUES;
-	if (data->queue_depth > MAX_QD)
-		data->queue_depth = MAX_QD;
-	if (uring_comp)
-		data->flags |= UBLK_F_URING_CMD_COMP_IN_TASK;
-	if (need_get_data)
-		data->flags |= UBLK_F_NEED_GET_DATA;
-	if (user_recovery)
-		data->flags |= UBLK_F_USER_RECOVERY;
-	if (user_recovery_fail_io)
-		data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_FAIL_IO;
-	if (user_recovery_reissue)
-		data->flags |= UBLK_F_USER_RECOVERY | UBLK_F_USER_RECOVERY_REISSUE;
-	if (unprivileged)
-		data->flags |= UBLK_F_UNPRIVILEGED_DEV;
-	if (zero_copy)
-		data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
-
-	ublk_set_debug_mask(debug_mask);
-
-	return 0;
-}
-
 static void ublksrv_print_std_opts(void)
 {
 	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
@@ -452,13 +358,43 @@ static void ublksrv_print_std_opts(void)
 	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
 }
 
+static void cmd_usage(const struct ublksrv_tgt_type *tgt_type)
+{
+	const char *type = tgt_type ? tgt_type->name : "TYPE";
+
+	printf("ublk[.%s] add -t %s\n", type, type);
+	ublksrv_print_std_opts();
+	if (tgt_type && tgt_type->usage_for_add)
+		tgt_type->usage_for_add();
+	else {
+		printf("\tFor additional arguments specific to %s, run:\n", type);
+		printf("\t\tublk help -t %s\n", type);
+	}
+	printf("ublk[.%s] recover -n DEV_ID\n", type);
+	printf("ublk[.%s] help -t %s\n", type, type);
+	printf("ublk del -n DEV_ID [ -a | --all]\n");
+	printf("ublk list -n DEV_ID -v\n");
+	printf("ublk set_affinity -n DEV_ID -q QID --cpuset SET\n");
+	printf("ublk features\n");
+	printf("ublk -v | --version\n");
+}
+
 static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
 	int ret, evtfd = -1;
 
-	ublksrv_parse_add_opts(&data, &evtfd, argc, argv);
+	if (!tgt_type->parser_for_add) {
+		fprintf(stderr, "No parser available for \"add\" command line\n");
+		return -EINVAL;
+	}
+	if (tgt_type->parser_for_add(&data, &evtfd, argc, argv)) {
+		cmd_usage(tgt_type);
+		return -EINVAL;
+	}
+
+	mkpath(data.run_dir);
 
 	if (data.tgt_type && strcmp(data.tgt_type, tgt_type->name)) {
 		fprintf(stderr, "Wrong tgt_type specified\n");
@@ -657,27 +593,6 @@ static int ublksrv_cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 	}
 
 	return __cmd_dev_user_recover(tgt_type, number, verbose, evtfd);
-}
-
-static void cmd_usage(const struct ublksrv_tgt_type *tgt_type)
-{
-	const char *type = tgt_type ? tgt_type->name : "TYPE";
-
-	printf("ublk[.%s] add -t %s\n", type, type);
-	ublksrv_print_std_opts();
-	if (tgt_type && tgt_type->usage_for_add)
-		tgt_type->usage_for_add();
-	else {
-		printf("\tFor additional arguments specific to %s, run:\n", type);
-		printf("\t\tublk help -t %s\n", type);
-	}
-	printf("ublk[.%s] recover -n DEV_ID\n", type);
-	printf("ublk[.%s] help -t %s\n", type, type);
-	printf("ublk del -n DEV_ID [ -a | --all]\n");
-	printf("ublk list -n DEV_ID -v\n");
-	printf("ublk set_affinity -n DEV_ID -q QID --cpuset SET\n");
-	printf("ublk features\n");
-	printf("ublk -v | --version\n");
 }
 
 int ublksrv_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
