@@ -2,12 +2,12 @@
 .\"     Title: ublk
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 05/15/2025
+.\"      Date: 07/11/2025
 .\"    Manual: ublk: manage ublk devices
 .\"    Source: ublk
 .\"  Language: English
 .\"
-.TH "UBLK" "1" "05/15/2025" "ublk" "ublk: manage ublk devices"
+.TH "UBLK" "1" "07/11/2025" "ublk" "ublk: manage ublk devices"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -43,7 +43,7 @@ The following commands are supported:
 .PP
 Command to add a ublk device\&.
 .PP
-\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} {0|1}] [{\-i, \-\-user_recovery_reissue} {0|1}] [{\-e, \-\-user_recovery_fail_io} {0|1}] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [{\-z, \-\-zerocopy}] [<type specific options>] \fR
+\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} {0|1}] [{\-i, \-\-user_recovery_reissue} {0|1}] [{\-e, \-\-user_recovery_fail_io} {0|1}] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [\-\-max_io_buf_bytes={BYTES}] [{\-z, \-\-zerocopy}] [<type specific options>] \fR
 .PP
 \fB\-t, \-\-type\fR
 .RS 4
@@ -93,6 +93,13 @@ Block devices are recoverable if ublk server exits and restarts Outstanding I/O 
 \fB\-\-debug_mask\fR
 .RS 4
 Bitmask specifying which debug features to enable\&.
+.RE
+.PP
+\fB\-\-max_io_buf_bytes\fR
+.RS 4
+Maximum I/O size\&. Default is 512kb\&.
+.sp
+NOTE: Memory buffers are pre\-allocated with one buffer for each entry in queue_depth\&.
 .RE
 .PP
 \fB\-\-unprivileged\fR
