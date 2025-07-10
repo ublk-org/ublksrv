@@ -45,7 +45,7 @@
     [{-i, --user_recovery_reissue} {0|1}]
     [{-e, --user_recovery_fail_io} {0|1}]
     [--debug_mask=0x{DBG_MASK}] [--unprivileged]
-    [--usercopy]
+    [--usercopy] [--max_io_buf_bytes={BYTES}]
     [{-z, --zerocopy}]
     [&lt;type specific options&gt;]
   </command>
@@ -128,6 +128,16 @@
   <listitem>
     <para>
       Bitmask specifying which debug features to enable.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>--max_io_buf_bytes</option></term>
+  <listitem>
+    <para>
+      Maximum I/O size. Default is 512kb.
+    </para>
+    <para>
+      NOTE: Memory buffers are pre-allocated with one buffer for each entry in queue_depth.
     </para>
   </listitem>
   </varlistentry>

@@ -362,12 +362,14 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "unprivileged",	0,	NULL, 0},
 		{ "usercopy",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
+		{ "max_io_buf_bytes",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
 		{ NULL }
 	};
 
 	data->queue_depth = DEF_QD;
 	data->nr_hw_queues = DEF_NR_HW_QUEUES;
+	data->max_io_buf_bytes = DEF_BUF_SIZE;
 	data->dev_id = -1;
 	data->run_dir = ublksrv_get_pid_dir();
 
@@ -415,11 +417,12 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 				data->flags |= UBLK_F_USER_COPY;
 			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
 				*efd = strtol(optarg, NULL, 10);
+			if (!strcmp(longopts[option_index].name, "max_io_buf_bytes"))
+				data->max_io_buf_bytes = strtol(optarg, NULL, 10);
 			break;
 		}
 	}
 
-	data->max_io_buf_bytes = DEF_BUF_SIZE;
 	if (data->nr_hw_queues > MAX_NR_HW_QUEUES)
 		data->nr_hw_queues = MAX_NR_HW_QUEUES;
 	if (data->queue_depth > MAX_QD)
