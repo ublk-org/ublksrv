@@ -6,6 +6,7 @@
 #include <iscsi/iscsi.h>
 #include <iscsi/scsi-lowlevel.h>
 
+struct iscsi_url *url;
 
 struct iscsi_tgt_data {
 	char url[4096];
@@ -26,8 +27,8 @@ typedef struct iscsi_cb_data {
 } iscsi_cb_data_t;
 
 struct iscsi_queue_data {
-	iscsi_cb_data_t *io_list;
-	pthread_spinlock_t io_list_lock;
+	struct iscsi_tgt_data *iscsi_data;
+	int events;
 	iscsi_cb_data_t ios[];
 };
 
@@ -48,56 +49,47 @@ static inline int cb_data_to_tag(iscsi_cb_data_t *cb)
 	return tag;
 }
 
-static void iscsi_handle_event(const struct ublksrv_queue *q)
-{
-	struct iscsi_queue_data *q_data = iscsi_get_queue_data(q);
-	iscsi_cb_data_t *cb_data, *tmp;
-
-	pthread_spin_lock(&q_data->io_list_lock);
-	cb_data = q_data->io_list;
-	q_data->io_list = NULL;
-	pthread_spin_unlock(&q_data->io_list_lock);
-
-	ublksrv_queue_handled_event(q);
-	
-	while (cb_data) {
-		unsigned int tag;
-
-		tmp = cb_data->next;
-
-		tag = cb_data_to_tag(cb_data);
-		ublksrv_complete_io(cb_data->q, tag, cb_data->count);
-		cb_data = tmp;
-	}
-}
-
 void rw_async_cb(struct iscsi_context *iscsi, int status, void *command_data, void *private_data)
 {
 	iscsi_cb_data_t *cb_data = (iscsi_cb_data_t *)private_data;
-	const struct ublksrv_queue *q = cb_data->q;
-	struct iscsi_queue_data *q_data = iscsi_get_queue_data(q);
 	struct scsi_task *task = (struct scsi_task *)command_data;
+	unsigned int tag;
 
 	if (status != SCSI_STATUS_GOOD) {
 		fprintf(stderr, "iscsi task failed with \"%s\"\n", iscsi_get_error(iscsi));
 		cb_data->count = -EIO;
 	}
-	
-	pthread_spin_lock(&q_data->io_list_lock);
-	cb_data->next = q_data->io_list;
-	q_data->io_list = cb_data;
-	pthread_spin_unlock(&q_data->io_list_lock);
 
-	ublksrv_queue_send_event(q);
+	tag = cb_data_to_tag(cb_data);
+	ublksrv_complete_io(cb_data->q, tag, cb_data->count);
 	scsi_free_scsi_task(task);
+}
+
+void iscsi_socket_cb(struct ublksrv_queue *q, int revents)
+{
+	struct iscsi_queue_data *q_data = iscsi_get_queue_data(q);
+	struct iscsi_context *iscsi = q_data->iscsi_data->iscsi;
+	int events;
+
+	if (iscsi_service(iscsi, revents) < 0) {
+		ublk_err("iscsi_service failed\n");
+	}
+
+	/* This is the fast path so only call ublksrv_epoll_mod_fd() if the set
+	 * of events have changed.
+	 */
+	events = iscsi_which_events(iscsi);
+	if (events != q_data->events) {
+		ublksrv_epoll_mod_fd(q, iscsi_get_fd(iscsi), events);
+		q_data->events = events;
+	}
 }
 
 static int iscsi_tgt_read(const struct ublksrv_queue *q,
 			  const struct ublksrv_io_desc *iod, int tag)
 {
-	const struct ublksrv_dev *dev = q->dev;
-	struct iscsi_tgt_data *iscsi_data = (struct iscsi_tgt_data *)dev->tgt.tgt_data;
 	struct iscsi_queue_data *q_data = iscsi_get_queue_data(q);
+	struct iscsi_tgt_data *iscsi_data = q_data->iscsi_data;
 	iscsi_cb_data_t *cb_data = &q_data->ios[tag];
 	struct scsi_task *task;
 
@@ -106,9 +98,9 @@ static int iscsi_tgt_read(const struct ublksrv_queue *q,
 	}
 
 	cb_data->count = iod->nr_sectors * 512;
-
 	cb_data->iov.iov_base = (void *)iod->addr;
 	cb_data->iov.iov_len = iod->nr_sectors * 512;
+	
 	task = iscsi_read16_iov_task(iscsi_data->iscsi, iscsi_data->lun,
 				     iod->start_sector >> iscsi_data->block_shift,
 				     iod->nr_sectors * 512, iscsi_data->block_size,
@@ -118,16 +110,15 @@ static int iscsi_tgt_read(const struct ublksrv_queue *q,
 		ublk_err("Failed to read from iSCSI LUN. %s\n", iscsi_get_error(iscsi_data->iscsi));
 		return -ENOMEM;
 	}
- 
+
 	return 0;
 }
 
 static int iscsi_tgt_write(const struct ublksrv_queue *q,
 			   const struct ublksrv_io_desc *iod, int tag)
 {
-	const struct ublksrv_dev *dev = q->dev;
-	struct iscsi_tgt_data *iscsi_data = (struct iscsi_tgt_data *)dev->tgt.tgt_data;
 	struct iscsi_queue_data *q_data = iscsi_get_queue_data(q);
+	struct iscsi_tgt_data *iscsi_data = q_data->iscsi_data;
 	iscsi_cb_data_t *cb_data = &q_data->ios[tag];
 	struct scsi_task *task;
 
@@ -155,9 +146,8 @@ static int iscsi_tgt_write(const struct ublksrv_queue *q,
 static int iscsi_tgt_flush(const struct ublksrv_queue *q,
 			   const struct ublksrv_io_desc *iod, int tag)
 {
-	const struct ublksrv_dev *dev = q->dev;
-	struct iscsi_tgt_data *iscsi_data = (struct iscsi_tgt_data *)dev->tgt.tgt_data;
 	struct iscsi_queue_data *q_data = iscsi_get_queue_data(q);
+	struct iscsi_tgt_data *iscsi_data = q_data->iscsi_data;
 	iscsi_cb_data_t *cb_data = &q_data->ios[tag];
 	struct scsi_task *task;
 
@@ -177,9 +167,8 @@ static int iscsi_tgt_flush(const struct ublksrv_queue *q,
 static int iscsi_tgt_unmap(const struct ublksrv_queue *q,
 			   const struct ublksrv_io_desc *iod, int tag)
 {
-	const struct ublksrv_dev *dev = q->dev;
-	struct iscsi_tgt_data *iscsi_data = (struct iscsi_tgt_data *)dev->tgt.tgt_data;
 	struct iscsi_queue_data *q_data = iscsi_get_queue_data(q);
+	struct iscsi_tgt_data *iscsi_data = q_data->iscsi_data;
 	iscsi_cb_data_t *cb_data = &q_data->ios[tag];
 	struct scsi_task *task;
 
@@ -205,9 +194,8 @@ static int iscsi_tgt_unmap(const struct ublksrv_queue *q,
 static int iscsi_tgt_write_zeroes(const struct ublksrv_queue *q,
 				  const struct ublksrv_io_desc *iod, int tag)
 {
-	const struct ublksrv_dev *dev = q->dev;
-	struct iscsi_tgt_data *iscsi_data = (struct iscsi_tgt_data *)dev->tgt.tgt_data;
 	struct iscsi_queue_data *q_data = iscsi_get_queue_data(q);
+	struct iscsi_tgt_data *iscsi_data = q_data->iscsi_data;
 	iscsi_cb_data_t *cb_data = &q_data->ios[tag];
 	struct scsi_task *task;
 
@@ -268,7 +256,6 @@ static struct iscsi_tgt_data *iscsi_init(const char *iscsiurl,
 					 const char *initiator)
 {
 	struct iscsi_tgt_data *iscsi_data;
-	struct iscsi_url *url;
 	struct scsi_task *task = NULL;
 	struct scsi_readcapacity16 *rc16;
 
@@ -315,15 +302,22 @@ static struct iscsi_tgt_data *iscsi_init(const char *iscsiurl,
 	}
 	iscsi_data->capacity = rc16->block_length * (rc16->returned_lba + 1);
 	iscsi_data->block_size = rc16->block_length;
+
+	switch (iscsi_data->block_size) {
+	case 512:
+		iscsi_data->block_shift         = 0;
+		break;
+	case 4096:
+		iscsi_data->block_shift         = 3;
+		break;
+	default:
+		fprintf(stderr, "Unsupported block size %d\n", iscsi_data->block_size);
+		goto fail_disconnect;
+	}
+	
 	scsi_free_scsi_task(task);
 	task = NULL;
 	
-	if (iscsi_mt_service_thread_start(iscsi_data->iscsi)) {
-		fprintf(stderr, "failed to start service thread\n");
-		goto fail_disconnect;
-	}
-
-	iscsi_destroy_url(url);
 	return iscsi_data;
 
  fail_disconnect:
@@ -343,7 +337,6 @@ static struct iscsi_tgt_data *iscsi_init(const char *iscsiurl,
 static void iscsi_exit(struct iscsi_tgt_data *iscsi_data)
 {
 	if (iscsi_data) {
-		iscsi_mt_service_thread_stop(iscsi_data->iscsi);
 		iscsi_logout_sync(iscsi_data->iscsi);
 		iscsi_destroy_context(iscsi_data->iscsi);
 		free(iscsi_data);
@@ -376,7 +369,6 @@ static int iscsi_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	char url[PATH_MAX], initiator[PATH_MAX];
-	struct iscsi_tgt_data *iscsi_data = NULL;
 	int ret;
 
 	ret = ublk_json_read_target_str_info(cdev, "url", url);
@@ -390,13 +382,6 @@ static int iscsi_recover_tgt(struct ublksrv_dev *dev, int type)
 		ublk_err( "%s: backing file can't be retrieved from jbuf %d\n",
 				__func__, ret);
 		return ret;
-	}
-
-	iscsi_data = iscsi_init(url, initiator);
-	dev->tgt.tgt_data = iscsi_data;
-	if (dev->tgt.tgt_data == NULL) {
-		fprintf(stderr, "Failed to initialize iscsi\n");
-		return -ENOMEM;
 	}
 
 	return iscsi_setup_tgt(dev);
@@ -459,21 +444,13 @@ static int iscsi_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	switch (iscsi_data->block_size) {
 	case 512:
 		p.basic.logical_bs_shift	= 9;
-		iscsi_data->block_shift         = 0;
 		break;
 	case 4096:
 		p.basic.logical_bs_shift	= 12;
-		iscsi_data->block_shift         = 3;
 		break;
 	default:
 		fprintf(stderr, "Unsupported block size %d\n", iscsi_data->block_size);
 		return -EINVAL;
-	}
-
-	dev->tgt.tgt_data = iscsi_data;
-	if (dev->tgt.tgt_data == NULL) {
-		fprintf(stderr, "Failed to initialize iscsi\n");
-		return -ENOMEM;
 	}
 
 	tgt_json.dev_size = iscsi_data->capacity;
@@ -485,31 +462,49 @@ static int iscsi_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	ublk_json_write_tgt_str(cdev, "initiator-name", iscsi_data->initiator);
 	ublk_json_write_params(cdev, &p);
 
+	iscsi_exit(iscsi_data);
+	
 	return iscsi_setup_tgt(dev);
 }
 
 static void iscsi_deinit_tgt(const struct ublksrv_dev *dev)
 {
-	struct iscsi_tgt_data *iscsi_data = (struct iscsi_tgt_data *)dev->tgt.tgt_data;
-
-	iscsi_exit(iscsi_data);
+	iscsi_destroy_url(url);
 }
 
 static int iscsi_init_queue(const struct ublksrv_queue *q,
 		void **queue_data_ptr)
 {
+	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(q->dev);
 	struct iscsi_queue_data *data = (struct iscsi_queue_data *)calloc(sizeof(*data) +
 				sizeof(data->ios[0]) * q->q_depth, 1);
-	int i;
+	struct iscsi_context *iscsi;
+	char url[PATH_MAX], initiator[PATH_MAX];
+	int i, ret;
 
 	if (!data)
 		return -ENOMEM;
 
-	pthread_spin_init(&data->io_list_lock, PTHREAD_PROCESS_PRIVATE);
 	for (i = 0; i < q->q_depth; i++) {
 		data->ios[i].q = q;
 	}
 	*queue_data_ptr = (void *)data;
+
+	ret = ublk_json_read_target_str_info(cdev, "url", url);
+	if (ret < 0) {
+		ublk_err( "%s: backing file can't be retrieved from jbuf %d\n",
+				__func__, ret);
+		return ret;
+	}
+	ret = ublk_json_read_target_str_info(cdev, "initiator-name", initiator);
+	if (ret < 0) {
+		ublk_err( "%s: backing file can't be retrieved from jbuf %d\n",
+				__func__, ret);
+		return ret;
+	}
+	data->iscsi_data = iscsi_init(url, initiator);
+	iscsi = data->iscsi_data->iscsi;
+	ublksrv_epoll_add_fd((struct ublksrv_queue *)q, iscsi_get_fd(iscsi), iscsi_which_events(iscsi), iscsi_socket_cb);
 	return 0;
 }
 
@@ -517,6 +512,8 @@ static void iscsi_deinit_queue(const struct ublksrv_queue *q)
 {
 	struct iscsi_queue_data *data = iscsi_get_queue_data(q);
 
+	if (data->iscsi_data)
+		iscsi_exit(data->iscsi_data);
 	free(data);
 }
 
@@ -527,11 +524,9 @@ static void iscsi_cmd_usage()
 
 static const struct ublksrv_tgt_type  iscsi_tgt_type = {
 	.handle_io_async = iscsi_handle_io_async,
-	.handle_event = iscsi_handle_event,
 	.usage_for_add = iscsi_cmd_usage,
 	.init_tgt = iscsi_init_tgt,
 	.deinit_tgt = iscsi_deinit_tgt,
-	.ublksrv_flags = UBLKSRV_F_NEED_EVENTFD,
 	.name	=  "iscsi",
 	.init_queue = iscsi_init_queue,
 	.deinit_queue = iscsi_deinit_queue,

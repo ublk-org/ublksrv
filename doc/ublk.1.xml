@@ -321,7 +321,7 @@
 <refsect2><title>iSCSI</title>
 <para>
   Extra options for the iSCSI device type.
-  iSCSI support requires libiscsi 1.20.1 or later.
+  iSCSI support requires libiscsi 1.20.3 or later.
 </para>
 <para>
   <command>

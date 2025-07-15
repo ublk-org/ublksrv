@@ -136,10 +136,9 @@ AC_ARG_WITH([libiscsi],
 if test "x$with_libiscsi" != "xno"; then
     	AC_MSG_CHECKING([for libiscsi])
 	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-#include <stddef.h>
 #include <iscsi/iscsi.h>
 	]], [[
-		int (*ptr)(struct iscsi_context *) = iscsi_mt_service_thread_start;
+		int i = LIBISCSI_IMMEDIATE_SOCKET_WRITE;
 	]])],
 	[AC_MSG_RESULT([yes])
 	 AM_CONDITIONAL([HAVE_LIBISCSI], true)
