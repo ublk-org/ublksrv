@@ -359,7 +359,6 @@ struct ublksrv_ctrl_dev_info {
  * include/uapi/linux/blkzoned.h are part of ublk UAPI.
  */
 #define		UBLK_IO_OP_REPORT_ZONES		18
-#define		UBLK_IO_OP_EPOLLFD		20
 /*
  * UBLK_IO_OP range 0xe0 - 0xef is reserved for builtin/internal use.
  */
