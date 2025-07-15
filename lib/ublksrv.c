@@ -241,7 +241,7 @@ static inline int __ublksrv_queue_event(struct _ublksrv_queue *q)
 {
 	if (q->efd >= 0) {
 		struct io_uring_sqe *sqe;
-		__u64 user_data = build_eventfd_data(UBLK_IO_OP_EVENTFD);
+		__u64 user_data = build_internal_data(UBLK_IO_OP_EVENTFD);
 
 		if (q->state & UBLKSRV_QUEUE_STOPPING)
 			return -EINVAL;
@@ -464,7 +464,7 @@ static int ublksrv_setup_epollfd(struct _ublksrv_queue *q)
 {
 	const struct ublksrv_ctrl_dev_info *info = &q->dev->ctrl_dev->dev_info;
 	struct io_uring_sqe *sqe;
-	__u64 user_data = build_eventfd_data(UBLK_IO_OP_EPOLLFD);
+	__u64 user_data = build_internal_data(UBLK_IO_OP_EPOLLFD);
 
 	if (q->dev->tgt.tgt_ring_depth == 0) {
 		ublk_err("ublk dev %d queue %d zero tgt queue depth",
@@ -493,7 +493,7 @@ static void ublkdrv_process_epollfd(struct _ublksrv_queue *q, struct io_uring_cq
 {
 	struct epoll_event *e, events[EPOLL_MAX_EVENTS];
 	struct io_uring_sqe *sqe;
-	__u64 user_data = build_eventfd_data(UBLK_IO_OP_EPOLLFD);
+	__u64 user_data = build_internal_data(UBLK_IO_OP_EPOLLFD);
 	int i, num_events;
 
 	num_events = epoll_wait(q->epollfd, events, EPOLL_MAX_EVENTS, 0);
@@ -969,7 +969,7 @@ static inline void ublksrv_handle_tgt_cqe(struct _ublksrv_queue *q,
 			user_data_to_op(cqe->user_data));
 	}
 
-	if (is_eventfd_io(cqe->user_data)) {
+	if (is_internal_io(cqe->user_data)) {
 		switch ((cqe->user_data >> 16) & 0xff) {
 		case UBLK_IO_OP_EVENTFD:
 			if (q->tgt_ops->handle_event)
@@ -1000,7 +1000,7 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 			__func__, cqe->res, q->q_id, tag, cmd_op,
 			is_target_io(cqe->user_data),
 			user_data_to_tgt_data(cqe->user_data),
-			is_eventfd_io(cqe->user_data),
+			is_internal_io(cqe->user_data),
 			(q->state & UBLKSRV_QUEUE_STOPPING));
 
 	/* Don't retrieve io in case of target io */
