@@ -333,6 +333,12 @@ struct ublksrv_tgt_type {
 	unsigned long reserved[5];
 };
 
+/*
+ * UBLK_IO_OP range 0xe0 - 0xef is reserved for builtin/internal use.
+ */
+#define		UBLK_IO_OP_EVENTFD		0xe0
+#define 	UBLK_IO_OP_EPOLLFD              0xe1
+
 /**
  * Build sqe->user_data.
  *
