@@ -99,6 +99,12 @@ struct ublk_io {
 	struct ublk_io_data  data;
 };
 
+struct epoll_cb_data {
+	struct epoll_cb_data *next;
+	int fd;
+	epoll_cb cb;
+};
+
 struct _ublksrv_queue {
 	/********** part of API, can't change ************/
 	int q_id;
@@ -123,6 +129,9 @@ struct _ublksrv_queue {
 
 	unsigned cmd_inflight, tgt_io_inflight;	//obsolete
 	unsigned state;
+
+	int epollfd;
+	struct epoll_cb_data *epoll_callbacks;
 
 	/* eventfd */
 	int efd;
