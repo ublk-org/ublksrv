@@ -6,12 +6,14 @@
 #include <nfsc/libnfs.h>
 
 
-struct nfs_tgt_data {
+struct nfs_url *url;
+
+typedef struct nfs_tgt_data {
 	char url[4096];
 	struct nfs_context *nfs;
 	struct nfsfh *nfsfh;
 	size_t capacity;
-};
+} nfs_tgt_data_t;
 
 typedef struct nfs_cb_data {
 	struct nfs_cb_data *next;
@@ -20,8 +22,8 @@ typedef struct nfs_cb_data {
 } nfs_cb_data_t;
 
 struct nfs_queue_data {
-	nfs_cb_data_t *io_list;
-	pthread_spinlock_t io_list_lock;
+	nfs_tgt_data_t *nfs_data;
+	int events;
 	nfs_cb_data_t ios[];
 };
 
@@ -40,56 +42,47 @@ static inline int cb_data_to_tag(nfs_cb_data_t *cb)
 	return tag;
 }
 
-static void nfs_handle_event(const struct ublksrv_queue *q)
-{
-	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
-	nfs_cb_data_t *cb_data, *tmp;
-
-	pthread_spin_lock(&q_data->io_list_lock);
-	cb_data = q_data->io_list;
-	q_data->io_list = NULL;
-	pthread_spin_unlock(&q_data->io_list_lock);
-
-	while (cb_data) {
-		unsigned int tag;
-
-		tmp = cb_data->next;
-
-		tag = cb_data_to_tag(cb_data);
-		ublksrv_complete_io(cb_data->q, tag, cb_data->count);
-		cb_data = tmp;
-	}
-
-	ublksrv_queue_handled_event(q);
-}
-
 void rw_async_cb(int status, struct nfs_context *nfs,
 		 void *data, void *private_data)
 {
 	nfs_cb_data_t *cb_data = (nfs_cb_data_t *)private_data;
 	const struct ublksrv_queue *q = cb_data->q;
-	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+	unsigned int tag;
+
+	tag = cb_data_to_tag(cb_data);
 
 	if (status < 0) {
-		fprintf(stderr, "pread/pwrite failed with \"%s\"\n", (char *)data);
+		ublk_err("pread/pwrite failed with \"%s\"\n", (char *)data);
 		status = -EIO;
 	}
-	cb_data->count = status;
+	ublksrv_complete_io(q, tag, status);
+}
 
-	pthread_spin_lock(&q_data->io_list_lock);
-	cb_data->next = q_data->io_list;
-	q_data->io_list = cb_data;
-	pthread_spin_unlock(&q_data->io_list_lock);
+void nfs_socket_cb(struct ublksrv_queue *q, int revents)
+{
+	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+	struct nfs_context *nfs = q_data->nfs_data->nfs;
+	int events;
 
-	ublksrv_queue_send_event(q);
+	if (nfs_service(nfs, revents) < 0) {
+		ublk_err("nfs_service failed\n");
+	}
+
+	/* This is the fast path so only call ublksrv_epoll_mod_fd() if the set
+	 * of events have changed.
+	 */
+	events = nfs_which_events(nfs);
+	if (events != q_data->events) {
+		ublksrv_epoll_mod_fd(q, nfs_get_fd(nfs), events);
+		q_data->events = events;
+	}
 }
 
 static int nfs_tgt_read(const struct ublksrv_queue *q,
 			const struct ublksrv_io_desc *iod, int tag)
 {
-	const struct ublksrv_dev *dev = q->dev;
-	struct nfs_tgt_data *nfs_data = (struct nfs_tgt_data *)dev->tgt.tgt_data;
 	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+	struct nfs_tgt_data *nfs_data = q_data->nfs_data;
 	nfs_cb_data_t *cb_data = &q_data->ios[tag];
 
 	if ((iod->nr_sectors + iod->start_sector) * 512 > nfs_data->capacity) {
@@ -110,9 +103,8 @@ static int nfs_tgt_read(const struct ublksrv_queue *q,
 static int nfs_tgt_write(const struct ublksrv_queue *q,
 			 const struct ublksrv_io_desc *iod, int tag)
 {
-	const struct ublksrv_dev *dev = q->dev;
-	struct nfs_tgt_data *nfs_data = (struct nfs_tgt_data *)dev->tgt.tgt_data;
 	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+	struct nfs_tgt_data *nfs_data = q_data->nfs_data;
 	nfs_cb_data_t *cb_data = &q_data->ios[tag];
 
 	if ((iod->nr_sectors + iod->start_sector) * 512 > nfs_data->capacity) {
@@ -133,9 +125,8 @@ static int nfs_tgt_write(const struct ublksrv_queue *q,
 static int nfs_tgt_flush(const struct ublksrv_queue *q,
 			 const struct ublksrv_io_desc *iod, int tag)
 {
-	const struct ublksrv_dev *dev = q->dev;
-	struct nfs_tgt_data *nfs_data = (struct nfs_tgt_data *)dev->tgt.tgt_data;
 	struct nfs_queue_data *q_data = nfs_get_queue_data(q);
+	struct nfs_tgt_data *nfs_data = q_data->nfs_data;
 	nfs_cb_data_t *cb_data = &q_data->ios[tag];
 
 	if (nfs_fsync_async(nfs_data->nfs, nfs_data->nfsfh,
@@ -183,7 +174,6 @@ static int nfs_handle_io_async(const struct ublksrv_queue *q,
 static struct nfs_tgt_data *nfs_init(const char *nfsurl)
 {
 	struct nfs_tgt_data *nfs_data;
-	struct nfs_url *url;
 	struct nfs_stat_64 st;
 
 	nfs_data = (struct nfs_tgt_data *)calloc(sizeof(struct nfs_tgt_data), 1);
@@ -224,16 +214,8 @@ static struct nfs_tgt_data *nfs_init(const char *nfsurl)
 		goto fail_url;
 	}
 
-	if (nfs_mt_service_thread_start(nfs_data->nfs)) {
-		fprintf(stderr, "failed to start service thread\n");
-		goto fail_close;
-	}
-
-	nfs_destroy_url(url);
 	return nfs_data;
 
- fail_close:
-	nfs_close(nfs_data->nfs, nfs_data->nfsfh);
  fail_url:
 	nfs_destroy_url(url);
  fail_context:
@@ -247,7 +229,6 @@ static void nfs_exit(struct nfs_tgt_data *nfs_data)
 {
 	if (nfs_data) {
 		nfs_close(nfs_data->nfs, nfs_data->nfsfh);
-		nfs_mt_service_thread_stop(nfs_data->nfs);
 		nfs_destroy_context(nfs_data->nfs);
 		free(nfs_data);
 	}
@@ -279,7 +260,6 @@ static int nfs_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	char url[PATH_MAX];
-	struct nfs_tgt_data *nfs_data = NULL;
 	int ret;
 
 	ret = ublk_json_read_target_str_info(cdev, "url", url);
@@ -287,13 +267,6 @@ static int nfs_recover_tgt(struct ublksrv_dev *dev, int type)
 		ublk_err( "%s: backing file can't be retrieved from jbuf %d\n",
 				__func__, ret);
 		return ret;
-	}
-
-	nfs_data = nfs_init(url);
-	dev->tgt.tgt_data = nfs_data;
-	if (dev->tgt.tgt_data == NULL) {
-		fprintf(stderr, "Failed to initialize nfs\n");
-		return -ENOMEM;
 	}
 
 	return nfs_setup_tgt(dev);
@@ -346,8 +319,7 @@ static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	}
 
 	nfs_data = nfs_init(nfsurl);
-	dev->tgt.tgt_data = nfs_data;
-	if (dev->tgt.tgt_data == NULL) {
+	if (nfs_data == NULL) {
 		fprintf(stderr, "Failed to initialize nfs\n");
 		return -ENOMEM;
 	}
@@ -360,14 +332,14 @@ static int nfs_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	ublk_json_write_tgt_str(cdev, "url", nfs_data->url);
 	ublk_json_write_params(cdev, &p);
 
+	nfs_exit(nfs_data);
 	return nfs_setup_tgt(dev);
 }
 
 static void nfs_deinit_tgt(const struct ublksrv_dev *dev)
 {
-	struct nfs_tgt_data *nfs_data = (struct nfs_tgt_data *)dev->tgt.tgt_data;
-
-	nfs_exit(nfs_data);
+	if (url)
+		nfs_destroy_url(url);
 }
 
 static int nfs_init_queue(const struct ublksrv_queue *q,
@@ -375,16 +347,30 @@ static int nfs_init_queue(const struct ublksrv_queue *q,
 {
 	struct nfs_queue_data *data = (struct nfs_queue_data *)calloc(sizeof(*data) +
 				sizeof(data->ios[0]) * q->q_depth, 1);
+	struct nfs_context *nfs;
 	int i;
+	char url[PATH_MAX];
+	int ret;
+
+	ret = ublk_json_read_target_str_info(ublksrv_get_ctrl_dev(q->dev), "url", url);
+	if (ret < 0) {
+		ublk_err( "%s: backing file can't be retrieved from jbuf %d\n",
+				__func__, ret);
+		return ret;
+	}
 
 	if (!data)
 		return -ENOMEM;
 
-	pthread_spin_init(&data->io_list_lock, PTHREAD_PROCESS_PRIVATE);
+	data->nfs_data = nfs_init(url);
+	
 	for (i = 0; i < q->q_depth; i++)
 		data->ios[i].q = q;
 
 	*queue_data_ptr = (void *)data;
+	nfs = data->nfs_data->nfs;
+	ublksrv_epoll_add_fd((struct ublksrv_queue *)q, nfs_get_fd(nfs), nfs_which_events(nfs), nfs_socket_cb);
+
 	return 0;
 }
 
@@ -392,6 +378,7 @@ static void nfs_deinit_queue(const struct ublksrv_queue *q)
 {
 	struct nfs_queue_data *data = nfs_get_queue_data(q);
 
+	nfs_exit(data->nfs_data);
 	free(data);
 }
 
@@ -402,11 +389,9 @@ static void nfs_cmd_usage()
 
 static const struct ublksrv_tgt_type  nfs_tgt_type = {
 	.handle_io_async = nfs_handle_io_async,
-	.handle_event = nfs_handle_event,
 	.usage_for_add = nfs_cmd_usage,
 	.init_tgt = nfs_init_tgt,
 	.deinit_tgt = nfs_deinit_tgt,
-	.ublksrv_flags = UBLKSRV_F_NEED_EVENTFD,
 	.name	=  "nfs",
 	.init_queue = nfs_init_queue,
 	.deinit_queue = nfs_deinit_queue,
