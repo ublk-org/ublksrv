@@ -224,9 +224,11 @@ int create_pid_file(const char *pid_file, int *pid_fd);
 extern void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset);
 
 /* bit63: target io, bit62: eventfd data */
-static inline __u64 build_eventfd_data()
+static inline __u64 build_eventfd_data(unsigned op)
 {
-	return 0x3ULL << 62;
+	assert(!(op >> 8));
+
+	return (op << 16) | (0x3ULL << 62);
 }
 
 static inline int is_eventfd_io(__u64 user_data)
