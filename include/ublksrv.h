@@ -1177,7 +1177,6 @@ int ublksrv_epoll_add_fd(struct ublksrv_queue *q, int fd, int events, epoll_cb c
 
 /**
  * Modify a registered file descriptor.
- * This must be called from the context of the queue's eventloop.
  */
 int ublksrv_epoll_mod_fd(struct ublksrv_queue *q, int fd, int events);
 
