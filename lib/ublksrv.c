@@ -494,7 +494,7 @@ static void ublkdrv_process_epollfd(struct _ublksrv_queue *q, struct io_uring_cq
 	struct epoll_event *e, events[EPOLL_MAX_EVENTS];
 	struct io_uring_sqe *sqe;
 	__u64 user_data = build_internal_data(UBLK_IO_OP_EPOLLFD);
-	int i, num_events;
+	int num_events;
 
 	num_events = epoll_wait(q->epollfd, events, EPOLL_MAX_EVENTS, 0);
 	e = events;
