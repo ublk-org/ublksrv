@@ -365,6 +365,8 @@ static int iscsi_setup_tgt(struct ublksrv_dev *dev)
 	return 0;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 static int iscsi_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
@@ -386,6 +388,7 @@ static int iscsi_recover_tgt(struct ublksrv_dev *dev, int type)
 
 	return iscsi_setup_tgt(dev);
 }
+#pragma GCC diagnostic pop
 
 static int iscsi_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 			  char *argv[])
@@ -472,6 +475,8 @@ static void iscsi_deinit_tgt(const struct ublksrv_dev *dev)
 	iscsi_destroy_url(url);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 static int iscsi_init_queue(const struct ublksrv_queue *q,
 		void **queue_data_ptr)
 {
@@ -507,6 +512,7 @@ static int iscsi_init_queue(const struct ublksrv_queue *q,
 	ublksrv_epoll_add_fd((struct ublksrv_queue *)q, iscsi_get_fd(iscsi), iscsi_which_events(iscsi), iscsi_socket_cb);
 	return 0;
 }
+#pragma GCC diagnostic pop
 
 static void iscsi_deinit_queue(const struct ublksrv_queue *q)
 {
