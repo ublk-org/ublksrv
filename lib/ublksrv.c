@@ -525,22 +525,25 @@ int ublksrv_epoll_mod_fd(struct ublksrv_queue *tq, int fd, int events)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
 	struct epoll_cb_data *ecd = q->epoll_callbacks;
+	int ret = -1;
 
+	pthread_spin_lock(&q->epoll_lock);
 	while (ecd) {
 		if (ecd->fd == fd) {
 			struct epoll_event event;
 			event.events = events;
 			event.data.u64 = (uintptr_t)ecd;
 
-			if (epoll_ctl(q->epollfd, EPOLL_CTL_MOD, fd, &event)) {
+			ret = epoll_ctl(q->epollfd, EPOLL_CTL_MOD, fd, &event);
+			if (ret)
 				ublk_err("Failed to add file descriptor to epoll\n");
-				return -1;
-			}
-			return 0;
+			goto out;
 		}
 		ecd = ecd->next;
 	}
-	return -EBADF;
+ out:
+	pthread_spin_unlock(&q->epoll_lock);
+	return ret;
 }
 
 int ublksrv_epoll_add_fd(struct ublksrv_queue *tq, int fd, int events, epoll_cb cb)
@@ -548,23 +551,22 @@ int ublksrv_epoll_add_fd(struct ublksrv_queue *tq, int fd, int events, epoll_cb 
 	struct _ublksrv_queue *q = tq_to_local(tq);
 	struct epoll_event event;
 	struct epoll_cb_data *ecd;
+	int ret = -1;
 
+	pthread_spin_lock(&q->epoll_lock);
 	if (q->epollfd == -1) {
-		int ret;
-
-		ret = ublksrv_setup_epollfd(q);
-		if (ret < 0) {
+		if (ublksrv_setup_epollfd(q) < 0) {
 			ublk_err("ublk dev %d queue %d setup pollfd failed: %s",
 				 q->dev->ctrl_dev->dev_info.dev_id, q->q_id,
 				 strerror(-ret));
-			return -EINVAL;
+			goto out;
 		}
 	}
 
 	ecd = calloc(1, sizeof(struct epoll_cb_data));
 	if (!ecd) {
 		ublk_err("failed to allocate epoll_cb_data\n");
-		return -EINVAL;
+		goto out;
 	}
 	ecd->fd           = fd;
 	ecd->cb           = cb;
@@ -574,12 +576,13 @@ int ublksrv_epoll_add_fd(struct ublksrv_queue *tq, int fd, int events, epoll_cb 
 	event.events = events;
 	event.data.u64 = (uintptr_t)ecd;
 
-	if (epoll_ctl(q->epollfd, EPOLL_CTL_ADD, fd, &event)) {
+	ret = epoll_ctl(q->epollfd, EPOLL_CTL_ADD, fd, &event);
+	if (ret)
 		ublk_err("Failed to add file descriptor to epoll\n");
-		return -1;
-	}
 
-	return 0;
+ out:
+	pthread_spin_unlock(&q->epoll_lock);
+	return ret;
 }
 
 static void ublksrv_kill_eventfd(struct _ublksrv_queue *q)
@@ -708,6 +711,8 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 
 	q->epollfd = -1;
 	q->epoll_callbacks = NULL;
+	pthread_spin_init(&q->epoll_lock, PTHREAD_PROCESS_PRIVATE);
+
 	q->tgt_ops = dev->tgt.ops;	//cache ops for fast path
 	q->dev = dev;
 	if (ctrl_dev->dev_info.flags & UBLK_F_CMD_IOCTL_ENCODE)

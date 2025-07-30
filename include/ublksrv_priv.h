@@ -132,6 +132,7 @@ struct _ublksrv_queue {
 
 	int epollfd;
 	struct epoll_cb_data *epoll_callbacks;
+	pthread_spinlock_t epoll_lock;
 
 	/* eventfd */
 	int efd;
