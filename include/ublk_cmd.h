@@ -539,12 +539,16 @@ struct ublk_param_zoned {
 	__u32	max_open_zones;
 	__u32	max_active_zones;
 	__u32	max_zone_append_sectors;
-	__u8	reserved[20];
+
+	__u32	reserved;
+	__u64	reserved2;
+	__u64	reserved3;
 };
 
 struct ublk_param_dma_align {
 	__u32	alignment;
-	__u8	pad[4];
+
+	__u32	pad;
 };
 
 #define UBLK_MIN_SEGMENT_SIZE   4096
@@ -567,7 +571,8 @@ struct ublk_param_segment {
 	 */
 	__u32 	max_segment_size;
 	__u16 	max_segments;
-	__u8	pad[2];
+
+	__u16	pad;
 };
 
 struct ublk_params {
