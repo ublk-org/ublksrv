@@ -115,17 +115,19 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_zoned,
 	max_open_zones,
 	max_active_zones,
 	max_zone_append_sectors,
-	reserved[20])
+	reserved,
+	reserved2,
+	reserved3)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_dma_align,
 	alignment,
-	pad[4])
+	pad)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_segment,
 	seg_boundary_mask,
 	max_segment_size,
 	max_segments,
-	pad[2])
+	pad)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
 	len, types, basic, discard, devt, zoned, dma, seg)
