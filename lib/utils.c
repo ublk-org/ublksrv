@@ -108,7 +108,7 @@ cpu_set_t *ublk_make_cpuset(int num_sets, const char *cpuset)
 	if (!(str = strdup(cpuset)))
 		return NULL;
 
-	for(i = 0, ptr = str; ptr = strchr(ptr, '['); i++) {
+	for(i = 0, ptr = str; (ptr = strchr(ptr, '[')); i++) {
 		if (!(ptr = strchr(ptr, ']')))
 			break;
 	}
