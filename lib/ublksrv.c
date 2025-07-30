@@ -460,11 +460,25 @@ static void ublksrv_set_sched_affinity(struct _ublksrv_dev *dev,
 				dev_id, q_id);
 }
 
+static int ublksrv_prep_epoll_sqe(struct _ublksrv_queue *q)
+{
+	__u64 user_data = build_internal_data(UBLK_IO_OP_EPOLLFD);
+	struct io_uring_sqe *sqe = ublksrv_alloc_sqe(&q->ring);
+
+	if (!sqe) {
+		ublk_err("%s: queue %d run out of sqe\n",
+			 __func__, q->q_id);
+		return -1;
+	}
+
+	io_uring_prep_poll_multishot(sqe, q->epollfd, POLLIN);
+	io_uring_sqe_set_data64(sqe, user_data);
+	return 0;
+}
+
 static int ublksrv_setup_epollfd(struct _ublksrv_queue *q)
 {
 	const struct ublksrv_ctrl_dev_info *info = &q->dev->ctrl_dev->dev_info;
-	struct io_uring_sqe *sqe;
-	__u64 user_data = build_internal_data(UBLK_IO_OP_EPOLLFD);
 
 	if (q->dev->tgt.tgt_ring_depth == 0) {
 		ublk_err("ublk dev %d queue %d zero tgt queue depth",
@@ -476,24 +490,13 @@ static int ublksrv_setup_epollfd(struct _ublksrv_queue *q)
 	if (q->epollfd < 0)
 		return -errno;
 
-	sqe = ublksrv_alloc_sqe(&q->ring);
-	if (!sqe) {
-		ublk_err("%s: queue %d run out of sqe\n",
-			 __func__, q->q_id);
-			return -1;
-	}
-
-	io_uring_prep_poll_multishot(sqe, q->epollfd, POLLIN);
-	io_uring_sqe_set_data64(sqe, user_data);
-	return 0;
+	return ublksrv_prep_epoll_sqe(q);
 }
 
 #define EPOLL_MAX_EVENTS 8
 static void ublkdrv_process_epollfd(struct _ublksrv_queue *q, struct io_uring_cqe *cqe)
 {
 	struct epoll_event *e, events[EPOLL_MAX_EVENTS];
-	struct io_uring_sqe *sqe;
-	__u64 user_data = build_internal_data(UBLK_IO_OP_EPOLLFD);
 	int num_events;
 
 	num_events = epoll_wait(q->epollfd, events, EPOLL_MAX_EVENTS, 0);
@@ -508,15 +511,7 @@ static void ublkdrv_process_epollfd(struct _ublksrv_queue *q, struct io_uring_cq
 	if (cqe->flags & IORING_CQE_F_MORE)
 		return;
 
-	sqe = ublksrv_alloc_sqe(&q->ring);
-	if (!sqe) {
-		ublk_err("%s: queue %d run out of sqe\n",
-			 __func__, q->q_id);
-		return;
-	}
-
-	io_uring_prep_poll_multishot(sqe, q->epollfd, POLLIN);
-	io_uring_sqe_set_data64(sqe, user_data);
+	ublksrv_prep_epoll_sqe(q);
 	io_uring_submit_and_wait(&q->ring, 0);
 	return;
 }
