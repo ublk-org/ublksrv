@@ -240,3 +240,18 @@ AC_CONFIG_FILES([Makefile
                  ublksrv.pc])
 
 AC_OUTPUT
+
+dnl Summarise version and how it is configured.
+echo
+echo "--------------------------------------------------"
+echo
+echo "               $PACKAGE_NAME   $PACKAGE_VERSION"
+echo
+AS_ECHO_N("    gnutls ................. ")
+if test "x$HAVE_GNUTLS" = "x1"; then echo "yes"; else echo "no"; fi
+AS_ECHO_N("    large file support ..... ")
+if test "$NBD_LFS" -eq "1"; then echo "yes"; else echo "no"; fi
+echo
+echo
+echo "Now use 'make' to build"
+echo
