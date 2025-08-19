@@ -111,7 +111,7 @@ static void ublksrv_drain_fetch_commands(const struct ublksrv_dev *dev,
 	const struct ublksrv_ctrl_dev_info *dinfo =
 		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
 	unsigned nr_queues = dinfo->nr_hw_queues;
-	int i;
+	unsigned i;
 	void *ret;
 
 	for (i = 0; i < nr_queues; i++)
@@ -604,7 +604,7 @@ static int __cmd_dev_user_recover(const struct ublksrv_tgt_type *tgt_type,
 		goto fail;
 	}
 
-	if (dev_info.dev_id != number) {
+	if (dev_info.dev_id != (unsigned)number) {
 		fprintf(stderr, "dev id doesn't match read %d for dev %d\n",
 				dev_info.dev_id, number);
 		goto fail;
