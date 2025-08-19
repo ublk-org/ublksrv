@@ -63,8 +63,13 @@ exec:
 
 	setsid();
 	res = fork();
-	if (res == 0)
+	if (res == 0) {
+		/* prepare for detaching */
+		close(STDIN_FILENO);
+		close(STDOUT_FILENO);
+		close(STDERR_FILENO);
 		goto exec;
+	}
 	if (res > 0) {
 		uint64_t id;
 
