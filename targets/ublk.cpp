@@ -31,7 +31,7 @@ static int ublksrv_execv_helper(const char *type, int argc, char *argv[])
 	 */
 	memset(full_path, 0, sizeof(full_path));
 	fp_len = readlink("/proc/self/exe", full_path, sizeof(full_path));
-	if (fp_len < 0 || fp_len >= sizeof(full_path))
+	if (fp_len < 0 || (size_t)fp_len >= sizeof(full_path))
 		return -EINVAL;
 	asprintf(&fp, "%s.%s", full_path, type);
 
@@ -353,12 +353,12 @@ static int cmd_dev_get_features(int argc, char *argv[])
 
 		printf("ublk_drv features: 0x%llx\n", features);
 
-		for (i = 0; i < sizeof(features) * 8; i++) {
+		for (i = 0; (size_t)i < sizeof(features) * 8; i++) {
 			const char *feat;
 
 			if (!((1ULL << i)  & features))
 				continue;
-			if (i < sizeof(feat_map) / sizeof(feat_map[0]))
+			if ((size_t)i < sizeof(feat_map) / sizeof(feat_map[0]))
 				feat = feat_map[i];
 			else
 				feat = "unknown";
