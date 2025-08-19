@@ -133,7 +133,7 @@ static inline int ublk_queue_alloc_sqes(const struct ublksrv_queue *q,
 	struct io_uring *r = q->ring_ptr;
 	int i;
 
-	if (io_uring_sq_space_left(r) < nr_sqes)
+	if (io_uring_sq_space_left(r) < (unsigned)nr_sqes)
 		io_uring_submit(r);
 
 	for (i = 0; i < nr_sqes; i++) {
