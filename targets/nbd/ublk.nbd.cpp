@@ -406,7 +406,8 @@ static int nbd_do_recv(const struct ublksrv_queue *q,
 		void *buf, unsigned len)
 {
 	unsigned msg_flags = MSG_DONTWAIT | MSG_WAITALL;
-	int i = 0, done = 0;
+	int i = 0;
+	unsigned done = 0;
 	const int loops = len < 512 ? 16 : 32;
 	int ret;
 
@@ -476,7 +477,7 @@ read_io:
 
 		len = io_data->iod->nr_sectors << 9;
 		ret = nbd_do_recv(q, nbd_data, fd, (void *)io_data->iod->addr, len);
-		if (ret == len) {
+		if (ret == (int)len) {
 			nbd_data->done = ret;
 			fake_cqe->res = 0;
 			io->tgt_io_cqe = fake_cqe;
@@ -562,7 +563,7 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 		total = sizeof(nbd_request) + (nr_sects << 9);
 	else
 		total = sizeof(nbd_request);
-	if (cqe->res < total)
+	if (cqe->res < (int)total)
 		nbd_err("%s: short send/receive tag %d op %d %llx, len %u written %u cqe flags %x\n",
 				__func__, tag, ublk_op, cqe->user_data,
 				total, cqe->res, cqe->flags);
