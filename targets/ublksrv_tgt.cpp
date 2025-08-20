@@ -542,8 +542,8 @@ static char *ublksrv_pop_cmd(int *argc, char *argv[])
 		return NULL;
 	}
 
-	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
 	(*argc)--;
+	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
 
 	return cmd;
 }
