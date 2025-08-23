@@ -4,7 +4,12 @@
 GITDESC=$(git describe --dirty|sed -e 's/^v//' 2>/dev/null)
 
 if [ -z "$GITDESC" ]; then
-    GITDESC="0.unknown"
+    # Fallback to VERSION file if available
+    if [ -f "$(dirname "$0")/../VERSION" ]; then
+        GITDESC=$(cat "$(dirname "$0")/../VERSION")
+    else
+        GITDESC="0.unknown"
+    fi
 fi
 
 echo $GITDESC
