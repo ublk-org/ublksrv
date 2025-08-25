@@ -32,6 +32,7 @@ static inline void ublksrv_log(int priority, const char *fmt, ...)
 
     va_start(ap, fmt);
     vsyslog(priority, fmt, ap);
+    va_end(ap);
 }
 
 static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
@@ -40,6 +41,7 @@ static inline void ublksrv_printf(FILE *stream, const char *fmt, ...)
 
     va_start(ap, fmt);
     vfprintf(stream, fmt, ap);
+    va_end(ap);
 }
 #else
 static inline void ublksrv_log(int priority, const char *fmt, ...) { }
