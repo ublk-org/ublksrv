@@ -35,8 +35,6 @@ static inline unsigned ilog2(unsigned x)
     return sizeof(unsigned) * 8 - 1 - __builtin_clz(x);
 }
 
-#define MAX_NR_UBLK_DEVS	128
-
 /*
  * Our convention is to use this macro instead of raw `co_await` to make it
  * easy to log `tag` when debugging coroutine issues.
