@@ -2,9 +2,20 @@
 
 #include "config.h"
 #include "ublksrv_tgt.h"
+#include <filesystem>
 #include <sys/eventfd.h>
 
 static int list_one_dev(int number, bool log, bool verbose);
+
+template<typename cb_t>
+static void for_each_dev(cb_t && cb)
+{
+	for (auto & entry : std::filesystem::directory_iterator("/sys/class/ublk-char")) {
+		unsigned dev_id;
+		if (sscanf(entry.path().filename().c_str(), "ublkc%u", &dev_id) == 1)
+			cb(dev_id);
+	}
+}
 
 /*
  * returns 0 on success and -errno on failure
