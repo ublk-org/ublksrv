@@ -538,12 +538,13 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 static char *ublksrv_pop_cmd(int *argc, char *argv[])
 {
 	char *cmd = argv[1];
-	if (*argc < 2) {
-		return NULL;
-	}
 
+	if (*argc < 2)
+		return NULL;
+
+	if (*argc > 2)
+		memmove(&argv[1], &argv[2], (*argc - 2) * sizeof(argv[0]));
 	(*argc)--;
-	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
 
 	return cmd;
 }
