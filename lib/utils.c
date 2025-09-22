@@ -99,6 +99,15 @@ unsigned ublk_get_debug_mask(unsigned mask)
 {
 	return ublk_debug_mask;
 }
+#else
+void ublk_set_debug_mask(unsigned mask)
+{
+}
+
+unsigned ublk_get_debug_mask(unsigned mask)
+{
+	return 0;
+}
 #endif
 
 cpu_set_t *ublk_make_cpuset(int num_sets, const char *cpuset)
