@@ -279,10 +279,8 @@ static inline void *ublksrv_get_sqe_cmd(struct io_uring_sqe *sqe)
 
 static inline void ublksrv_set_sqe_cmd_op(struct io_uring_sqe *sqe, __u32 cmd_op)
 {
-	__u32 *addr = (__u32 *)&sqe->off;
-
-	addr[0] = cmd_op;
-	addr[1] = 0;
+	sqe->cmd_op = cmd_op;
+	sqe->__pad1 = 0;
 }
 
 /*
