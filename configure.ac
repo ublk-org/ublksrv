@@ -239,4 +239,35 @@ AC_CONFIG_FILES([Makefile
                  tests/Makefile
                  ublksrv.pc])
 
+#
+# Check if g++ supports -fcoroutines -std=c++20
+#
+AC_LANG_PUSH([C++])
+CXXFLAGS_save=$CXXFLAGS
+CXXFLAGS="$CXXFLAGS -fcoroutines -std=c++20"
+T001_PROGRAM="
+#include <coroutine>
+int main(void) {
+	return 0;
+}
+"
+AC_MSG_CHECKING([whether $CXX supports -fcoroutines -std=c++20])
+AC_COMPILE_IFELSE(
+	[AC_LANG_SOURCE([$T001_PROGRAM])],
+	[AC_MSG_RESULT([yes])],
+	[AC_MSG_FAILURE([no])]
+)
+
+CXXFLAGS=$CXXFLAGS_save
+AC_LANG_POP([C++])
+
+#
+# Only support kernel 5.19 and beyond
+#
+linux_kernel_ver=$(uname -r)
+AX_COMPARE_VERSION($linux_kernel_ver, [ge], [5.19],
+    [AC_MSG_NOTICE([checking for kernel version >= 5.19.X. Found... $linux_kernel_ver])],
+    [AC_MSG_ERROR([Expected Kernel Version >= 5.19.X. Found... $linux_kernel_ver]),[1]])
+
+
 AC_OUTPUT
