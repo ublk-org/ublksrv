@@ -472,12 +472,21 @@ static int cmd_dev_recover(int argc, char *argv[])
 	return ublksrv_execv_helper(tgt_type, argc, argv);
 }
 
+static bool ublk_module_loaded() {
+	return access("/sys/module/ublk_drv", F_OK) == 0;
+}
+
 int main(int argc, char *argv[])
 {
 	char *cmd;
 	int ret;
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
+
+	if (!ublk_module_loaded()) {
+		printf("ublk module not loaded. please run \"modprobe ublk_drv\" first\n");
+		return EXIT_FAILURE;
+	}
 
 	if (argc < 2) {
 		printf("%s: missing command\n", argv[0]);
