@@ -16,6 +16,11 @@ if ! command -v "${UBLK}" &> /dev/null; then
 	exit -1
 fi
 
+if ! command -v "fio" &> /dev/null; then
+	echo "error: fio command could not be found"
+	exit -1
+fi
+
 export UBLK
 export TEST_DIR=$DIR
 export UBLK_TMP=`mktemp /tmp/ublk_tmp_XXXXX`
