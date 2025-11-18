@@ -31,10 +31,10 @@ request is done, the same IORING_OP_URING_CMD is issued to ublk driver for
 both committing io request result and getting future notification of new
 io request.
 
-So far, the ublk driver needs to copy io request pages into userspace buffer
-(pages) first for write before notifying the request to ublksrv, and copy
-userspace buffer(pages) to the io request pages after ublksrv handles
-READ. Also looks linux-mm can't support zero copy for this case yet. [#zero_copy]_
+ublk supports io-uring based buffer register zero copy. For using it, pass
+`UBLK_F_SUPPORT_ZERO_COPY` or `UBLK_F_AUTO_BUF_REG` to ublk driver, please
+refer to `Zero copy` and `Auto Buffer Registration` section of ublk kernel
+document. [#zero_copy]_
 
 More ublk targets will be added with this framework in future even though only
 ublk-loop and ublk-null are implemented now.
@@ -295,7 +295,7 @@ References
 ==========
 
 .. [#ublk_driver] https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/block/ublk_drv.c?h=v6.0
-.. [#zero_copy] https://lore.kernel.org/all/20220318095531.15479-1-xiaoguang.wang@linux.alibaba.com/
+.. [#zero_copy] https://www.kernel.org/doc/Documentation/block/ublk.rst
 .. [#nlohmann] https://github.com/nlohmann/json
 .. [#build_with_liburing_src] https://github.com/ming1/ubdsrv/blob/master/build_with_liburing_src
 .. [#stefan_container] https://lore.kernel.org/linux-block/YoOr6jBfgVm8GvWg@stefanha-x1.localdomain/
