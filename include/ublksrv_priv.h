@@ -17,7 +17,7 @@
 #include <sys/types.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
-#include <sys/poll.h>
+#include <poll.h>
 
 #include "ublk_cmd.h"
 #include "ublksrv_utils.h"
