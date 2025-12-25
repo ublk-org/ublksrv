@@ -17,6 +17,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <linux/falloc.h>
+
 #include "ublksrv.h"
 #include "ublksrv_utils.h"
 #include "ublksrv_aio.h"

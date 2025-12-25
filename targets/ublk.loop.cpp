@@ -4,6 +4,8 @@
 
 #include <poll.h>
 #include <sys/epoll.h>
+#include <linux/falloc.h>
+
 #include "ublksrv_tgt.h"
 
 struct loop_tgt_data {
