@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MIT or GPL-2.0-only
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "ublksrv.h"

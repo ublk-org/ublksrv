@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 #include <assert.h>
+#include <sched.h>
 
 #include "liburing.h"
 
