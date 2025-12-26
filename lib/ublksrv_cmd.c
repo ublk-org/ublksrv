@@ -296,18 +296,6 @@ int ublksrv_ctrl_start_dev(struct ublksrv_ctrl_dev *ctrl_dev,
 	return ret;
 }
 
-/*
- * Stop the ublksrv device:
- *
- * 1) send STOP_DEV command to /dev/ublk-control with device id provided
- *
- * 2) ublk driver gets this command, freeze /dev/ublkbN, then complete all
- * pending seq, meantime tell the daemon via cqe->res to not submit sqe
- * any more, since we are being closed. Also delete /dev/ublkbN.
- *
- * 3) the ublk daemon figures out that all sqes are completed, and free,
- * then close /dev/ublkcN and exit itself.
- */
 static int __ublksrv_ctrl_add_dev(struct ublksrv_ctrl_dev *dev, unsigned cmd_op)
 {
 	struct ublksrv_ctrl_cmd_data data = {
@@ -459,6 +447,18 @@ int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev)
 	return ret;
 }
 
+/*
+ * Stop the ublksrv device:
+ *
+ * 1) send STOP_DEV command to /dev/ublk-control with device id provided
+ *
+ * 2) ublk driver gets this command, freeze /dev/ublkbN, then complete all
+ * pending seq, meantime tell the daemon via cqe->res to not submit sqe
+ * any more, since we are being closed. Also delete /dev/ublkbN.
+ *
+ * 3) the ublk daemon figures out that all sqes are completed, and free,
+ * then close /dev/ublkcN and exit itself.
+ */
 int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev)
 {
 	struct ublksrv_ctrl_cmd_data data = {
