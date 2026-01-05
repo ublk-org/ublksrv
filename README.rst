@@ -43,6 +43,21 @@ libublksrv is also generated, and it helps to integrate ublk into existed
 project. One example of demo_null is provided for how to make a ublk
 device over libublksrv.
 
+Build Dependencies
+==================
+
+**Fedora/RHEL/CentOS:**
+
+.. code-block:: console
+
+  dnf install git libtool automake autoconf g++ pkgconf-pkg-config liburing-devel
+
+**Ubuntu/Debian:**
+
+.. code-block:: console
+
+  apt install git libtool automake autoconf g++ pkg-config liburing-dev
+
 Quick start
 ===========
 
@@ -180,7 +195,7 @@ use unprivileged ublk in docker
 .. code-block:: console
 
   #run the following commands inside the above container
-  dnf install -y git libtool automake autoconf g++ liburing-devel
+  dnf install -y git libtool automake autoconf g++ pkgconf-pkg-config liburing-devel
   git clone https://github.com/ming1/ubdsrv.git
   cd ubdsrv
   autoreconf -i&& ./configure&& make -j 4&& make install
