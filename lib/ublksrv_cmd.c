@@ -527,7 +527,7 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
                         info->max_io_buf_bytes,
 			info->ublksrv_pid,
 			ublksrv_dev_state_desc(dev));
-        printf("\tflags 0x%llx [%s%s%s%s%s%s%s%s%s%s%s ]\n",
+        printf("\tflags 0x%llx [%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s ]\n",
                         info->flags,
                         info->flags & UBLK_F_SUPPORT_ZERO_COPY ? " SUPPORT_ZERO_COPY" : "",
                         info->flags & UBLK_F_AUTO_BUF_REG ? " AUTO_ZC" : "",
@@ -539,7 +539,15 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
                         info->flags & UBLK_F_CMD_IOCTL_ENCODE ? " CMD_IOCTL_ENCODE" : "",
                         info->flags & UBLK_F_USER_COPY ? " USER_COPY" : "",
                         info->flags & UBLK_F_ZONED ? " ZONED" : "",
-                        info->flags & UBLK_F_USER_RECOVERY_FAIL_IO ? " RECOVERY_FAIL_IO" : "");
+                        info->flags & UBLK_F_USER_RECOVERY_FAIL_IO ? " RECOVERY_FAIL_IO" : "",
+                        info->flags & UBLK_F_UPDATE_SIZE ? " UPDATE_SIZE" : "",
+                        info->flags & UBLK_F_QUIESCE ? " QUIESCE" : "",
+                        info->flags & UBLK_F_PER_IO_DAEMON ? " PER_IO_DAEMON" : "",
+                        info->flags & UBLK_F_BUF_REG_OFF_DAEMON ? " BUF_REG_OFF_DAEMON" : "",
+                        info->flags & UBLK_F_BATCH_IO ? " BATCH_IO" : "",
+                        info->flags & UBLK_F_INTEGRITY ? " INTEGRITY" : "",
+                        info->flags & UBLK_F_SAFE_STOP_DEV ? " SAFE_STOP_DEV" : "",
+                        info->flags & UBLK_F_NO_AUTO_PART_SCAN ? " NO_AUTO_PART_SCAN" : "");
 	printf("\tublkc: %u:%d ublkb: %u:%u owner: %u:%u\n",
 			p.devt.char_major, p.devt.char_minor,
 			p.devt.disk_major, p.devt.disk_minor,
