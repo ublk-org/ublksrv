@@ -328,7 +328,7 @@ static void ublksrv_submit_fetch_commands(struct _ublksrv_queue *q)
 static inline int __ublksrv_queue_is_done(const struct _ublksrv_queue *q)
 {
 	return (q->state & UBLKSRV_QUEUE_STOPPING) &&
-		!io_uring_sq_ready(&q->ring);
+		!io_uring_sq_ready(&q->ring) && !q->cmd_inflight;
 }
 
 int ublksrv_queue_is_done(const struct ublksrv_queue *tq)
