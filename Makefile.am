@@ -14,7 +14,7 @@ AM_CXXFLAGS = -std=c++20 -Wunused
 TGT_DIR = targets
 TGT_INC = $(top_srcdir)/$(TGT_DIR)/include
 
-sbin_PROGRAMS = ublk ublk.null ublk.loop ublk.nbd ublk_user_id
+sbin_PROGRAMS = ublk ublk.null ublk.loop ublk.nbd ublk.nvme_vfio ublk_user_id
 noinst_PROGRAMS = demo_null demo_event
 dist_sbin_SCRIPTS = utils/ublk_chown.sh utils/ublk_chown_docker.sh
 
@@ -51,6 +51,11 @@ ublk_nbd_SOURCES = $(TGT_DIR)/nbd/ublk.nbd.cpp $(TGT_DIR)/nbd/cliserv.c $(TGT_DI
 ublk_nbd_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_nbd_CPPFLAGS = $(ublk_nbd_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_nbd_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
+
+ublk_nvme_vfio_SOURCES = $(TGT_DIR)/nvme/ublk.nvme_vfio.cpp $(TGT_DIR)/ublksrv_tgt.cpp
+ublk_nvme_vfio_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
+ublk_nvme_vfio_CPPFLAGS = $(ublk_nvme_vfio_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
+ublk_nvme_vfio_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
 ublk_nfs_SOURCES = $(TGT_DIR)/ublk.nfs.cpp $(TGT_DIR)/ublksrv_tgt.cpp
 ublk_nfs_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
