@@ -353,6 +353,13 @@ static int cmd_dev_get_features(int argc, char *argv[])
 		[const_ilog2(UBLK_F_USER_RECOVERY_FAIL_IO)] = "RECOVERY_FAIL_IO",
 		[const_ilog2(UBLK_F_UPDATE_SIZE)] = "UPDATE_SIZE",
 		[const_ilog2(UBLK_F_AUTO_BUF_REG)] = "AUTO_ZC",
+		[const_ilog2(UBLK_F_QUIESCE)] = "QUIESCE",
+		[const_ilog2(UBLK_F_PER_IO_DAEMON)] = "PER_IO_DAEMON",
+		[const_ilog2(UBLK_F_BUF_REG_OFF_DAEMON)] = "BUF_REG_OFF_DAEMON",
+		[const_ilog2(UBLK_F_BATCH_IO)] = "BATCH_IO",
+		[const_ilog2(UBLK_F_INTEGRITY)] = "INTEGRITY",
+		[const_ilog2(UBLK_F_SAFE_STOP_DEV)] = "SAFE_STOP_DEV",
+		[const_ilog2(UBLK_F_NO_AUTO_PART_SCAN)] = "NO_AUTO_PART_SCAN",
 	};
 
 	if (!dev) {
