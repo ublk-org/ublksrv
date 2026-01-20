@@ -38,6 +38,14 @@ extern "C" {
  */
 #define UBLKSRV_F_NEED_EVENTFD		(1UL << 1)
 
+/*
+ * Target needs polling mode for completion (e.g., NVMe VFIO).
+ * When set and there are inflight target IOs, the event loop uses
+ * non-blocking io_uring wait to allow continuous polling via
+ * handle_io_background callback.
+ */
+#define UBLKSRV_F_NEED_POLL		(1UL << 2)
+
 struct io_uring;
 struct io_uring_cqe;
 struct ublksrv_aio_ctx;
@@ -90,6 +98,7 @@ struct ublk_io_data {
 #define UBLKSRV_USER_COPY	(1U << 3)
 #define UBLKSRV_ZERO_COPY       (1U << 4)
 #define UBLKSRV_AUTO_ZC 	(1U << 5)
+#define UBLKSRV_QUEUE_POLL	(1U << 6)
 
 /**
  * ublksrv_queue is 1:1 mapping with ublk driver's blk-mq queue, and
@@ -1155,6 +1164,26 @@ extern int ublksrv_process_io(const struct ublksrv_queue *q);
  * @param res io result
  */
 extern int ublksrv_complete_io(const struct ublksrv_queue *q, unsigned tag, int res);
+
+/**
+ * Increment target IO inflight counter.
+ *
+ * Called by target when submitting IO to external completion source
+ * (e.g., NVMe CQ). Used with UBLKSRV_F_NEED_POLL to enable polling mode
+ * when IOs are inflight.
+ *
+ * @param q the ublksrv queue instance
+ */
+extern void ublksrv_queue_inc_tgt_io_inflight(const struct ublksrv_queue *q);
+
+/**
+ * Decrement target IO inflight counter.
+ *
+ * Called by target when IO completes from external completion source.
+ *
+ * @param q the ublksrv queue instance
+ */
+extern void ublksrv_queue_dec_tgt_io_inflight(const struct ublksrv_queue *q);
 
 /**
  * Reap events received from queue

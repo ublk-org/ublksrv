@@ -233,6 +233,20 @@ int ublksrv_complete_io(const struct ublksrv_queue *tq, unsigned tag, int res)
 	return ublksrv_queue_io_cmd(q, io, tag);
 }
 
+void ublksrv_queue_inc_tgt_io_inflight(const struct ublksrv_queue *tq)
+{
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
+	q->tgt_io_inflight++;
+}
+
+void ublksrv_queue_dec_tgt_io_inflight(const struct ublksrv_queue *tq)
+{
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
+	q->tgt_io_inflight--;
+}
+
 /*
  * eventfd is treated as special target IO which has to be queued
  * when queue is setup
@@ -720,11 +734,15 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 		q->state |= UBLKSRV_ZERO_COPY;
 	if (ctrl_dev->dev_info.flags & UBLK_F_AUTO_BUF_REG)
 		q->state |= UBLKSRV_AUTO_ZC;
+	/* polling logic should be implemented in ->handle_io_background() */
+	if (ctrl_dev->dev_info.ublksrv_flags & UBLKSRV_F_NEED_POLL)
+		q->state |= UBLKSRV_QUEUE_POLL;
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
 	q->io_cmd_buf = NULL;
 	q->cmd_inflight = 0;
+	q->tgt_io_inflight = 0;
 	q->tid = ublksrv_gettid();
 
 	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
@@ -1129,6 +1147,8 @@ int ublksrv_process_io(const struct ublksrv_queue *tq)
 	struct __kernel_timespec *tsp = (q->state & UBLKSRV_QUEUE_IDLE) ?
 		NULL : &ts;
 	struct io_uring_cqe *cqe;
+	unsigned wait_nr = ((q->state & UBLKSRV_QUEUE_POLL) &&
+			    q->tgt_io_inflight) ? 0 : 1;
 
 	ublk_dbg(UBLK_DBG_QUEUE, "dev%d-q%d: to_submit %d inflight %u/%u stopping %d\n",
 				q->dev->ctrl_dev->dev_info.dev_id,
@@ -1139,7 +1159,7 @@ int ublksrv_process_io(const struct ublksrv_queue *tq)
 	if (__ublksrv_queue_is_done(q))
 		return -ENODEV;
 
-	ret = io_uring_submit_and_wait_timeout(&q->ring, &cqe, 1, tsp, NULL);
+	ret = io_uring_submit_and_wait_timeout(&q->ring, &cqe, wait_nr, tsp, NULL);
 
 	ublksrv_reset_aio_batch(q);
 	reapped = ublksrv_reap_events_uring(&q->ring);
