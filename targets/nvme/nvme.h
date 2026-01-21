@@ -50,6 +50,24 @@
 /* Command Flags */
 #define NVME_RW_FUA             (1 << 14)
 
+/* SGL Descriptor Types (upper 4 bits of type field) */
+#define NVME_SGL_FMT_DATA_DESC		0x00
+#define NVME_SGL_FMT_LAST_SEG_DESC	0x03
+
+/* SGL Descriptor Subtypes (lower 4 bits of type field) */
+#define NVME_SGL_FMT_ADDRESS		0x00
+
+/* Command flags for SGL usage */
+#define NVME_CMD_SGL_METABUF		(1 << 6)
+
+/* SGL Descriptor Structure (16 bytes) */
+struct nvme_sgl_desc {
+	__le64	addr;
+	__le32	length;
+	__u8	rsvd[3];
+	__u8	type;		/* [7:4]=type, [3:0]=subtype */
+};
+
 /* Dataset Management Attributes (CDW11) */
 #define NVME_DSMGMT_AD          (1 << 2)  /* Attribute - Deallocate */
 

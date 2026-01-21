@@ -177,6 +177,7 @@ struct nvme_vfio_tgt_data {
 	unsigned int max_transfer_shift;
 	__u8 vwc;  /* Volatile Write Cache present */
 	__u8 mdts;		/* Maximum Data Transfer Size (power of 2) */
+	__le32 sgls;		/* SGL Support capabilities */
 
 	/* DMA IOVA allocation */
 	__u64 next_iova;
@@ -409,6 +410,13 @@ static __u64 nvme_virt_to_phys(struct nvme_vfio_tgt_data *data, __u64 vaddr)
 static inline bool nvme_use_iommu(struct nvme_vfio_tgt_data *data)
 {
 	return !data->use_noiommu && !data->force_noiommu;
+}
+
+/* Check if controller supports SGL for NVM commands */
+static inline bool nvme_sgl_supported(struct nvme_vfio_tgt_data *data)
+{
+	/* Bits 0-1: 0=not supported, 1=byte aligned, 2=dword aligned */
+	return (le32toh(data->sgls) & 0x3) != 0;
 }
 
 /*
@@ -1092,10 +1100,12 @@ static int nvme_identify_controller(struct nvme_vfio_tgt_data *data)
 	/* Store volatile write cache capability */
 	data->vwc = ctrl->vwc;
 	data->mdts = ctrl->mdts;
+	data->sgls = ctrl->sgls;
 
-	nvme_log("Controller: VWC=%s, MDTS=%u (%uKB)\n",
+	nvme_log("Controller: VWC=%s, MDTS=%u (%uKB), SGL=%s\n",
 			(data->vwc & NVME_CTRL_VWC_PRESENT) ? "yes" : "no",
-			data->mdts, data->mdts ? (1U << data->mdts) * 4 : 0);
+			data->mdts, data->mdts ? (1U << data->mdts) * 4 : 0,
+			nvme_sgl_supported(data) ? "yes" : "no");
 
 	nvme_unmap_dma(data, &ctrl_mapping);
 	return 0;
@@ -1149,8 +1159,7 @@ static int nvme_identify_namespace(struct nvme_vfio_tgt_data *data,
 	       (unsigned long long)data->dev_size, 1U << data->lba_shift);
 
 	/* Populate ublk parameters */
-	params->types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_SEGMENT |
-			UBLK_PARAM_TYPE_DISCARD;
+	params->types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD;
 	params->basic.logical_bs_shift = data->lba_shift;
 	params->basic.physical_bs_shift = data->lba_shift;
 	params->basic.io_opt_shift = data->lba_shift;
@@ -1169,15 +1178,21 @@ static int nvme_identify_namespace(struct nvme_vfio_tgt_data *data,
 	}
 	params->basic.max_sectors = max_bytes >> 9;
 
-	params->basic.virt_boundary_mask = 4095;
+	/*
+	 * Segment parameters and virt_boundary_mask are only needed for PRP
+	 * mode. SGL can describe arbitrary addresses without page alignment.
+	 */
+	if (!nvme_sgl_supported(data)) {
+		params->types |= UBLK_PARAM_TYPE_SEGMENT;
+		params->basic.virt_boundary_mask = PAGE_SIZE - 1;
+		params->seg.seg_boundary_mask = PAGE_SIZE - 1;
+		params->seg.max_segment_size = 32 << 20;
+		params->seg.max_segments = 127;
+	}
 
 	/* Set write cache attributes if VWC is present */
 	if (data->vwc & NVME_CTRL_VWC_PRESENT)
 		params->basic.attrs = UBLK_ATTR_VOLATILE_CACHE | UBLK_ATTR_FUA;
-
-	params->seg.seg_boundary_mask = 4095;
-	params->seg.max_segment_size = 32 << 20;
-	params->seg.max_segments = 127;
 
 	/* Discard parameters - single segment only (ublk limitation) */
 	params->discard.discard_alignment = 0;
@@ -1475,6 +1490,31 @@ static inline int nvme_setup_prps(struct nvme_rw_command *cmd,
 	return 0;
 }
 
+/*
+ * Setup SGL descriptor for a command.
+ * Uses single DATA_BLOCK descriptor embedded in command dptr.
+ */
+static inline int nvme_setup_sgl(struct nvme_rw_command *cmd,
+				 __u64 iova, size_t len)
+{
+	struct nvme_sgl_desc *sgl;
+
+	/* Cast prp1/prp2 area as SGL descriptor (same offset, 16 bytes) */
+	sgl = (struct nvme_sgl_desc *)&cmd->prp1;
+
+	sgl->addr = htole64(iova);
+	sgl->length = htole32((__u32)len);
+	sgl->rsvd[0] = 0;
+	sgl->rsvd[1] = 0;
+	sgl->rsvd[2] = 0;
+	sgl->type = (NVME_SGL_FMT_DATA_DESC << 4) | NVME_SGL_FMT_ADDRESS;
+
+	/* Set SGL flag in command */
+	cmd->flags |= NVME_CMD_SGL_METABUF;
+
+	return 0;
+}
+
 /* Queue read/write I/O */
 static int nvme_queue_rw_io(const struct ublksrv_queue *q,
 			    struct nvme_queue *nvmeq,
@@ -1527,9 +1567,14 @@ static int nvme_queue_rw_io(const struct ublksrv_queue *q,
 	cmd->apptag = 0;
 	cmd->appmask = 0;
 
-	/* Setup PRP entries */
-	if (nvme_setup_prps(cmd, data, priv, io_buf, iova, len) < 0)
-		return -EINVAL;
+	/* Setup data pointers - use SGL if supported, otherwise PRP */
+	if (nvme_sgl_supported(data)) {
+		if (nvme_setup_sgl(cmd, iova, len) < 0)
+			return -EINVAL;
+	} else {
+		if (nvme_setup_prps(cmd, data, priv, io_buf, iova, len) < 0)
+			return -EINVAL;
+	}
 
 	nvme_sq_submit_cmd(nvmeq);
 
