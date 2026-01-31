@@ -1395,13 +1395,11 @@ static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
 }
 
 /* Poll completion queue */
-static inline void nvme_poll_cq(const struct ublksrv_queue *q,
+static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
 				struct nvme_queue *nvmeq,
 				struct nvme_vfio_tgt_data *data)
 {
 	bool found = false;
-
-	nvme_sq_flush(nvmeq);
 
 	while (nvme_cqe_pending(nvmeq)) {
 		struct nvme_completion *cqe = &((struct nvme_completion *)nvmeq->cq_buffer)[nvmeq->cq_head];
@@ -1442,6 +1440,8 @@ static inline void nvme_poll_cq(const struct ublksrv_queue *q,
 
 	if (found)
 		nvme_writel_mmio(nvmeq->cq_head, nvmeq->cq_doorbell);
+
+	return found;
 }
 
 /* Setup PRP entries for a command */
@@ -2152,8 +2152,12 @@ static void nvme_vfio_handle_io_background(const struct ublksrv_queue *q,
 	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
 	struct nvme_queue *nvmeq = &data->io_queues[q->q_id];
 
-	/* Poll NVMe CQ for completions */
-	nvme_poll_cq(q, nvmeq, data);
+	/* Flush any pending SQ submissions */
+	nvme_sq_flush(nvmeq);
+
+	/* Poll NVMe CQ for completions until no more are found */
+	while (nvme_poll_cq(q, nvmeq, data))
+		;
 }
 
 static int nvme_vfio_handle_io_async(const struct ublksrv_queue *q,
