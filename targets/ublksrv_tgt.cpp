@@ -346,6 +346,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 	int user_recovery_reissue = 0;
 	int unprivileged = 0;
 	int zero_copy = 0;
+	int batch_io = 0;
 	int option_index = 0;
 	unsigned int debug_mask = 0;
 	static const struct option longopts[] = {
@@ -364,6 +365,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "eventfd",	1,	NULL, 0},
 		{ "max_io_buf_bytes",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
+		{ "batch-io",	0,	NULL, 'b'},
 		{ NULL }
 	};
 
@@ -375,7 +377,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 
 	mkpath(data->run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:z",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:zb",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -386,6 +388,9 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 			break;
 		case 'z':
 			zero_copy = 1;
+			break;
+		case 'b':
+			batch_io = 1;
 			break;
 		case 'q':
 			data->nr_hw_queues = strtol(optarg, NULL, 10);
@@ -441,6 +446,8 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		data->flags |= UBLK_F_UNPRIVILEGED_DEV;
 	if (zero_copy)
 		data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
+	if (batch_io)
+		data->flags |= UBLK_F_BATCH_IO;
 
 	ublk_set_debug_mask(debug_mask);
 
@@ -452,6 +459,7 @@ static void ublksrv_print_std_opts(void)
 	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
 	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
 	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
+	printf("\t-b | --batch-io (enable batch IO mode)\n");
 	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
 }
 
@@ -488,16 +496,26 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 		goto fail_send_event;
 	}
 
-	if (data.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+	if (data.flags & (UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_BATCH_IO)) {
 		__u64 features = 0;
 
 		ret = ublksrv_ctrl_get_features(dev, &features);
 		if (ret)
 			return ret;
-		if (!(features & UBLK_F_SUPPORT_ZERO_COPY))
+
+		if ((data.flags & UBLK_F_SUPPORT_ZERO_COPY) &&
+		    !(features & UBLK_F_SUPPORT_ZERO_COPY))
 			return -ENOTSUP;
+
+		if ((data.flags & UBLK_F_BATCH_IO) &&
+		    !(features & UBLK_F_BATCH_IO)) {
+			fprintf(stderr, "UBLK_F_BATCH_IO not supported by kernel\n");
+			return -ENOTSUP;
+		}
+
 		/* disable UBLK_F_AUTO_BUF_REG if it isn't supported yet */
-		if (!(features & UBLK_F_AUTO_BUF_REG)) {
+		if ((data.flags & UBLK_F_SUPPORT_ZERO_COPY) &&
+		    !(features & UBLK_F_AUTO_BUF_REG)) {
 			data.flags &= ~UBLK_F_AUTO_BUF_REG;
 			ublksrv_ctrl_deinit(dev);
 			dev = ublksrv_ctrl_init(&data);

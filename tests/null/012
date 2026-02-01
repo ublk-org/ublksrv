@@ -1,0 +1,8 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+export T_TYPE_PARAMS="-t null -q 2 -b"
+
+__run_dev_perf 2
