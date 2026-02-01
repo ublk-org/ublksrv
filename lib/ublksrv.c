@@ -935,6 +935,7 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 	int ret = -1;
 	struct _ublksrv_dev *dev = (struct _ublksrv_dev *)calloc(1, sizeof(*dev));
 	struct ublksrv_tgt_info *tgt;
+	unsigned tried = 0;
 
 	if (!dev)
 		return local_to_tdev(dev);
@@ -944,12 +945,22 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 	dev->cdev_fd = -1;
 
 	snprintf(buf, 64, "%s%d", UBLKC_DEV, dev_id);
-	dev->cdev_fd = open(buf, O_RDWR | O_NONBLOCK);
-	if (dev->cdev_fd < 0) {
-		ublk_err("can't open %s, ret %d\n", buf, dev->cdev_fd);
-		goto fail;
+
+	/* retry if udev opens our char device at the same time */
+	while (true) {
+		ret = open(buf, O_RDWR | O_NONBLOCK);
+		if (ret >= 0)
+			break;
+		if (errno != EBUSY || tried >= 10) {
+			ublk_err("can't open %s, ret %d errno (%s)\n", buf,
+					ret, strerror(errno));
+			goto fail;
+		}
+		tried++;
+		usleep(50000);
 	}
 
+	dev->cdev_fd = ret;
 	tgt->fds[0] = dev->cdev_fd;
 
 	ret = ublksrv_tgt_init(dev, ctrl_dev->tgt_type, ctrl_dev->tgt_ops,
