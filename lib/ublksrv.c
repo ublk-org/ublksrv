@@ -131,11 +131,6 @@ static void ublksrv_tgt_deinit(struct _ublksrv_dev *dev)
 		tgt->ops->deinit_tgt(local_to_tdev(dev));
 }
 
-static inline bool ublksrv_queue_use_buf(const struct _ublksrv_queue *q)
-{
-	return !(q->state & (UBLKSRV_USER_COPY | UBLKSRV_ZERO_COPY));
-}
-
 static inline bool ublksrv_queue_alloc_buf(const struct _ublksrv_queue *q)
 {
 	return !(q->state & UBLKSRV_ZERO_COPY);
@@ -225,8 +220,14 @@ static inline int ublksrv_queue_io_cmd(struct _ublksrv_queue *q,
 int ublksrv_complete_io(const struct ublksrv_queue *tq, unsigned tag, int res)
 {
 	struct _ublksrv_queue *q = tq_to_local(tq);
-
 	struct ublk_io *io = &q->ios[tag];
+
+	/* In batch mode, add to commit buffer instead of issuing individual cmd */
+	if (ublksrv_queue_batch_io(q)) {
+		ublksrv_batch_add_complete(q, tag, res);
+		io->flags = UBLKSRV_IO_FREE;
+		return 1;
+	}
 
 	ublksrv_mark_io_done(io, res);
 
@@ -327,11 +328,17 @@ int ublksrv_queue_send_event(const struct ublksrv_queue *tq)
  * Issue all available commands to /dev/ublkcN  and the exact cmd is figured
  * out in queue_io_cmd with help of each io->status.
  *
- * todo: queue io commands with batching
+ * For batch mode, issue PREP_IO_CMDS once, then two multishot FETCH_IO_CMDS.
  */
 static void ublksrv_submit_fetch_commands(struct _ublksrv_queue *q)
 {
 	int i = 0;
+
+	if (ublksrv_queue_batch_io(q)) {
+		ublksrv_batch_start_fetch(q);
+		__ublksrv_queue_event(q);
+		return;
+	}
 
 	for (i = 0; i < q->q_depth; i++)
 		ublksrv_queue_io_cmd(q, &q->ios[i], i);
@@ -416,6 +423,10 @@ void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 
 	if (q->efd >= 0)
 		close(q->efd);
+
+	/* Free batch buffers before unregistering ring */
+	if (ublksrv_queue_batch_io(q))
+		ublksrv_batch_free_bufs(q);
 
 	io_uring_unregister_buffers(&q->ring);
 	io_uring_unregister_ring_fd(&q->ring);
@@ -737,6 +748,8 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 	/* polling logic should be implemented in ->handle_io_background() */
 	if (ctrl_dev->dev_info.ublksrv_flags & UBLKSRV_F_NEED_POLL)
 		q->state |= UBLKSRV_QUEUE_POLL;
+	if (ctrl_dev->dev_info.flags & UBLK_F_BATCH_IO)
+		q->state |= UBLKSRV_QUEUE_BATCH_IO;
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
@@ -824,6 +837,18 @@ skip_alloc_buf:
 	}
 
 	io_uring_register_ring_fd(&q->ring);
+
+	/* Allocate batch IO buffers if batch mode is enabled */
+	if (ublksrv_queue_batch_io(q)) {
+		ublk_dbg(UBLK_DBG_QUEUE, "ublk dev %d queue %d allocating batch bufs\n",
+			ctrl_dev->dev_info.dev_id, q->q_id);
+		ret = ublksrv_batch_alloc_bufs(q);
+		if (ret) {
+			ublk_err("ublk dev %d queue %d alloc batch bufs failed %d\n",
+				ctrl_dev->dev_info.dev_id, q->q_id, ret);
+			goto fail;
+		}
+	}
 
 	/*
 	* N.B. PR_SET_IO_FLUSHER was added with Linux 5.6+.
@@ -1038,6 +1063,10 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 		return;
 	}
 
+	/* Handle batch IO commands */
+	if (ublksrv_queue_batch_io(q) && ublksrv_batch_handle_cqe(q, cqe, cmd_op))
+		return;
+
 	io = &q->ios[tag];
 	q->cmd_inflight--;
 
@@ -1169,6 +1198,10 @@ int ublksrv_process_io(const struct ublksrv_queue *tq)
 
 	if (__ublksrv_queue_is_done(q))
 		return -ENODEV;
+
+	/* Submit any pending batch commits before io_uring submit */
+	if (ublksrv_queue_batch_io(q))
+		ublksrv_batch_submit_commit(q);
 
 	ret = io_uring_submit_and_wait_timeout(&q->ring, &cqe, wait_nr, tsp, NULL);
 

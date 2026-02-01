@@ -99,6 +99,7 @@ struct ublk_io_data {
 #define UBLKSRV_ZERO_COPY       (1U << 4)
 #define UBLKSRV_AUTO_ZC 	(1U << 5)
 #define UBLKSRV_QUEUE_POLL	(1U << 6)
+#define UBLKSRV_QUEUE_BATCH_IO	(1U << 7)
 
 /**
  * ublksrv_queue is 1:1 mapping with ublk driver's blk-mq queue, and

@@ -24,6 +24,54 @@
 #include "ublksrv.h"
 #include "ublksrv_aio.h"
 
+/*
+ * Batch IO support structures
+ *
+ * When UBLK_F_BATCH_IO is set, the queue uses batch-based operations instead
+ * of per-tag FETCH/COMMIT_AND_FETCH:
+ * - UBLK_U_IO_PREP_IO_CMDS: One-time prep with buffer info
+ * - UBLK_U_IO_FETCH_IO_CMDS: Multishot fetch returning 2-byte tags
+ * - UBLK_U_IO_COMMIT_IO_CMDS: Batch commit of completed IOs
+ */
+
+/* Batch element - aligned with kernel's ublk_elem_header (8 or 16 bytes) */
+struct ublk_batch_elem {
+	__u16 tag;
+	__u16 buf_index;
+	__s32 result;
+	__u64 buf_addr;		/* Only used if !UBLK_F_USER_COPY && !UBLK_F_SUPPORT_ZERO_COPY */
+};
+
+/* Per-queue commit buffer state (2 per queue for double-buffering) */
+struct batch_commit_buf {
+	void *buf;		/* Points to commit buffer memory */
+	unsigned short done;	/* Number of IOs added to this batch */
+	unsigned short count;	/* Max capacity of this buffer */
+};
+
+/* Per-queue fetch buffer with io_uring buffer ring (2 per queue) */
+struct batch_fetch_buf {
+	struct io_uring_buf_ring *br;
+	void *fetch_buf;
+	unsigned int fetch_buf_size;
+	unsigned int fetch_buf_off;
+};
+
+/* Number of fetch/commit buffers for double-buffering */
+#define UBLK_BATCH_NR_FETCH_BUFS	1
+#define UBLK_BATCH_NR_COMMIT_BUFS	2
+
+/* Per-queue batch IO state - allocated only when UBLK_F_BATCH_IO is set */
+struct ublksrv_queue_batch {
+	struct batch_fetch_buf fetch_bufs[UBLK_BATCH_NR_FETCH_BUFS];
+	struct batch_commit_buf commit_bufs[UBLK_BATCH_NR_COMMIT_BUFS];
+	void *commit_buf_mem;			/* Allocated commit buffer memory */
+	unsigned int commit_buf_size;		/* Size of each commit buffer */
+	unsigned char commit_buf_elem_size;	/* Size of each element (8 or 16) */
+	unsigned char cur_commit_buf;		/* Index of current active commit buffer (0 or 1) */
+	unsigned char prep_done;		/* PREP_IO_CMDS has been issued */
+	__u16 cmd_flags;			/* Flags for batch commands */
+};
 
 /* todo: relace the hardcode name with /dev/char/maj:min */
 #ifdef UBLKC_PREFIX
@@ -154,7 +202,10 @@ struct _ublksrv_queue {
 	int nr_ctxs;
 	struct ublksrv_aio_ctx *ctxs[UBLKSRV_NR_CTX_BATCH];
 
-	unsigned long reserved[8];
+	/* Batch IO support - only used when UBLK_F_BATCH_IO is set */
+	struct ublksrv_queue_batch batch;
+
+	unsigned long reserved[4];
 
 	struct ublk_io ios[0];
 };
@@ -232,6 +283,48 @@ static inline struct io_uring_sqe *ublksrv_alloc_sqe(struct io_uring *r)
 int create_pid_file(const char *pid_file, int *pid_fd);
 
 extern void ublksrv_build_cpu_str(char *buf, int len, const cpu_set_t *cpuset);
+
+/* Check if queue needs to pass buffer addresses (not zero-copy or user-copy) */
+static inline bool ublksrv_queue_use_buf(const struct _ublksrv_queue *q)
+{
+	return !(q->state & (UBLKSRV_USER_COPY | UBLKSRV_ZERO_COPY));
+}
+
+/* Batch IO support - check if queue uses batch mode */
+static inline bool ublksrv_queue_batch_io(const struct _ublksrv_queue *q)
+{
+	return !!(q->state & UBLKSRV_QUEUE_BATCH_IO);
+}
+
+/* Batch IO functions (implemented in ublksrv_batch.c) */
+int ublksrv_batch_alloc_bufs(struct _ublksrv_queue *q);
+void ublksrv_batch_free_bufs(struct _ublksrv_queue *q);
+void ublksrv_batch_start_fetch(struct _ublksrv_queue *q);
+void ublksrv_batch_submit_commit(struct _ublksrv_queue *q);
+bool ublksrv_batch_handle_cqe(struct _ublksrv_queue *q,
+			      struct io_uring_cqe *cqe, unsigned cmd_op);
+
+/* Add completed IO to current commit buffer (inline for fast path) */
+static inline void ublksrv_batch_add_complete(struct _ublksrv_queue *q,
+					      unsigned tag, int result)
+{
+	struct ublksrv_queue_batch *b = &q->batch;
+	struct batch_commit_buf *cb = &b->commit_bufs[b->cur_commit_buf];
+	struct ublk_batch_elem *elem;
+
+	elem = (struct ublk_batch_elem *)
+		((char *)cb->buf + cb->done * b->commit_buf_elem_size);
+
+	elem->tag = tag;
+	elem->result = result;
+
+	if (q->state & UBLKSRV_AUTO_ZC)
+		elem->buf_index = tag;
+	else if (ublksrv_queue_use_buf(q))
+		elem->buf_addr = (__u64)q->ios[tag].buf_addr;
+
+	cb->done++;
+}
 
 /*
  * bit63: target io, bit62: internal data.
