@@ -129,8 +129,19 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_segment,
 	max_segments,
 	pad)
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_integrity,
+	flags, /* LBMD_PI_CAP_* from linux/fs.h */
+	max_integrity_segments, /* 0 means no limit */
+	interval_exp,
+	metadata_size, /* UBLK_PARAM_TYPE_INTEGRITY requires nonzero */
+	pi_offset,
+	csum_type, /* LBMD_PI_CSUM_* from linux/fs.h */
+	tag_size,
+	pad,
+	pad2)
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
-	len, types, basic, discard, devt, zoned, dma, seg)
+	len, types, basic, discard, devt, zoned, dma, seg, integrity)
 
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
 {
