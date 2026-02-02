@@ -161,6 +161,8 @@ struct nvme_vfio_tgt_data {
 	__u32 lba_shift;
 	__u64 dev_size;
 
+	bool user_copy;  /* UBLK_F_USER_COPY mode flag */
+
 	/* VFIO handles */
 	int container_fd;
 	int group_fd;
@@ -1499,6 +1501,37 @@ static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
 		nvmeq->cq_phase = !nvmeq->cq_phase;
 }
 
+/* Perform synchronous user copy between ublk device and NVMe IO buffer.
+ * fds[0] always contains the ublk char device fd (set by library). */
+static int nvme_user_copy_sync(const struct ublksrv_queue *q, int tag,
+			       void *io_buf, size_t len, bool to_ublk)
+{
+	int cdev_fd = q->dev->tgt.fds[0];
+	__u64 pos = ublk_pos(q->q_id, tag, 0);
+	ssize_t ret;
+
+	if (to_ublk) {
+		/* READ completion: copy from NVMe buffer to ublk device */
+		ret = pwrite(cdev_fd, io_buf, len, pos);
+	} else {
+		/* WRITE request: copy from ublk device to NVMe buffer */
+		ret = pread(cdev_fd, io_buf, len, pos);
+	}
+
+	if (ret < 0) {
+		ublk_err("user copy %s failed: %s\n",
+			 to_ublk ? "pwrite" : "pread", strerror(errno));
+		return -errno;
+	}
+	if ((size_t)ret != len) {
+		ublk_err("user copy short %s: %zd/%zu\n",
+			 to_ublk ? "pwrite" : "pread", ret, len);
+		return -EIO;
+	}
+
+	return 0;
+}
+
 /* Poll completion queue */
 static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
 				struct nvme_queue *nvmeq,
@@ -1527,10 +1560,18 @@ static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
 
 		if (status == 0) {
 			/* Discard returns 0 on success, read/write returns bytes */
-			if (ublksrv_get_op(iod) == UBLK_IO_OP_DISCARD)
+			if (ublksrv_get_op(iod) == UBLK_IO_OP_DISCARD) {
 				result = 0;
-			else
+			} else {
 				result = iod->nr_sectors << 9;
+				/* For READ with user_copy, copy data from NVMe buffer to ublk device */
+				if (data->user_copy && ublksrv_get_op(iod) == UBLK_IO_OP_READ) {
+					void *io_buf = nvme_pool_get_io_buf(data, q->q_id, tag);
+					int ret = nvme_user_copy_sync(q, tag, io_buf, result, true);
+					if (ret < 0)
+						result = ret;
+				}
+			}
 		} else {
 			fprintf(stderr, "NVMe error: op=%d tag=%d status=0x%x\n",
 				 ublksrv_get_op(iod), tag, status);
@@ -1654,6 +1695,13 @@ static int nvme_queue_rw_io(const struct ublksrv_queue *q,
 	}
 
 	op = ublksrv_get_op(iod);
+
+	/* For WRITE with user_copy, copy data from ublk device to NVMe buffer first */
+	if (data->user_copy && op == UBLK_IO_OP_WRITE) {
+		int ret = nvme_user_copy_sync(q, tag, io_buf, len, false);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* Get SQ entry */
 	cmd = (struct nvme_rw_command *)nvmeq->sq_buffer + nvmeq->sq_tail;
@@ -2069,6 +2117,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 
 	dev->tgt.tgt_data = data;
 	data->force_noiommu = force_noiommu;
+	data->user_copy = info->flags & UBLK_F_USER_COPY;
 
 	/* Enable noiommu mode if requested */
 	if (force_noiommu) {
