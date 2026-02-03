@@ -48,6 +48,7 @@
 #include <fcntl.h>
 
 #include "ublksrv_tgt.h"
+#include "dma_buf.h"
 #include "nvme.h"
 
 #define PAGE_SIZE 4096
@@ -116,6 +117,17 @@ struct nvme_io_priv {
 	__le64 *prp_list;                       /* PRP list buffer (virtual addr) */
 };
 
+/*
+ * NVMe DMA buffer pool - wraps generic dma_buf_pool with NVMe-specific
+ * layout information. Each queue has its own pool with pre-computed offsets.
+ */
+struct nvme_dma_buf_pool {
+	struct dma_buf_pool pool;	/* Generic hugepage-backed pool */
+	size_t queue_off;		/* Offset to I/O queue SQ/CQ region */
+	size_t prp_off;			/* Offset to PRP list region */
+	size_t io_buf_off;		/* Offset to I/O buffer region */
+};
+
 /* Queue Structure */
 struct nvme_queue {
 	__u16 qid;
@@ -165,6 +177,7 @@ struct nvme_vfio_tgt_data {
 
 	/* Queues */
 	struct nvme_queue admin_queue;
+	pthread_mutex_t admin_lock;	/* Protects admin queue submission */
 	struct nvme_queue *io_queues;
 	int nr_io_queues;
 
@@ -179,27 +192,27 @@ struct nvme_vfio_tgt_data {
 	__u8 mdts;		/* Maximum Data Transfer Size (power of 2) */
 	__le32 sgls;		/* SGL Support capabilities */
 
-	/* DMA IOVA allocation */
+	/* DMA IOVA allocation and mapping */
 	__u64 next_iova;
 	pthread_spinlock_t iova_lock;	/* Protects next_iova allocation */
 
-	/* dma_buf pool for pinned DMA memory */
-	void *dmabuf_base;		/* mmap'd base address */
-	size_t dmabuf_size;		/* total allocated size */
+	/*
+	 * Per-queue DMA buffer pools for NUMA-affine memory allocation.
+	 * pools[0] is special: includes admin queue buffers + identify buffer.
+	 * pools[1..N-1] are for I/O queues 1..N-1.
+	 *
+	 * Pool initialization happens in init_queue callback which runs on
+	 * the queue's thread, achieving NUMA-affine hugepage allocation.
+	 *
+	 * Each pool stores its own prp_off and io_buf_off, so accessor
+	 * functions don't need special handling for different queue layouts.
+	 */
+	struct nvme_dma_buf_pool *pools;	/* array[nr_io_queues] */
 
-	/* Region layout (offsets from dmabuf_base) */
-	size_t queue_region_off;	/* end of queue region (= prp_region_off) */
-	size_t prp_region_off;		/* offset to PRP list region */
-	size_t io_buf_region_off;	/* offset to I/O buffer region */
-	size_t identify_buf_off;	/* offset to identify buffer */
-
-	/* Queue buffer allocation state (bump allocator) */
-	size_t queue_alloc_off;
-
-	/* Pagemap cache for noiommu mode */
-	uint64_t *pagemap_cache;		/* Pre-read pagemap entries */
-	__u64 pagemap_base_vaddr;		/* Base virtual address of cached region */
-	size_t pagemap_nr_pages;		/* Number of pages in cache */
+	/* Queue 0 pool extra info (admin queue + identify buffer) */
+	size_t pool0_admin_sq_off;	/* admin SQ offset in pool[0] */
+	size_t pool0_admin_cq_off;	/* admin CQ offset in pool[0] */
+	size_t pool0_identify_off;	/* identify buffer offset in pool[0] */
 };
 
 /* Helper: Read 32-bit register */
@@ -328,83 +341,37 @@ static int get_iommu_group(const char *pci_addr, int *use_noiommu)
 }
 
 /*
- * Pre-read pagemap entries for the dmabuf region into a cache.
- */
-static int nvme_read_pagemap(struct nvme_vfio_tgt_data *data)
-{
-	size_t nr_pages = data->dmabuf_size / PAGE_SIZE;
-	__u64 base_vaddr = (__u64)data->dmabuf_base;
-	off_t offset;
-	ssize_t ret;
-	int pagemap_fd;
-
-	data->pagemap_cache = (uint64_t *)malloc(nr_pages * sizeof(uint64_t));
-	if (!data->pagemap_cache) {
-		ublk_err("Failed to allocate pagemap cache\n");
-		return -ENOMEM;
-	}
-
-	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
-	if (pagemap_fd < 0) {
-		ublk_err("Failed to open /proc/self/pagemap: %s\n", strerror(errno));
-		free(data->pagemap_cache);
-		data->pagemap_cache = NULL;
-		return -errno;
-	}
-
-	offset = (base_vaddr / PAGE_SIZE) * sizeof(uint64_t);
-	ret = pread(pagemap_fd, data->pagemap_cache,
-		    nr_pages * sizeof(uint64_t), offset);
-	close(pagemap_fd);
-
-	if (ret != (ssize_t)(nr_pages * sizeof(uint64_t))) {
-		ublk_err("pread pagemap failed: expected %zu, got %zd\n",
-			nr_pages * sizeof(uint64_t), ret);
-		free(data->pagemap_cache);
-		data->pagemap_cache = NULL;
-		return -EIO;
-	}
-
-	data->pagemap_base_vaddr = base_vaddr;
-	data->pagemap_nr_pages = nr_pages;
-
-	return 0;
-}
-
-/*
- * Query physical address from pre-read pagemap cache
+ * Query physical address by searching through per-queue pools.
+ * For noiommu mode, each pool has its own pagemap cache.
  */
 static __u64 nvme_virt_to_phys(struct nvme_vfio_tgt_data *data, __u64 vaddr)
 {
-	uint64_t entry;
-	unsigned long pfn;
-	size_t page_idx;
+	struct dma_buf_pool *pool;
+	uint64_t phys;
+	int i;
 
-	if (!data->pagemap_cache) {
-		ublk_err("pagemap cache not initialized\n");
+	if (!data->pools) {
+		ublk_err("virt_to_phys: pools not initialized\n");
 		return 0;
 	}
 
-	/* Check if vaddr is within cached region */
-	if (vaddr < data->pagemap_base_vaddr ||
-	    vaddr >= data->pagemap_base_vaddr + data->pagemap_nr_pages * PAGE_SIZE) {
-		ublk_err("vaddr 0x%llx outside cached region\n", (unsigned long long)vaddr);
-		return 0;
+	/* Search all pools for the one containing this address */
+	for (i = 0; i < data->nr_io_queues; i++) {
+		pool = &data->pools[i].pool;
+		if (!pool->base)
+			continue;
+
+		__u64 base = (__u64)pool->base;
+		if (vaddr >= base && vaddr < base + pool->size) {
+			phys = dma_buf_pool_virt_to_phys(pool, (void *)vaddr);
+			if (phys == DMA_BUF_PHYS_ERROR)
+				return 0;
+			return phys;
+		}
 	}
 
-	page_idx = (vaddr - data->pagemap_base_vaddr) / PAGE_SIZE;
-	entry = data->pagemap_cache[page_idx];
-
-	/* Check page present bit */
-	if (!(entry & (1ULL << 63))) {
-		ublk_err("Page not present for vaddr 0x%llx\n", (unsigned long long)vaddr);
-		return 0;
-	}
-
-	/* Extract PFN (bits 0-54) */
-	pfn = entry & 0x007fffffffffffffULL;
-
-	return (pfn * PAGE_SIZE) + (vaddr & (PAGE_SIZE - 1));
+	ublk_err("vaddr 0x%llx not found in any pool\n", (unsigned long long)vaddr);
+	return 0;
 }
 
 static inline bool nvme_use_iommu(struct nvme_vfio_tgt_data *data)
@@ -731,108 +698,234 @@ static int nvme_ensure_hugepages(size_t needed_bytes)
 	return 0;
 }
 
-static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
+/*
+ * Calculate per-queue pool size.
+ * For queue 0: includes admin queue buffers + identify buffer.
+ * For queue N > 0: just I/O queue buffers.
+ */
+static size_t nvme_calc_queue_pool_size(struct nvme_vfio_tgt_data *data, int qid)
 {
-	size_t queue_region, prp_region, io_buf_region, total_size;
-	size_t admin_sq_size, admin_cq_size, io_sq_size, io_cq_size;
-	int nr_queues = data->nr_io_queues;
 	int depth = data->queue_depth;
 	size_t io_buf_size = data->max_io_buf_bytes;
-	int ret;
+	size_t io_sq_size, io_cq_size;
+	size_t queue_buf_size, prp_size, io_bufs_size;
+	size_t total;
 
-	/* Calculate region sizes */
+	io_sq_size = ((depth + 1) * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	io_cq_size = ((depth + 1) * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	queue_buf_size = io_sq_size + io_cq_size;
+	prp_size = depth * PAGE_SIZE;
+	io_bufs_size = depth * io_buf_size;
+
+	if (qid == 0) {
+		/* Queue 0 pool: admin SQ/CQ + queue 0 SQ/CQ + PRP + I/O bufs + identify */
+		size_t admin_sq_size = (ADMIN_Q_SIZE * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+		size_t admin_cq_size = (ADMIN_Q_SIZE * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+		total = admin_sq_size + admin_cq_size + queue_buf_size +
+			prp_size + io_bufs_size + PAGE_SIZE;
+	} else {
+		/* Queue N pool: queue N SQ/CQ + PRP + I/O bufs */
+		total = queue_buf_size + prp_size + io_bufs_size;
+	}
+
+	/* Round up to hugepage size */
+	return (total + HUGE_PAGE_SIZE - 1) & ~(HUGE_PAGE_SIZE - 1);
+}
+
+/*
+ * Initialize pool layout info for queue 0 (includes admin queue).
+ * Must be called after pool[0] is initialized.
+ */
+static void nvme_init_pool0_layout(struct nvme_vfio_tgt_data *data)
+{
+	struct nvme_dma_buf_pool *pool0 = &data->pools[0];
+	int depth = data->queue_depth;
+	size_t io_buf_size = data->max_io_buf_bytes;
+	size_t admin_sq_size, admin_cq_size, io_sq_size, io_cq_size;
+	size_t off = 0;
+
 	admin_sq_size = (ADMIN_Q_SIZE * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 	admin_cq_size = (ADMIN_Q_SIZE * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 	io_sq_size = ((depth + 1) * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 	io_cq_size = ((depth + 1) * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-	queue_region = (admin_sq_size + admin_cq_size) +
-		       nr_queues * (io_sq_size + io_cq_size);
-	prp_region = nr_queues * depth * PAGE_SIZE;
-	io_buf_region = nr_queues * depth * io_buf_size;
+	/* Admin SQ at offset 0 */
+	data->pool0_admin_sq_off = off;
+	off += admin_sq_size;
 
-	data->queue_region_off = queue_region;
-	data->prp_region_off = queue_region;
-	data->io_buf_region_off = queue_region + prp_region;
-	data->identify_buf_off = queue_region + prp_region + io_buf_region;
+	/* Admin CQ */
+	data->pool0_admin_cq_off = off;
+	off += admin_cq_size;
 
-	total_size = data->identify_buf_off + PAGE_SIZE;
+	/* Queue 0 SQ/CQ - store offset in pool struct */
+	pool0->queue_off = off;
+	off += io_sq_size + io_cq_size;
 
-	/* Round up to hugepage size */
-	total_size = (total_size + HUGE_PAGE_SIZE - 1) & ~(HUGE_PAGE_SIZE - 1);
+	/* PRP region - store offset in pool struct */
+	pool0->prp_off = off;
+	off += depth * PAGE_SIZE;
 
-	ret = nvme_ensure_hugepages(total_size);
+	/* I/O buffer region - store offset in pool struct */
+	pool0->io_buf_off = off;
+	off += depth * io_buf_size;
+
+	data->pool0_identify_off = off;
+}
+
+/*
+ * Controller-level DMA buffer pool initialization.
+ * Called from nvme_vfio_init_tgt() - reserves hugepages for ALL queues,
+ * then initializes pool[0] for admin queue + I/O queue 0.
+ */
+static int nvme_ctrl_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
+{
+	int nr_queues = data->nr_io_queues;
+	size_t total_hugepages = 0;
+	size_t pool0_size;
+	int ret, i;
+
+	/* Calculate total hugepages needed for all queues upfront */
+	for (i = 0; i < nr_queues; i++)
+		total_hugepages += nvme_calc_queue_pool_size(data, i);
+
+	ret = nvme_ensure_hugepages(total_hugepages);
 	if (ret < 0)
 		return ret;
 
-	data->dmabuf_base = mmap(NULL, total_size, PROT_READ | PROT_WRITE,
-				 MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB |
-				 MAP_POPULATE, -1, 0);
-	if (data->dmabuf_base == MAP_FAILED) {
-		ublk_err("Failed to mmap hugepages: %s\n", strerror(errno));
-		return -errno;
+	/* Allocate pools array */
+	data->pools = (struct nvme_dma_buf_pool *)calloc(nr_queues, sizeof(struct nvme_dma_buf_pool));
+	if (!data->pools) {
+		ublk_err("Failed to allocate pools array\n");
+		return -ENOMEM;
 	}
 
-	data->dmabuf_size = total_size;
+	/* Initialize pool[0] for admin queue + I/O queue 0 */
+	pool0_size = nvme_calc_queue_pool_size(data, 0);
+	ret = dma_buf_pool_init(&data->pools[0].pool, pool0_size);
+	if (ret < 0) {
+		free(data->pools);
+		data->pools = NULL;
+		return ret;
+	}
 
-	memset(data->dmabuf_base, 0, total_size);
-
-	data->queue_alloc_off = 0;
+	/* Setup layout info */
+	nvme_init_pool0_layout(data);
 
 	return 0;
 }
 
-static void nvme_dmabuf_pool_deinit(struct nvme_vfio_tgt_data *data)
+/*
+ * Initialize DMA buffer pool for a single I/O queue (qid > 0).
+ * Called from nvme_vfio_init_queue() for NUMA-affine allocation.
+ */
+static int nvme_queue_dmabuf_pool_init(struct nvme_vfio_tgt_data *data, int qid)
 {
-	if (data->pagemap_cache) {
-		free(data->pagemap_cache);
-		data->pagemap_cache = NULL;
+	struct nvme_dma_buf_pool *pool;
+	int depth = data->queue_depth;
+	size_t io_sq_size, io_cq_size;
+	size_t pool_size;
+	size_t off;
+	int ret;
+
+	if (qid <= 0 || qid >= data->nr_io_queues) {
+		ublk_err("Invalid qid %d for pool init\n", qid);
+		return -EINVAL;
 	}
-	if (data->dmabuf_base && data->dmabuf_base != MAP_FAILED) {
-		munmap(data->dmabuf_base, data->dmabuf_size);
-		data->dmabuf_base = NULL;
-	}
+
+	pool = &data->pools[qid];
+	pool_size = nvme_calc_queue_pool_size(data, qid);
+	ret = dma_buf_pool_init(&pool->pool, pool_size);
+	if (ret < 0)
+		return ret;
+
+	/* Calculate layout offsets for this pool */
+	io_sq_size = ((depth + 1) * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	io_cq_size = ((depth + 1) * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+	/* Pool layout: SQ/CQ | PRP region | I/O buffer region */
+	pool->queue_off = 0;	/* SQ/CQ at start for non-zero queues */
+	off = io_sq_size + io_cq_size;
+	pool->prp_off = off;
+	off += depth * PAGE_SIZE;
+	pool->io_buf_off = off;
+
+	return 0;
 }
 
-/* Allocate from queue region */
-static void *nvme_pool_alloc_queue_buf(struct nvme_vfio_tgt_data *data, size_t size)
+/*
+ * Deinitialize DMA buffer pool for a single I/O queue.
+ */
+static void nvme_queue_dmabuf_pool_deinit(struct nvme_vfio_tgt_data *data, int qid)
 {
-	size_t aligned_size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	void *ptr;
+	if (qid < 0 || qid >= data->nr_io_queues)
+		return;
 
-	if (data->queue_alloc_off + aligned_size > data->queue_region_off) {
-		ublk_err("Queue region exhausted\n");
-		return NULL;
-	}
+	dma_buf_pool_deinit(&data->pools[qid].pool);
+}
 
-	ptr = (char *)data->dmabuf_base + data->queue_alloc_off;
-	data->queue_alloc_off += aligned_size;
-	return ptr;
+/*
+ * Deinitialize all DMA buffer pools.
+ */
+static void nvme_dmabuf_pools_deinit(struct nvme_vfio_tgt_data *data)
+{
+	int i;
+
+	if (!data->pools)
+		return;
+
+	for (i = 0; i < data->nr_io_queues; i++)
+		dma_buf_pool_deinit(&data->pools[i].pool);
+
+	free(data->pools);
+	data->pools = NULL;
+}
+
+/* Get admin SQ buffer from pool[0] */
+static inline void *nvme_pool0_get_admin_sq(struct nvme_vfio_tgt_data *data)
+{
+	return (char *)data->pools[0].pool.base + data->pool0_admin_sq_off;
+}
+
+/* Get admin CQ buffer from pool[0] */
+static inline void *nvme_pool0_get_admin_cq(struct nvme_vfio_tgt_data *data)
+{
+	return (char *)data->pools[0].pool.base + data->pool0_admin_cq_off;
+}
+
+/* Get I/O queue SQ buffer for given queue */
+static inline void *nvme_pool_get_queue_sq(struct nvme_vfio_tgt_data *data, int qid)
+{
+	struct nvme_dma_buf_pool *pool = &data->pools[qid];
+	return (char *)pool->pool.base + pool->queue_off;
+}
+
+/* Get I/O queue CQ buffer for given queue */
+static inline void *nvme_pool_get_queue_cq(struct nvme_vfio_tgt_data *data, int qid)
+{
+	struct nvme_dma_buf_pool *pool = &data->pools[qid];
+	int depth = data->queue_depth;
+	size_t sq_size = ((depth + 1) * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	return (char *)pool->pool.base + pool->queue_off + sq_size;
 }
 
 /* Get PRP list buffer for given queue/tag */
-static void *nvme_pool_get_prp(struct nvme_vfio_tgt_data *data, int qid, int tag)
+static inline void *nvme_pool_get_prp(struct nvme_vfio_tgt_data *data, int qid, int tag)
 {
-	int depth = data->queue_depth;
-	size_t offset = data->prp_region_off + (qid * depth + tag) * PAGE_SIZE;
-
-	return (char *)data->dmabuf_base + offset;
+	struct nvme_dma_buf_pool *pool = &data->pools[qid];
+	return (char *)pool->pool.base + pool->prp_off + tag * PAGE_SIZE;
 }
 
 /* Get I/O buffer for given queue/tag */
 static inline void *nvme_pool_get_io_buf(struct nvme_vfio_tgt_data *data, int qid, int tag)
 {
-	int depth = data->queue_depth;
-	size_t io_buf_size = data->max_io_buf_bytes;
-	size_t offset = data->io_buf_region_off + (qid * depth + tag) * io_buf_size;
-
-	return (char *)data->dmabuf_base + offset;
+	struct nvme_dma_buf_pool *pool = &data->pools[qid];
+	return (char *)pool->pool.base + pool->io_buf_off + tag * data->max_io_buf_bytes;
 }
 
-/* Get identify buffer */
+/* Get identify buffer (from pool[0] only) */
 static void *nvme_pool_get_identify_buf(struct nvme_vfio_tgt_data *data)
 {
-	return (char *)data->dmabuf_base + data->identify_buf_off;
+	return (char *)data->pools[0].pool.base + data->pool0_identify_off;
 }
 
 /*
@@ -882,10 +975,11 @@ static void nvme_unmap_dma(struct nvme_vfio_tgt_data *data,
 }
 
 /*
- * Initialize NVMe queue pair
+ * Initialize NVMe queue pair with pre-allocated buffers.
  */
 static int nvme_queue_init(struct nvme_vfio_tgt_data *data,
-			   struct nvme_queue *q, __u16 qid, __u16 depth)
+			   struct nvme_queue *q, __u16 qid, __u16 depth,
+			   void *sq_buffer, void *cq_buffer)
 {
 	volatile void *bar = data->bar0;
 	size_t sq_buf_size, cq_buf_size;
@@ -893,18 +987,10 @@ static int nvme_queue_init(struct nvme_vfio_tgt_data *data,
 	sq_buf_size = (depth * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 	cq_buf_size = (depth * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-	q->sq_buffer = nvme_pool_alloc_queue_buf(data, sq_buf_size);
-	if (!q->sq_buffer) {
-		ublk_err("Failed to allocate SQ buffer from pool\n");
-		return -ENOMEM;
-	}
-	memset(q->sq_buffer, 0, sq_buf_size);
+	q->sq_buffer = sq_buffer;
+	q->cq_buffer = cq_buffer;
 
-	q->cq_buffer = nvme_pool_alloc_queue_buf(data, cq_buf_size);
-	if (!q->cq_buffer) {
-		ublk_err("Failed to allocate CQ buffer from pool\n");
-		return -ENOMEM;
-	}
+	memset(q->sq_buffer, 0, sq_buf_size);
 	memset(q->cq_buffer, 0, cq_buf_size);
 
 	q->sq_iova = nvme_map_dma(data, q->sq_buffer, sq_buf_size, &q->sq_mapping);
@@ -979,28 +1065,39 @@ static int nvme_wait_admin_completion(struct nvme_vfio_tgt_data *data)
 	return -ETIMEDOUT;
 }
 
-/* Submit admin command */
+/* Submit admin command (thread-safe) */
 static int nvme_submit_admin_cmd(struct nvme_vfio_tgt_data *data,
 				 void *cmd, size_t cmd_size)
 {
 	struct nvme_queue *adminq = &data->admin_queue;
+	int ret;
+
+	pthread_mutex_lock(&data->admin_lock);
 
 	memcpy((char *)adminq->sq_buffer + (adminq->sq_tail * 64), cmd, cmd_size);
 
 	adminq->sq_tail = (adminq->sq_tail + 1) % adminq->qsize;
 	nvme_writel_mmio(adminq->sq_tail, adminq->sq_doorbell);
 
-	return nvme_wait_admin_completion(data);
+	ret = nvme_wait_admin_completion(data);
+
+	pthread_mutex_unlock(&data->admin_lock);
+
+	return ret;
 }
 
-/* Create admin queue */
+/* Create admin queue (uses pool[0]) */
 static int nvme_create_admin_queue(struct nvme_vfio_tgt_data *data)
 {
 	struct nvme_queue *q = &data->admin_queue;
 	volatile void *bar = data->bar0;
+	void *sq_buf, *cq_buf;
 	int ret;
 
-	ret = nvme_queue_init(data, q, 0, ADMIN_Q_SIZE);
+	sq_buf = nvme_pool0_get_admin_sq(data);
+	cq_buf = nvme_pool0_get_admin_cq(data);
+
+	ret = nvme_queue_init(data, q, 0, ADMIN_Q_SIZE, sq_buf, cq_buf);
 	if (ret < 0)
 		return ret;
 
@@ -1207,16 +1304,24 @@ fail_unmap:
 	return ret;
 }
 
-/* Create I/O queue pair */
+/* Create I/O queue pair.
+ * qid is NVMe queue ID (1-based), so pool_idx = qid - 1.
+ */
 static int nvme_create_io_queue(struct nvme_vfio_tgt_data *data,
 				int qid, int qsize)
 {
 	struct nvme_create_cq create_cq = {};
 	struct nvme_create_sq create_sq = {};
 	struct nvme_queue *ioq = &data->io_queues[qid - 1];
+	int pool_idx = qid - 1;
+	void *sq_buf, *cq_buf;
 	int ret;
 
-	ret = nvme_queue_init(data, ioq, qid, qsize);
+	/* Get buffer pointers from the queue's pool */
+	sq_buf = nvme_pool_get_queue_sq(data, pool_idx);
+	cq_buf = nvme_pool_get_queue_cq(data, pool_idx);
+
+	ret = nvme_queue_init(data, ioq, qid, qsize, sq_buf, cq_buf);
 	if (ret < 0)
 		return ret;
 
@@ -1314,20 +1419,19 @@ static void nvme_shutdown_controller(struct nvme_vfio_tgt_data *data)
  * Clean up all nvme_vfio resources.
  * Called from both error path in init and normal deinit.
  * If shutdown_ctrl is true, perform proper controller shutdown sequence.
+ *
+ * Note: Queues 1..N-1 are cleaned up in nvme_vfio_deinit_queue().
+ * This function cleans up queue 0, admin queue, and all pools.
  */
 static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctrl)
 {
-	int i;
-
 	if (!data)
 		return;
 
-	/* Delete I/O queues */
+	/* Delete I/O queue 0 (queues 1..N-1 are deleted in deinit_queue) */
 	if (data->io_queues) {
-		for (i = 0; i < data->nr_io_queues; i++) {
-			nvme_delete_io_queue(data, i + 1);
-			nvme_queue_deinit(data, &data->io_queues[i]);
-		}
+		nvme_delete_io_queue(data, 1);
+		nvme_queue_deinit(data, &data->io_queues[0]);
 		free(data->io_queues);
 	}
 
@@ -1347,7 +1451,8 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 		close(data->container_fd);
 
 	pthread_spin_destroy(&data->iova_lock);
-	nvme_dmabuf_pool_deinit(data);
+	pthread_mutex_destroy(&data->admin_lock);
+	nvme_dmabuf_pools_deinit(data);
 
 	free(data);
 }
@@ -1980,6 +2085,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	data->max_io_buf_bytes = info->max_io_buf_bytes;
 	data->max_transfer_shift = 31 - __builtin_clz(info->max_io_buf_bytes);
 	pthread_spin_init(&data->iova_lock, PTHREAD_PROCESS_PRIVATE);
+	pthread_mutex_init(&data->admin_lock, NULL);
 
 	if (strlen(pci_addr) >= sizeof(data->pci_addr)) {
 		ublk_err("PCI address too long\n");
@@ -2001,16 +2107,20 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	if (nvme_validate_params(data, cap) < 0)
 		goto err;
 
-	/* Initialize dma_buf pool */
-	if (nvme_dmabuf_pool_init(data) < 0) {
-		ublk_err("Failed to initialize dma_buf pool\n");
+	/*
+	 * Initialize controller DMA buffer pool.
+	 * This reserves hugepages for all queues and creates pool[0]
+	 * for admin queue + I/O queue 0.
+	 */
+	if (nvme_ctrl_dmabuf_pool_init(data) < 0) {
+		ublk_err("Failed to initialize controller dma_buf pool\n");
 		goto err;
 	}
 
-	/* Pre-read pagemap for noiommu mode */
+	/* Pre-read pagemap for pool[0] (noiommu mode) */
 	if (!nvme_use_iommu(data)) {
-		if (nvme_read_pagemap(data) < 0) {
-			ublk_err("Failed to read pagemap\n");
+		if (dma_buf_pool_read_pagemap(&data->pools[0].pool) < 0) {
+			ublk_err("Failed to read pagemap for pool0\n");
 			goto err;
 		}
 	}
@@ -2026,19 +2136,19 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	if (nvme_identify_namespace(data, &p) < 0)
 		goto err;
 
-	/* Setup I/O queues */
+	/* Allocate I/O queues array */
 	data->io_queues = (struct nvme_queue *)calloc(data->nr_io_queues, sizeof(struct nvme_queue));
 	if (!data->io_queues) {
 		ublk_err("calloc io_queues: %s\n", strerror(errno));
 		goto err;
 	}
 
-	for (int i = 0; i < data->nr_io_queues; i++) {
-		int qsize = data->queue_depth + 1;
-		if (nvme_create_io_queue(data, i + 1, qsize) < 0) {
-			goto err;
-		}
-	}
+	/*
+	 * Only create I/O queue 0 here (uses pool[0]).
+	 * Other queues are created in nvme_vfio_init_queue() for NUMA affinity.
+	 */
+	if (nvme_create_io_queue(data, 1, data->queue_depth + 1) < 0)
+		goto err;
 
 	/* Setup JSON data */
 	strcpy(tgt_json.name, "nvme_vfio");
@@ -2071,20 +2181,77 @@ static void nvme_vfio_deinit_tgt(const struct ublksrv_dev *dev)
 static int nvme_vfio_init_queue(const struct ublksrv_queue *q, void **queue_data_ptr)
 {
 	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
-	int depth = data->queue_depth;
+	int depth, qid, ret;
 
-	/* Pre-allocate and pre-map DMA buffers */
+	if (!data || !data->pools) {
+		ublk_err("init_queue: target data not initialized\n");
+		return -EINVAL;
+	}
+
+	depth = data->queue_depth;
+	qid = q->q_id;
+
+	if (qid < 0 || qid >= data->nr_io_queues) {
+		ublk_err("init_queue: invalid qid %d\n", qid);
+		return -EINVAL;
+	}
+
+	/*
+	 * For queues with qid > 0:
+	 * - Create per-queue DMA buffer pool (NUMA-affine mmap)
+	 * - Create the NVMe I/O queue
+	 * Queue 0's pool and NVMe queue are already created in init_tgt.
+	 */
+	if (qid > 0) {
+		/* Initialize pool on this queue's thread for NUMA affinity */
+		ret = nvme_queue_dmabuf_pool_init(data, qid);
+		if (ret < 0) {
+			ublk_err("Failed to init pool for queue %d\n", qid);
+			return ret;
+		}
+
+		/* Read pagemap for this pool (noiommu mode) */
+		if (!nvme_use_iommu(data)) {
+			ret = dma_buf_pool_read_pagemap(&data->pools[qid].pool);
+			if (ret < 0) {
+				ublk_err("Failed to read pagemap for queue %d\n", qid);
+				nvme_queue_dmabuf_pool_deinit(data, qid);
+				return ret;
+			}
+		}
+
+		/* Create NVMe I/O queue (NVMe qid = ublk qid + 1) */
+		ret = nvme_create_io_queue(data, qid + 1, depth + 1);
+		if (ret < 0) {
+			ublk_err("Failed to create I/O queue %d\n", qid);
+			nvme_queue_dmabuf_pool_deinit(data, qid);
+			return ret;
+		}
+	}
+
+	/* Verify pool is initialized before accessing it */
+	if (!data->pools[qid].pool.base) {
+		ublk_err("init_queue: pool %d not initialized\n", qid);
+		ret = -EINVAL;
+		goto fail_cleanup;
+	}
+
+	/* Pre-allocate and pre-map DMA buffers for I/O */
 	for (int tag = 0; tag < depth; tag++) {
 		struct nvme_io_priv *priv = nvme_get_io_priv(q, tag);
 
 		memset(priv, 0, sizeof(*priv));
 
-		/* Get PRP list buffer from pool */
-		priv->prp_list = (__le64 *)nvme_pool_get_prp(data, q->q_id, tag);
-		if (!priv->prp_list) {
-			ublk_err("Failed to get PRP buffer for tag %d\n", tag);
-			return -1;
+		/* Get I/O buffer from pool and set it in libublksrv */
+		ret = ublksrv_queue_set_io_buf(q, tag,
+				nvme_pool_get_io_buf(data, qid, tag));
+		if (ret < 0) {
+			ublk_err("Failed to set I/O buffer for tag %d: %d\n", tag, ret);
+			goto fail_cleanup;
 		}
+
+		/* Get PRP list buffer from pool */
+		priv->prp_list = (__le64 *)nvme_pool_get_prp(data, qid, tag);
 		memset(priv->prp_list, 0, PAGE_SIZE);
 
 		/* Map PRP list for DMA */
@@ -2092,18 +2259,42 @@ static int nvme_vfio_init_queue(const struct ublksrv_queue *q, void **queue_data
 						      PAGE_SIZE, &priv->prp_mapping);
 		if (!priv->prp_mapping.iova) {
 			ublk_err("Failed to map PRP list for tag %d\n", tag);
-			return -1;
+			ret = -EIO;
+			goto fail_cleanup;
 		}
 	}
 
 	return 0;
+
+fail_cleanup:
+	/* Unmap any PRP lists that were mapped before failure */
+	for (int i = 0; i < depth; i++) {
+		struct nvme_io_priv *priv = nvme_get_io_priv(q, i);
+
+		if (priv->prp_mapping.iova)
+			nvme_unmap_dma(data, &priv->prp_mapping);
+	}
+	/* Clean up queue resources for qid > 0 */
+	if (qid > 0) {
+		nvme_delete_io_queue(data, qid + 1);
+		nvme_queue_deinit(data, &data->io_queues[qid]);
+		nvme_queue_dmabuf_pool_deinit(data, qid);
+	}
+	return ret;
 }
 
 static void nvme_vfio_deinit_queue(const struct ublksrv_queue *q)
 {
 	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
-	int depth = data->queue_depth;
+	int depth, qid;
 
+	if (!data)
+		return;
+
+	depth = data->queue_depth;
+	qid = q->q_id;
+
+	/* Unmap DMA buffers */
 	for (int tag = 0; tag < depth; tag++) {
 		struct nvme_io_priv *priv = nvme_get_io_priv(q, tag);
 
@@ -2112,6 +2303,18 @@ static void nvme_vfio_deinit_queue(const struct ublksrv_queue *q)
 		if (priv->prp_mapping.iova)
 			nvme_unmap_dma(data, &priv->prp_mapping);
 	}
+
+	/*
+	 * For queues with qid > 0:
+	 * - Delete the NVMe I/O queue
+	 * - Destroy the per-queue DMA buffer pool
+	 * Queue 0's resources are cleaned up in deinit_tgt.
+	 */
+	if (qid > 0) {
+		nvme_delete_io_queue(data, qid + 1);
+		nvme_queue_deinit(data, &data->io_queues[qid]);
+		nvme_queue_dmabuf_pool_deinit(data, qid);
+	}
 }
 
 static int nvme_vfio_queue_io(const struct ublksrv_queue *q,
@@ -2119,9 +2322,22 @@ static int nvme_vfio_queue_io(const struct ublksrv_queue *q,
 {
 	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
 	const struct ublksrv_io_desc *iod = io_data->iod;
-	struct nvme_queue *nvmeq = &data->io_queues[q->q_id];
-	unsigned int op = ublksrv_get_op(iod);
+	struct nvme_queue *nvmeq;
+	unsigned int op;
 	int ret;
+
+	if (!data || !data->io_queues) {
+		ublk_err("queue_io: uninitialized state qid %d\n", q->q_id);
+		return -EFAULT;
+	}
+
+	if (q->q_id < 0 || q->q_id >= data->nr_io_queues) {
+		ublk_err("queue_io: invalid qid %d\n", q->q_id);
+		return -EINVAL;
+	}
+
+	nvmeq = &data->io_queues[q->q_id];
+	op = ublksrv_get_op(iod);
 
 	switch (op) {
 	case UBLK_IO_OP_READ:
@@ -2150,7 +2366,23 @@ static void nvme_vfio_handle_io_background(const struct ublksrv_queue *q,
 					    int nr_queued_io)
 {
 	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
-	struct nvme_queue *nvmeq = &data->io_queues[q->q_id];
+	struct nvme_queue *nvmeq;
+
+	if (!data || !data->io_queues) {
+		ublk_err("handle_io_background: uninitialized state qid %d\n", q->q_id);
+		return;
+	}
+
+	if (q->q_id < 0 || q->q_id >= data->nr_io_queues) {
+		ublk_err("handle_io_background: invalid qid %d\n", q->q_id);
+		return;
+	}
+
+	nvmeq = &data->io_queues[q->q_id];
+	if (!nvmeq->sq_buffer || !nvmeq->cq_buffer) {
+		ublk_err("handle_io_background: queue %d not initialized\n", q->q_id);
+		return;
+	}
 
 	/* Flush any pending SQ submissions */
 	nvme_sq_flush(nvmeq);
@@ -2167,17 +2399,6 @@ static int nvme_vfio_handle_io_async(const struct ublksrv_queue *q,
 	return ret >= 0 ? 0 : ret;
 }
 
-static void *nvme_vfio_alloc_io_buf(const struct ublksrv_queue *q, int tag, int size)
-{
-	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
-	return nvme_pool_get_io_buf(data, q->q_id, tag);
-}
-
-static void nvme_vfio_free_io_buf(const struct ublksrv_queue *q, void *buf, int tag)
-{
-	/* Pool memory freed when pool is destroyed */
-}
-
 static void nvme_vfio_cmd_usage(void)
 {
 	printf("\tnvme_vfio: --pci PCI_ADDR [--noiommu]\n");
@@ -2191,9 +2412,7 @@ static const struct ublksrv_tgt_type nvme_vfio_tgt_type = {
 	.usage_for_add = nvme_vfio_cmd_usage,
 	.init_tgt = nvme_vfio_init_tgt,
 	.deinit_tgt = nvme_vfio_deinit_tgt,
-	.alloc_io_buf = nvme_vfio_alloc_io_buf,
-	.free_io_buf = nvme_vfio_free_io_buf,
-	.ublksrv_flags = UBLKSRV_F_NEED_POLL,
+	.ublksrv_flags = UBLKSRV_F_NEED_POLL | UBLKSRV_F_NO_IO_BUF,
 	.name = "nvme_vfio",
 	.init_queue = nvme_vfio_init_queue,
 	.deinit_queue = nvme_vfio_deinit_queue,
