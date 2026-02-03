@@ -52,7 +52,7 @@ ublk_nbd_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_nbd_CPPFLAGS = $(ublk_nbd_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_nbd_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
-ublk_nvme_vfio_SOURCES = $(TGT_DIR)/nvme/ublk.nvme_vfio.cpp $(TGT_DIR)/ublksrv_tgt.cpp
+ublk_nvme_vfio_SOURCES = $(TGT_DIR)/nvme/ublk.nvme_vfio.cpp $(TGT_DIR)/dma_buf.c $(TGT_DIR)/ublksrv_tgt.cpp
 ublk_nvme_vfio_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_nvme_vfio_CPPFLAGS = $(ublk_nvme_vfio_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_nvme_vfio_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
