@@ -146,7 +146,6 @@ struct nvme_queue {
 
 /* Target Private Data */
 struct nvme_vfio_tgt_data {
-	char pci_addr[16];
 	__u32 nsid;
 	__u32 lba_shift;
 	__u64 dev_size;
@@ -198,6 +197,9 @@ struct nvme_vfio_tgt_data {
 
 	/* Queue buffer allocation state (bump allocator) */
 	size_t queue_alloc_off;
+
+	char pci_addr[16];
+	int numa_node;
 };
 
 /* Helper: Read 32-bit register */
@@ -325,6 +327,68 @@ static int get_iommu_group(const char *pci_addr, int *use_noiommu)
 	return group_num;
 }
 
+/* Get NUMA node for a PCI device, returns -1 if not available */
+static int get_pci_numa_node(const char *pci_addr)
+{
+	char path[256];
+	char buf[32];
+	int fd, numa_node = -1;
+
+	snprintf(path, sizeof(path),
+		"/sys/bus/pci/devices/%s/numa_node", pci_addr);
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return -1;
+
+	if (read(fd, buf, sizeof(buf)) > 0)
+		numa_node = atoi(buf);
+
+	close(fd);
+	return numa_node;
+}
+
+/* Get CPU list string for a NUMA node, returns 0 on success */
+static int get_numa_cpulist(int numa_node, char *buf, size_t buflen)
+{
+	char path[256];
+	int fd;
+	ssize_t len;
+
+	if (numa_node < 0 || !buf || buflen == 0)
+		return -1;
+
+	snprintf(path, sizeof(path),
+		"/sys/devices/system/node/node%d/cpulist", numa_node);
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return -1;
+
+	len = read(fd, buf, buflen - 1);
+	close(fd);
+
+	if (len <= 0)
+		return -1;
+
+	/* Remove trailing newline */
+	buf[len] = '\0';
+	if (buf[len - 1] == '\n')
+		buf[len - 1] = '\0';
+
+	return 0;
+}
+
+static void nvme_log_numa_info(const struct nvme_vfio_tgt_data *data)
+{
+	char cpulist[256];
+
+	nvme_log("Initializing VFIO NVMe target for %s (numa node %d)\n",
+		 data->pci_addr, data->numa_node);
+	if (get_numa_cpulist(data->numa_node, cpulist, sizeof(cpulist)) == 0)
+		nvme_log("For good performance, start via: taskset -c %s(numa node %d)\n",
+			 cpulist, data->numa_node);
+}
 
 static inline bool nvme_use_iommu(struct nvme_vfio_tgt_data *data)
 {
@@ -968,7 +1032,6 @@ static int nvme_init_controller(struct nvme_vfio_tgt_data *data)
 		return -1;
 	}
 
-	nvme_log("NVMe controller initialized successfully\n");
 	return 0;
 }
 
@@ -1153,7 +1216,6 @@ static int nvme_create_io_queue(struct nvme_vfio_tgt_data *data,
 		goto err_deinit;
 	}
 
-	nvme_log("Created I/O queue %d (depth %d)\n", qid, qsize);
 	return 0;
 
 err_deinit:
@@ -1939,11 +2001,10 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 		ublk_err("PCI address too long\n");
 		goto err;
 	}
+	data->numa_node = get_pci_numa_node(pci_addr);
 	strcpy(data->pci_addr, pci_addr);
 	free(pci_addr);
 	pci_addr = NULL;
-
-	nvme_log("Initializing VFIO NVMe target for %s\n", data->pci_addr);
 
 	if (nvme_vfio_setup(data) < 0)
 		goto err;
@@ -2003,7 +2064,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	ublk_json_write_tgt_str(cdev, "pci_addr", data->pci_addr);
 	ublk_json_write_params(cdev, &p);
 
-	nvme_log("VFIO NVMe target initialized successfully\n");
+	nvme_log_numa_info(data);
 
 	return nvme_vfio_setup_tgt(dev);
 
