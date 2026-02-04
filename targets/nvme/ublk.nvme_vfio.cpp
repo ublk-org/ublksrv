@@ -2371,9 +2371,22 @@ static int nvme_vfio_queue_io(const struct ublksrv_queue *q,
 {
 	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
 	const struct ublksrv_io_desc *iod = io_data->iod;
-	struct nvme_queue *nvmeq = &data->io_queues[q->q_id];
-	unsigned int op = ublksrv_get_op(iod);
+	struct nvme_queue *nvmeq;
+	unsigned int op;
 	int ret;
+
+	if (!data || !data->io_queues) {
+		ublk_err("queue_io: uninitialized state qid %d\n", q->q_id);
+		return -EFAULT;
+	}
+
+	if (q->q_id < 0 || q->q_id >= data->nr_io_queues) {
+		ublk_err("queue_io: invalid qid %d\n", q->q_id);
+		return -EINVAL;
+	}
+
+	nvmeq = &data->io_queues[q->q_id];
+	op = ublksrv_get_op(iod);
 
 	switch (op) {
 	case UBLK_IO_OP_READ:
@@ -2402,7 +2415,23 @@ static void nvme_vfio_handle_io_background(const struct ublksrv_queue *q,
 					    int nr_queued_io)
 {
 	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
-	struct nvme_queue *nvmeq = &data->io_queues[q->q_id];
+	struct nvme_queue *nvmeq;
+
+	if (!data || !data->io_queues) {
+		ublk_err("handle_io_background: uninitialized state qid %d\n", q->q_id);
+		return;
+	}
+
+	if (q->q_id < 0 || q->q_id >= data->nr_io_queues) {
+		ublk_err("handle_io_background: invalid qid %d\n", q->q_id);
+		return;
+	}
+
+	nvmeq = &data->io_queues[q->q_id];
+	if (!nvmeq->sq_buffer || !nvmeq->cq_buffer) {
+		ublk_err("handle_io_background: queue %d not initialized\n", q->q_id);
+		return;
+	}
 
 	/* Flush any pending SQ submissions */
 	nvme_sq_flush(nvmeq);
