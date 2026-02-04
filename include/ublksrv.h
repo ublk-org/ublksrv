@@ -46,16 +46,6 @@ extern "C" {
  */
 #define UBLKSRV_F_NEED_POLL		(1UL << 2)
 
-/*
- * Target manages its own IO buffers and doesn't want libublksrv to
- * allocate/free them. When set:
- * - ublksrv_queue_init_flags() skips IO buffer allocation
- * - ublksrv_queue_deinit() skips IO buffer freeing
- * - Target must call ublksrv_queue_set_io_buf() in init_queue callback
- *   to set buffer addresses for each tag
- */
-#define UBLKSRV_F_NO_IO_BUF		(1UL << 3)
-
 struct io_uring;
 struct io_uring_cqe;
 struct ublksrv_aio_ctx;
@@ -1080,21 +1070,6 @@ extern const struct ublk_io_data *ublksrv_queue_get_io_data(
  * @return pre-allocated io buffer for this io
  */
 extern void *ublksrv_queue_get_io_buf(const struct ublksrv_queue *q, int tag);
-
-/**
- * Set io buffer for a specific tag
- *
- * Only allowed when UBLKSRV_F_NO_IO_BUF is set. Target calls this in
- * init_queue callback to set the io buffer address for each tag.
- *
- * @param q the ublksrv queue instance
- * @param tag tag for this io
- * @param buf io buffer address to set
- * @return 0 on success, -EPERM if UBLKSRV_F_NO_IO_BUF not set,
- *         -EINVAL for invalid tag
- */
-extern int ublksrv_queue_set_io_buf(const struct ublksrv_queue *q, int tag,
-		void *buf);
 
 /**
  * Return current queue state

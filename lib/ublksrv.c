@@ -388,12 +388,6 @@ static int queue_max_cmd_buf_sz(void)
 			page_sz);
 }
 
-/* Check if target manages its own IO buffers */
-static inline bool ublksrv_queue_no_io_buf(const struct _ublksrv_queue *q)
-{
-	return !!(q->dev->ctrl_dev->dev_info.ublksrv_flags & UBLKSRV_F_NO_IO_BUF);
-}
-
 int ublksrv_queue_unconsumed_cqes(const struct ublksrv_queue *tq)
 {
 	if (tq->ring_ptr)
@@ -436,7 +430,7 @@ void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 		q->io_cmd_buf = NULL;
 	}
 	for (i = 0; i < nr_ios; i++) {
-		if (q->ios[i].buf_addr && !ublksrv_queue_no_io_buf(q)) {
+		if (q->ios[i].buf_addr) {
 			if (q->dev->tgt.ops->free_io_buf)
 				q->dev->tgt.ops->free_io_buf(tq,
 						q->ios[i].buf_addr, i);
@@ -770,10 +764,6 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 			goto skip_alloc_buf;
 
 		if (!ublksrv_queue_alloc_buf(q))
-			goto skip_alloc_buf;
-
-		/* Skip allocation if target manages its own buffers */
-		if (ublksrv_queue_no_io_buf(q))
 			goto skip_alloc_buf;
 
 		if (dev->tgt.ops->alloc_io_buf)
@@ -1274,24 +1264,6 @@ void *ublksrv_queue_get_io_buf(const struct ublksrv_queue *tq, int tag)
 	if (tag < q->q_depth)
 		return q->ios[tag].buf_addr;
 	return NULL;
-}
-
-int ublksrv_queue_set_io_buf(const struct ublksrv_queue *tq, int tag,
-		void *buf)
-{
-	struct _ublksrv_queue *q = tq_to_local(tq);
-
-	if (!ublksrv_queue_no_io_buf(q)) {
-		ublk_err("%s: requires UBLKSRV_F_NO_IO_BUF flag\n", __func__);
-		return -EPERM;
-	}
-	if (tag < 0 || tag >= q->q_depth) {
-		ublk_err("%s: invalid tag %d (depth %d)\n", __func__,
-				tag, q->q_depth);
-		return -EINVAL;
-	}
-	q->ios[tag].buf_addr = buf;
-	return 0;
 }
 
 /*
