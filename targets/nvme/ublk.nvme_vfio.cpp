@@ -200,6 +200,9 @@ struct nvme_vfio_tgt_data {
 
 	char pci_addr[16];
 	int numa_node;
+
+	/* Extra hugepages allocated by nvme_ensure_hugepages() */
+	unsigned long extra_hugepages;
 };
 
 /* Helper: Read 32-bit register */
@@ -664,12 +667,35 @@ static inline struct nvme_io_priv *nvme_get_io_priv(
  */
 #define HUGE_PAGE_SIZE (2 * 1024 * 1024)  /* 2MB hugepages */
 
-static int nvme_ensure_hugepages(size_t needed_bytes)
+/* Get number of free hugepages */
+static unsigned long nvme_get_free_hugepages(void)
 {
-	size_t needed_pages = (needed_bytes + HUGE_PAGE_SIZE - 1) / HUGE_PAGE_SIZE;
-	unsigned long current_pages = 0, free_pages = 0;
+	unsigned long free_pages = 0;
 	FILE *fp;
 	char buf[64];
+
+	fp = fopen("/proc/meminfo", "r");
+	if (fp) {
+		while (fgets(buf, sizeof(buf), fp)) {
+			if (sscanf(buf, "HugePages_Free: %lu", &free_pages) == 1)
+				break;
+		}
+		fclose(fp);
+	}
+
+	return free_pages;
+}
+
+/* Adjust nr_hugepages by delta (positive to increase, negative to decrease) */
+static int nvme_adjust_hugepages(long delta)
+{
+	unsigned long current_pages = 0;
+	long new_pages;
+	FILE *fp;
+	char buf[64];
+
+	if (delta == 0)
+		return 0;
 
 	fp = fopen("/proc/sys/vm/nr_hugepages", "r");
 	if (!fp)
@@ -678,42 +704,47 @@ static int nvme_ensure_hugepages(size_t needed_bytes)
 		current_pages = strtoul(buf, NULL, 10);
 	fclose(fp);
 
-	fp = fopen("/proc/meminfo", "r");
-	if (fp) {
-		while (fgets(buf, sizeof(buf), fp)) {
-			if (sscanf(buf, "HugePages_Free: %lu", &free_pages) == 1)
-				break;
-		}
-		fclose(fp);
-	}
-
-	if (free_pages >= needed_pages)
-		return 0;
+	new_pages = (long)current_pages + delta;
+	if (new_pages < 0)
+		new_pages = 0;
 
 	fp = fopen("/proc/sys/vm/nr_hugepages", "w");
 	if (!fp)
 		return -errno;
 
-	fprintf(fp, "%lu\n", current_pages + needed_pages - free_pages);
+	fprintf(fp, "%ld\n", new_pages);
 	fclose(fp);
 
-	/* Verify allocation succeeded */
-	fp = fopen("/proc/meminfo", "r");
-	if (fp) {
-		free_pages = 0;
-		while (fgets(buf, sizeof(buf), fp)) {
-			if (sscanf(buf, "HugePages_Free: %lu", &free_pages) == 1)
-				break;
-		}
-		fclose(fp);
-	}
+	return 0;
+}
 
+static int nvme_ensure_hugepages(size_t needed_bytes, unsigned long *extra_allocated)
+{
+	size_t needed_pages = (needed_bytes + HUGE_PAGE_SIZE - 1) / HUGE_PAGE_SIZE;
+	unsigned long free_pages, extra;
+	int ret;
+
+	*extra_allocated = 0;
+
+	free_pages = nvme_get_free_hugepages();
+	if (free_pages >= needed_pages)
+		return 0;
+
+	extra = needed_pages - free_pages;
+
+	ret = nvme_adjust_hugepages(extra);
+	if (ret < 0)
+		return ret;
+
+	/* Verify allocation succeeded */
+	free_pages = nvme_get_free_hugepages();
 	if (free_pages < needed_pages) {
 		ublk_err("Failed to allocate %zu hugepages (only %lu free)\n",
 			needed_pages, free_pages);
 		return -ENOMEM;
 	}
 
+	*extra_allocated = extra;
 	return 0;
 }
 
@@ -747,13 +778,15 @@ static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
 	/* Round up to hugepage size */
 	total_size = (total_size + HUGE_PAGE_SIZE - 1) & ~(HUGE_PAGE_SIZE - 1);
 
-	ret = nvme_ensure_hugepages(total_size);
+	ret = nvme_ensure_hugepages(total_size, &data->extra_hugepages);
 	if (ret < 0)
 		return ret;
 
 	ret = dma_buf_pool_init(&data->dma_pool, total_size);
-	if (ret < 0)
+	if (ret < 0) {
+		nvme_adjust_hugepages(-(long)data->extra_hugepages);
 		return ret;
+	}
 
 	data->queue_alloc_off = 0;
 
@@ -1317,6 +1350,7 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 
 	pthread_spin_destroy(&data->iova_lock);
 	nvme_dmabuf_pool_deinit(data);
+	nvme_adjust_hugepages(-(long)data->extra_hugepages);
 
 	free(data);
 }
