@@ -50,6 +50,8 @@
 #include "ublksrv_tgt.h"
 #include "nvme.h"
 
+#include "dma_buf.h"
+
 #define PAGE_SIZE 4096
 #define ADMIN_Q_SIZE 64
 
@@ -185,11 +187,10 @@ struct nvme_vfio_tgt_data {
 	__u64 next_iova;
 	pthread_spinlock_t iova_lock;	/* Protects next_iova allocation */
 
-	/* dma_buf pool for pinned DMA memory */
-	void *dmabuf_base;		/* mmap'd base address */
-	size_t dmabuf_size;		/* total allocated size */
+	/* DMA buffer pool for pinned DMA memory */
+	struct dma_buf_pool dma_pool;
 
-	/* Region layout (offsets from dmabuf_base) */
+	/* Region layout (offsets from dma_pool.base) */
 	size_t queue_region_off;	/* end of queue region (= prp_region_off) */
 	size_t prp_region_off;		/* offset to PRP list region */
 	size_t io_buf_region_off;	/* offset to I/O buffer region */
@@ -197,11 +198,6 @@ struct nvme_vfio_tgt_data {
 
 	/* Queue buffer allocation state (bump allocator) */
 	size_t queue_alloc_off;
-
-	/* Pagemap cache for noiommu mode */
-	uint64_t *pagemap_cache;		/* Pre-read pagemap entries */
-	__u64 pagemap_base_vaddr;		/* Base virtual address of cached region */
-	size_t pagemap_nr_pages;		/* Number of pages in cache */
 };
 
 /* Helper: Read 32-bit register */
@@ -329,85 +325,6 @@ static int get_iommu_group(const char *pci_addr, int *use_noiommu)
 	return group_num;
 }
 
-/*
- * Pre-read pagemap entries for the dmabuf region into a cache.
- */
-static int nvme_read_pagemap(struct nvme_vfio_tgt_data *data)
-{
-	size_t nr_pages = data->dmabuf_size / PAGE_SIZE;
-	__u64 base_vaddr = (__u64)data->dmabuf_base;
-	off_t offset;
-	ssize_t ret;
-	int pagemap_fd;
-
-	data->pagemap_cache = (uint64_t *)malloc(nr_pages * sizeof(uint64_t));
-	if (!data->pagemap_cache) {
-		ublk_err("Failed to allocate pagemap cache\n");
-		return -ENOMEM;
-	}
-
-	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
-	if (pagemap_fd < 0) {
-		ublk_err("Failed to open /proc/self/pagemap: %s\n", strerror(errno));
-		free(data->pagemap_cache);
-		data->pagemap_cache = NULL;
-		return -errno;
-	}
-
-	offset = (base_vaddr / PAGE_SIZE) * sizeof(uint64_t);
-	ret = pread(pagemap_fd, data->pagemap_cache,
-		    nr_pages * sizeof(uint64_t), offset);
-	close(pagemap_fd);
-
-	if (ret != (ssize_t)(nr_pages * sizeof(uint64_t))) {
-		ublk_err("pread pagemap failed: expected %zu, got %zd\n",
-			nr_pages * sizeof(uint64_t), ret);
-		free(data->pagemap_cache);
-		data->pagemap_cache = NULL;
-		return -EIO;
-	}
-
-	data->pagemap_base_vaddr = base_vaddr;
-	data->pagemap_nr_pages = nr_pages;
-
-	return 0;
-}
-
-/*
- * Query physical address from pre-read pagemap cache
- */
-static __u64 nvme_virt_to_phys(struct nvme_vfio_tgt_data *data, __u64 vaddr)
-{
-	uint64_t entry;
-	unsigned long pfn;
-	size_t page_idx;
-
-	if (!data->pagemap_cache) {
-		ublk_err("pagemap cache not initialized\n");
-		return 0;
-	}
-
-	/* Check if vaddr is within cached region */
-	if (vaddr < data->pagemap_base_vaddr ||
-	    vaddr >= data->pagemap_base_vaddr + data->pagemap_nr_pages * PAGE_SIZE) {
-		ublk_err("vaddr 0x%llx outside cached region\n", (unsigned long long)vaddr);
-		return 0;
-	}
-
-	page_idx = (vaddr - data->pagemap_base_vaddr) / PAGE_SIZE;
-	entry = data->pagemap_cache[page_idx];
-
-	/* Check page present bit */
-	if (!(entry & (1ULL << 63))) {
-		ublk_err("Page not present for vaddr 0x%llx\n", (unsigned long long)vaddr);
-		return 0;
-	}
-
-	/* Extract PFN (bits 0-54) */
-	pfn = entry & 0x007fffffffffffffULL;
-
-	return (pfn * PAGE_SIZE) + (vaddr & (PAGE_SIZE - 1));
-}
 
 static inline bool nvme_use_iommu(struct nvme_vfio_tgt_data *data)
 {
@@ -430,7 +347,8 @@ static __u64 nvme_get_iova(struct nvme_vfio_tgt_data *data, void *vaddr, size_t 
 
 	/* NoIOMMU mode: use physical address from /proc/self/pagemap */
 	if (!nvme_use_iommu(data)) {
-		return nvme_virt_to_phys(data, (__u64)vaddr);
+		uint64_t phys = dma_buf_pool_virt_to_phys(&data->dma_pool, vaddr);
+		return (phys == DMA_BUF_PHYS_ERROR) ? 0 : phys;
 	}
 
 	/* Standard IOMMU mode: allocate sequential IOVA */
@@ -467,11 +385,13 @@ static int nvme_build_prp_list(struct nvme_vfio_tgt_data *data,
 
 		/* Get IOVA for this page */
 		if (!nvme_use_iommu(data)) {
-			iova = nvme_virt_to_phys(data, vaddr_page);
-			if (!iova) {
+			uint64_t phys = dma_buf_pool_virt_to_phys(&data->dma_pool,
+								 (void *)vaddr_page);
+			if (phys == DMA_BUF_PHYS_ERROR) {
 				ublk_err("Failed to get physical address for page\n");
 				return -1;
 			}
+			iova = phys;
 		} else {
 			iova = first_iova + offset;
 		}
@@ -767,17 +687,9 @@ static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
 	if (ret < 0)
 		return ret;
 
-	data->dmabuf_base = mmap(NULL, total_size, PROT_READ | PROT_WRITE,
-				 MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB |
-				 MAP_POPULATE, -1, 0);
-	if (data->dmabuf_base == MAP_FAILED) {
-		ublk_err("Failed to mmap hugepages: %s\n", strerror(errno));
-		return -errno;
-	}
-
-	data->dmabuf_size = total_size;
-
-	memset(data->dmabuf_base, 0, total_size);
+	ret = dma_buf_pool_init(&data->dma_pool, total_size);
+	if (ret < 0)
+		return ret;
 
 	data->queue_alloc_off = 0;
 
@@ -786,14 +698,7 @@ static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
 
 static void nvme_dmabuf_pool_deinit(struct nvme_vfio_tgt_data *data)
 {
-	if (data->pagemap_cache) {
-		free(data->pagemap_cache);
-		data->pagemap_cache = NULL;
-	}
-	if (data->dmabuf_base && data->dmabuf_base != MAP_FAILED) {
-		munmap(data->dmabuf_base, data->dmabuf_size);
-		data->dmabuf_base = NULL;
-	}
+	dma_buf_pool_deinit(&data->dma_pool);
 }
 
 /* Allocate from queue region */
@@ -807,7 +712,7 @@ static void *nvme_pool_alloc_queue_buf(struct nvme_vfio_tgt_data *data, size_t s
 		return NULL;
 	}
 
-	ptr = (char *)data->dmabuf_base + data->queue_alloc_off;
+	ptr = (char *)data->dma_pool.base + data->queue_alloc_off;
 	data->queue_alloc_off += aligned_size;
 	return ptr;
 }
@@ -818,7 +723,7 @@ static void *nvme_pool_get_prp(struct nvme_vfio_tgt_data *data, int qid, int tag
 	int depth = data->queue_depth;
 	size_t offset = data->prp_region_off + (qid * depth + tag) * PAGE_SIZE;
 
-	return (char *)data->dmabuf_base + offset;
+	return (char *)data->dma_pool.base + offset;
 }
 
 /* Get I/O buffer for given queue/tag */
@@ -828,13 +733,13 @@ static inline void *nvme_pool_get_io_buf(struct nvme_vfio_tgt_data *data, int qi
 	size_t io_buf_size = data->max_io_buf_bytes;
 	size_t offset = data->io_buf_region_off + (qid * depth + tag) * io_buf_size;
 
-	return (char *)data->dmabuf_base + offset;
+	return (char *)data->dma_pool.base + offset;
 }
 
 /* Get identify buffer */
 static void *nvme_pool_get_identify_buf(struct nvme_vfio_tgt_data *data)
 {
-	return (char *)data->dmabuf_base + data->identify_buf_off;
+	return (char *)data->dma_pool.base + data->identify_buf_off;
 }
 
 /*
@@ -1507,9 +1412,9 @@ static inline int nvme_setup_prps(struct nvme_rw_command *cmd,
 		cmd->prp2 = 0;
 	} else if (remaining <= PAGE_SIZE) {
 		if (!nvme_use_iommu(data)) {
-			__u64 vaddr_page2 = ((__u64)io_buf + first_page_len) & ~(PAGE_SIZE - 1);
-			__u64 paddr2 = nvme_virt_to_phys(data, vaddr_page2);
-			if (!paddr2) {
+			void *vaddr_page2 = (void *)(((__u64)io_buf + first_page_len) & ~(PAGE_SIZE - 1));
+			uint64_t paddr2 = dma_buf_pool_virt_to_phys(&data->dma_pool, vaddr_page2);
+			if (paddr2 == DMA_BUF_PHYS_ERROR) {
 				ublk_err("Failed to get paddr for 2nd page\n");
 				return -EINVAL;
 			}
@@ -2058,7 +1963,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 
 	/* Pre-read pagemap for noiommu mode */
 	if (!nvme_use_iommu(data)) {
-		if (nvme_read_pagemap(data) < 0) {
+		if (dma_buf_pool_read_pagemap(&data->dma_pool) < 0) {
 			ublk_err("Failed to read pagemap\n");
 			goto err;
 		}
