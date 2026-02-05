@@ -203,6 +203,9 @@ struct nvme_vfio_tgt_data {
 
 	/* Extra hugepages allocated by nvme_ensure_hugepages() */
 	unsigned long extra_hugepages;
+
+	/* Hugepage size in bytes (read from /proc/meminfo) */
+	size_t hugepage_size;
 };
 
 /* Helper: Read 32-bit register */
@@ -665,7 +668,26 @@ static inline struct nvme_io_priv *nvme_get_io_priv(
 /*
  * Hugepage-based DMA pool management
  */
-#define HUGE_PAGE_SIZE (2 * 1024 * 1024)  /* 2MB hugepages */
+
+/* Get hugepage size from /proc/meminfo (returns 0 on error) */
+static size_t nvme_get_hugepage_size(void)
+{
+	unsigned long size_kb = 0;
+	FILE *fp;
+	char buf[64];
+
+	fp = fopen("/proc/meminfo", "r");
+	if (!fp)
+		return 0;
+
+	while (fgets(buf, sizeof(buf), fp)) {
+		if (sscanf(buf, "Hugepagesize: %lu kB", &size_kb) == 1)
+			break;
+	}
+	fclose(fp);
+
+	return size_kb * 1024;
+}
 
 /* Get number of free hugepages */
 static unsigned long nvme_get_free_hugepages(void)
@@ -718,9 +740,10 @@ static int nvme_adjust_hugepages(long delta)
 	return 0;
 }
 
-static int nvme_ensure_hugepages(size_t needed_bytes, unsigned long *extra_allocated)
+static int nvme_ensure_hugepages(size_t needed_bytes, size_t hugepage_size,
+				 unsigned long *extra_allocated)
 {
-	size_t needed_pages = (needed_bytes + HUGE_PAGE_SIZE - 1) / HUGE_PAGE_SIZE;
+	size_t needed_pages = (needed_bytes + hugepage_size - 1) / hugepage_size;
 	unsigned long free_pages, extra;
 	int ret;
 
@@ -755,7 +778,16 @@ static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
 	int nr_queues = data->nr_io_queues;
 	int depth = data->queue_depth;
 	size_t io_buf_size = data->max_io_buf_bytes;
+	size_t hps;
 	int ret;
+
+	/* Get hugepage size from system */
+	hps = nvme_get_hugepage_size();
+	if (hps == 0) {
+		ublk_err("Failed to get hugepage size from /proc/meminfo\n");
+		return -EINVAL;
+	}
+	data->hugepage_size = hps;
 
 	/* Calculate region sizes */
 	admin_sq_size = (ADMIN_Q_SIZE * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -776,9 +808,9 @@ static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
 	total_size = data->identify_buf_off + PAGE_SIZE;
 
 	/* Round up to hugepage size */
-	total_size = (total_size + HUGE_PAGE_SIZE - 1) & ~(HUGE_PAGE_SIZE - 1);
+	total_size = (total_size + hps - 1) & ~(hps - 1);
 
-	ret = nvme_ensure_hugepages(total_size, &data->extra_hugepages);
+	ret = nvme_ensure_hugepages(total_size, hps, &data->extra_hugepages);
 	if (ret < 0)
 		return ret;
 
