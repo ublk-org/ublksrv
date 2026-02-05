@@ -778,16 +778,8 @@ static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
 	int nr_queues = data->nr_io_queues;
 	int depth = data->queue_depth;
 	size_t io_buf_size = data->max_io_buf_bytes;
-	size_t hps;
+	size_t hps = data->hugepage_size;
 	int ret;
-
-	/* Get hugepage size from system */
-	hps = nvme_get_hugepage_size();
-	if (hps == 0) {
-		ublk_err("Failed to get hugepage size from /proc/meminfo\n");
-		return -EINVAL;
-	}
-	data->hugepage_size = hps;
 
 	/* Calculate region sizes */
 	admin_sq_size = (ADMIN_Q_SIZE * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -1574,25 +1566,93 @@ static inline int nvme_setup_prps(struct nvme_rw_command *cmd,
 
 /*
  * Setup SGL descriptor for a command.
- * Uses single DATA_BLOCK descriptor embedded in command dptr.
+ *
+ * In noiommu mode, I/O buffers may span hugepage boundaries where physical
+ * addresses are not contiguous. This function detects such cases and builds
+ * a 2-entry SGL list to handle the discontinuity.
+ *
+ * For single-segment I/O (within one hugepage or with IOMMU), uses a single
+ * DATA_BLOCK descriptor embedded in command dptr.
  */
 static inline int nvme_setup_sgl(struct nvme_rw_command *cmd,
-				 __u64 iova, size_t len)
+				 struct nvme_vfio_tgt_data *data,
+				 struct nvme_io_priv *priv,
+				 void *io_buf, __u64 iova, size_t len)
 {
 	struct nvme_sgl_desc *sgl;
-
-	/* Cast prp1/prp2 area as SGL descriptor (same offset, 16 bytes) */
-	sgl = (struct nvme_sgl_desc *)&cmd->prp1;
-
-	sgl->addr = htole64(iova);
-	sgl->length = htole32((__u32)len);
-	sgl->rsvd[0] = 0;
-	sgl->rsvd[1] = 0;
-	sgl->rsvd[2] = 0;
-	sgl->type = (NVME_SGL_FMT_DATA_DESC << 4) | NVME_SGL_FMT_ADDRESS;
+	size_t hps = data->hugepage_size;
+	__u64 buf_start = (__u64)io_buf;
+	__u64 buf_end = buf_start + len - 1;
+	int need_two_segments = 0;
 
 	/* Set SGL flag in command */
 	cmd->flags |= NVME_CMD_SGL_METABUF;
+
+	/*
+	 * In noiommu mode, check if buffer crosses hugepage boundary.
+	 * Different hugepages have non-contiguous physical addresses.
+	 */
+	if (!nvme_use_iommu(data) && hps > 0) {
+		__u64 start_page = buf_start / hps;
+		__u64 end_page = buf_end / hps;
+		need_two_segments = (start_page != end_page);
+	}
+
+	if (!need_two_segments) {
+		/* Single segment - use DATA_BLOCK in command dptr */
+		sgl = (struct nvme_sgl_desc *)&cmd->prp1;
+
+		sgl->addr = htole64(iova);
+		sgl->length = htole32((__u32)len);
+		sgl->rsvd[0] = 0;
+		sgl->rsvd[1] = 0;
+		sgl->rsvd[2] = 0;
+		sgl->type = (NVME_SGL_FMT_DATA_DESC << 4) | NVME_SGL_FMT_ADDRESS;
+	} else {
+		/*
+		 * Two segments - build SGL list in prp_list buffer.
+		 * Segment 1: from buffer start to hugepage boundary
+		 * Segment 2: from hugepage boundary to buffer end
+		 */
+		struct nvme_sgl_desc *sgl_list = (struct nvme_sgl_desc *)priv->prp_list;
+		__u64 hp_boundary = ((buf_start / hps) + 1) * hps;
+		size_t seg1_len = hp_boundary - buf_start;
+		size_t seg2_len = len - seg1_len;
+		void *seg2_vaddr = (void *)hp_boundary;
+		__u64 seg2_phys;
+
+		/* Get physical address for second segment */
+		seg2_phys = dma_buf_pool_virt_to_phys(&data->dma_pool, seg2_vaddr);
+		if (seg2_phys == DMA_BUF_PHYS_ERROR) {
+			ublk_err("SGL: failed to get phys for segment 2\n");
+			return -EFAULT;
+		}
+
+		/* Build SGL entry 0: first segment */
+		sgl_list[0].addr = htole64(iova);
+		sgl_list[0].length = htole32((__u32)seg1_len);
+		sgl_list[0].rsvd[0] = 0;
+		sgl_list[0].rsvd[1] = 0;
+		sgl_list[0].rsvd[2] = 0;
+		sgl_list[0].type = (NVME_SGL_FMT_DATA_DESC << 4) | NVME_SGL_FMT_ADDRESS;
+
+		/* Build SGL entry 1: second segment */
+		sgl_list[1].addr = htole64(seg2_phys);
+		sgl_list[1].length = htole32((__u32)seg2_len);
+		sgl_list[1].rsvd[0] = 0;
+		sgl_list[1].rsvd[1] = 0;
+		sgl_list[1].rsvd[2] = 0;
+		sgl_list[1].type = (NVME_SGL_FMT_DATA_DESC << 4) | NVME_SGL_FMT_ADDRESS;
+
+		/* Point command dptr to SGL list (LAST_SEGMENT descriptor) */
+		sgl = (struct nvme_sgl_desc *)&cmd->prp1;
+		sgl->addr = htole64(priv->prp_mapping.iova);
+		sgl->length = htole32(2 * sizeof(struct nvme_sgl_desc));
+		sgl->rsvd[0] = 0;
+		sgl->rsvd[1] = 0;
+		sgl->rsvd[2] = 0;
+		sgl->type = (NVME_SGL_FMT_LAST_SEG_DESC << 4) | NVME_SGL_FMT_ADDRESS;
+	}
 
 	return 0;
 }
@@ -1658,7 +1718,7 @@ static int nvme_queue_rw_io(const struct ublksrv_queue *q,
 
 	/* Setup data pointers - use SGL if supported, otherwise PRP */
 	if (nvme_sgl_supported(data)) {
-		if (nvme_setup_sgl(cmd, iova, len) < 0)
+		if (nvme_setup_sgl(cmd, data, priv, io_buf, iova, len) < 0)
 			return -EINVAL;
 	} else {
 		if (nvme_setup_prps(cmd, data, priv, io_buf, iova, len) < 0)
@@ -1991,6 +2051,12 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 		{ "noiommu",		no_argument, NULL, OPT_NOIOMMU },
 		{ NULL }
 	};
+	size_t hps = nvme_get_hugepage_size();
+
+	if (hps == 0) {
+		ublk_err("Failed to get hugepage size from /proc/meminfo\n");
+		return -EINVAL;
+	}
 
 	/* Check for unsupported zero copy modes */
 	if (info->flags & UBLK_F_AUTO_BUF_REG) {
@@ -2015,7 +2081,8 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	}
 
 	if (info->max_io_buf_bytes < PAGE_SIZE ||
-	    info->max_io_buf_bytes > (32 << 20) ||
+	    info->max_io_buf_bytes > (2 << 20) ||
+	    info->max_io_buf_bytes > hps ||
 	    (info->max_io_buf_bytes & (info->max_io_buf_bytes - 1))) {
 		ublk_err("max_io_buf_bytes %u invalid (must be power of 2, %u-%u)\n",
 			 info->max_io_buf_bytes, PAGE_SIZE, 32 << 20);
@@ -2069,6 +2136,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	data->queue_depth = info->queue_depth;
 	data->max_io_buf_bytes = info->max_io_buf_bytes;
 	data->max_transfer_shift = 31 - __builtin_clz(info->max_io_buf_bytes);
+	data->hugepage_size = hps;
 	pthread_spin_init(&data->iova_lock, PTHREAD_PROCESS_PRIVATE);
 
 	if (strlen(pci_addr) >= sizeof(data->pci_addr)) {
