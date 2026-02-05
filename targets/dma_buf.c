@@ -38,7 +38,6 @@ int dma_buf_pool_init(struct dma_buf_pool *pool, size_t size)
 	pool->pagemap_cache = NULL;
 	pool->pagemap_nr_pages = 0;
 
-	memset(pool->base, 0, size);
 	return 0;
 }
 
