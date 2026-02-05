@@ -822,6 +822,14 @@ static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
 
 	data->queue_alloc_off = 0;
 
+	nvme_log("DMA pool: hugepage_size=%zuKB, total_size=%zuMB, extra_hugepages=%lu\n",
+		 hps >> 10, total_size >> 20, data->extra_hugepages);
+	nvme_log("DMA pool layout: queue[0-%zx) prp[%zx-%zx) io_buf[%zx-%zx) identify[%zx-%zx)\n",
+		 data->queue_region_off,
+		 data->prp_region_off, data->io_buf_region_off,
+		 data->io_buf_region_off, data->identify_buf_off,
+		 data->identify_buf_off, data->identify_buf_off + PAGE_SIZE);
+
 	return 0;
 }
 
