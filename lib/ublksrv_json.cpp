@@ -2,6 +2,8 @@
 
 #include <config.h>
 
+#include <uuid/uuid.h>
+
 #include <iostream>
 #include "nlohmann/json.hpp"
 #include "ublksrv_priv.h"
@@ -129,8 +131,29 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_segment,
 	max_segments,
 	pad)
 
+namespace nlohmann
+{
+	template <>
+	struct adl_serializer<struct ublk_param_uuid> {
+		static struct ublk_param_uuid from_json(const json& j) {
+			struct ublk_param_uuid p_uuid;
+			std::string uuid_str = j.at("uuid");
+
+			uuid_parse(uuid_str.c_str(), p_uuid.uuid);
+			return {p_uuid};
+		}
+
+		static void to_json(json& j, const struct ublk_param_uuid p) {
+			char uuid_str[UUID_STR_LEN];
+
+			uuid_unparse(p.uuid, uuid_str);
+			j["uuid"] = uuid_str;
+		}
+	};
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
-	len, types, basic, discard, devt, zoned, dma, seg)
+	len, types, basic, discard, devt, zoned, dma, seg, uuid)
 
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
 {
