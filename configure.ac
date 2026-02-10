@@ -85,6 +85,10 @@ AC_ARG_ENABLE(
 dnl Check for liburing (required).
 PKG_CHECK_MODULES([LIBURING], [liburing >= 2.2])
 
+dnl Check for libuuid (required)
+AC_CHECK_HEADERS([uuid/uuid.h],,
+	AC_MSG_ERROR(libuuid is required))
+
 dnl Check if io_uring_prep_sendmsg_zc which isn't supported on 2.2 yet
 AC_MSG_CHECKING([for io_uring_prep_sendmsg_zc])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[

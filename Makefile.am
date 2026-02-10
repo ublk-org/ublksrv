@@ -34,7 +34,7 @@ ublk_SOURCES = $(TGT_DIR)/ublk.cpp $(TGT_DIR)/ublksrv_tgt.cpp
 
 ublk_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_CPPFLAGS = $(ublk_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
-ublk_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
+ublk_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS) -luuid
 
 ublk_null_SOURCES = $(TGT_DIR)/ublk.null.cpp $(TGT_DIR)/ublksrv_tgt.cpp
 ublk_null_CFLAGS = $(ublk_CFLAGS)
