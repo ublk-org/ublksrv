@@ -6,6 +6,7 @@ libublksrv_la_SOURCES = \
 	ublksrv_cmd.c \
 	ublksrv_json.cpp \
 	ublksrv.c \
+	ublksrv_batch.c \
 	utils.c \
 	ublksrv_aio.c
 libublksrv_la_CFLAGS = \
