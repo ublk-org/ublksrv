@@ -575,6 +575,10 @@ struct ublk_param_segment {
 	__u16	pad;
 };
 
+struct ublk_param_uuid {
+	__u8 uuid[16];
+};
+
 struct ublk_params {
 	/*
 	 * Total length of parameters, userspace has to set 'len' for both
@@ -589,6 +593,7 @@ struct ublk_params {
 #define UBLK_PARAM_TYPE_ZONED           (1 << 3)
 #define UBLK_PARAM_TYPE_DMA_ALIGN       (1 << 4)
 #define UBLK_PARAM_TYPE_SEGMENT         (1 << 5)
+#define UBLK_PARAM_TYPE_UUID            (1 << 6)
 	__u32	types;			/* types of parameter included */
 
 	struct ublk_param_basic		basic;
@@ -597,6 +602,7 @@ struct ublk_params {
 	struct ublk_param_zoned	zoned;
 	struct ublk_param_dma_align	dma;
 	struct ublk_param_segment	seg;
+	struct ublk_param_uuid		uuid;
 };
 
 #endif
