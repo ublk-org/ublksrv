@@ -22,11 +22,12 @@
  *     sudo ublk.nvme_vfio add --noiommu -q 1 -d 128 --pci 0000:01:00.0
  *
  * Prerequisites:
- *   Standard mode:
+ *   Standard mode (iommufd + VFIO cdev):
  *     - IOMMU enabled (intel_iommu=on or amd_iommu=on)
  *     - vfio-pci module loaded
+ *     - /dev/iommu available (CONFIG_IOMMUFD)
  *
- *   NoIOMMU mode:
+ *   NoIOMMU mode (legacy VFIO container/group):
  *     - vfio-pci module loaded
  *     - noiommu mode is automatically enabled when --noiommu is passed
  *
@@ -41,6 +42,8 @@
 #include <sys/epoll.h>
 #include <limits.h>
 #include <linux/vfio.h>
+#include <linux/iommufd.h>
+#include <dirent.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -158,6 +161,11 @@ struct nvme_vfio_tgt_data {
 	int device_fd;
 	int iommu_group;
 	int use_noiommu;
+
+	/* iommufd handles (used when IOMMU is available, -1 for noiommu) */
+	int iommufd;
+	__u32 ioas_id;
+	__u32 dev_id;
 
 	/* NoIOMMU mode flag */
 	int force_noiommu;	/* --noiommu flag: use virtual addresses as IOVAs */
@@ -430,70 +438,27 @@ static __u64 nvme_get_iova(struct nvme_vfio_tgt_data *data, void *vaddr, size_t 
 }
 
 /*
- * Build PRP list with individual page addresses
- */
-static int nvme_build_prp_list(struct nvme_vfio_tgt_data *data,
-			       void *vaddr, size_t len, __u64 first_iova,
-			       __le64 *prp_list, int max_entries)
-{
-	__u64 vaddr_page = (__u64)vaddr;
-	__u64 iova;
-	size_t offset = 0;
-	size_t remaining = len;
-	int prp_index = 0;
-
-	/* Skip first page (already in PRP1) */
-	offset = PAGE_SIZE - (vaddr_page & (PAGE_SIZE - 1));
-	vaddr_page = ((__u64)vaddr + offset) & ~(PAGE_SIZE - 1);
-	remaining = (len > offset) ? (len - offset) : 0;
-
-	while (remaining > 0) {
-		if (prp_index >= max_entries) {
-			ublk_err("PRP list overflow\n");
-			return -1;
-		}
-
-		/* Get IOVA for this page */
-		if (!nvme_use_iommu(data)) {
-			uint64_t phys = dma_buf_pool_virt_to_phys(&data->dma_pool,
-								 (void *)vaddr_page);
-			if (phys == DMA_BUF_PHYS_ERROR) {
-				ublk_err("Failed to get physical address for page\n");
-				return -1;
-			}
-			iova = phys;
-		} else {
-			iova = first_iova + offset;
-		}
-
-		prp_list[prp_index++] = htole64(iova);
-
-		vaddr_page += PAGE_SIZE;
-		offset += PAGE_SIZE;
-		remaining = (remaining > PAGE_SIZE) ? (remaining - PAGE_SIZE) : 0;
-	}
-
-	return prp_index;
-}
-
-/*
  * Perform VFIO DMA mapping if needed
  */
 static int nvme_do_vfio_map(struct nvme_vfio_tgt_data *data,
 			    void *vaddr, __u64 iova, size_t size)
 {
-	struct vfio_iommu_type1_dma_map dma_map = { .argsz = sizeof(dma_map) };
+	struct iommu_ioas_map map = {};
 
 	if (!nvme_use_iommu(data))
 		return 0;
 
-	dma_map.vaddr = (__u64)vaddr;
-	dma_map.size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	dma_map.iova = iova;
-	dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
+	map.size = sizeof(map);
+	map.flags = IOMMU_IOAS_MAP_FIXED_IOVA |
+		    IOMMU_IOAS_MAP_WRITEABLE |
+		    IOMMU_IOAS_MAP_READABLE;
+	map.ioas_id = data->ioas_id;
+	map.user_va = (__u64)vaddr;
+	map.length = (size + PAGE_SIZE - 1) & ~((__u64)PAGE_SIZE - 1);
+	map.iova = iova;
 
-	if (ioctl(data->container_fd, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
-		ublk_err("VFIO_IOMMU_MAP_DMA: %s\n", strerror(errno));
+	if (ioctl(data->iommufd, IOMMU_IOAS_MAP, &map) < 0) {
+		ublk_err("IOMMU_IOAS_MAP: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -901,15 +866,17 @@ static __u64 nvme_map_dma(struct nvme_vfio_tgt_data *data,
 static void nvme_unmap_dma(struct nvme_vfio_tgt_data *data,
 			   struct nvme_dma_mapping *mapping)
 {
-	struct vfio_iommu_type1_dma_unmap dma_unmap = { .argsz = sizeof(dma_unmap) };
-
 	if (!mapping || !mapping->iova)
 		return;
 
 	if (nvme_use_iommu(data)) {
-		dma_unmap.iova = mapping->iova;
-		dma_unmap.size = mapping->size;
-		ioctl(data->container_fd, VFIO_IOMMU_UNMAP_DMA, &dma_unmap);
+		struct iommu_ioas_unmap unmap = {};
+
+		unmap.size = sizeof(unmap);
+		unmap.ioas_id = data->ioas_id;
+		unmap.iova = mapping->iova;
+		unmap.length = mapping->size;
+		ioctl(data->iommufd, IOMMU_IOAS_UNMAP, &unmap);
 	}
 
 	mapping->vaddr = 0;
@@ -1373,12 +1340,30 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 	if (data->bar0 && data->bar0 != MAP_FAILED)
 		munmap((void *)data->bar0, data->bar0_size);
 
-	if (data->device_fd >= 0)
-		close(data->device_fd);
-	if (data->group_fd >= 0)
-		close(data->group_fd);
-	if (data->container_fd >= 0)
-		close(data->container_fd);
+	if (data->iommufd >= 0) {
+		/* iommufd path: detach device, destroy IOAS, then close fds */
+		struct vfio_device_detach_iommufd_pt detach = {};
+		struct iommu_destroy destroy = {};
+
+		detach.argsz = sizeof(detach);
+		ioctl(data->device_fd, VFIO_DEVICE_DETACH_IOMMUFD_PT, &detach);
+
+		destroy.size = sizeof(destroy);
+		destroy.id = data->ioas_id;
+		ioctl(data->iommufd, IOMMU_DESTROY, &destroy);
+
+		if (data->device_fd >= 0)
+			close(data->device_fd);
+		close(data->iommufd);
+	} else {
+		/* Legacy noiommu path */
+		if (data->device_fd >= 0)
+			close(data->device_fd);
+		if (data->group_fd >= 0)
+			close(data->group_fd);
+		if (data->container_fd >= 0)
+			close(data->container_fd);
+	}
 
 	pthread_spin_destroy(&data->iova_lock);
 	nvme_dmabuf_pool_deinit(data);
@@ -1551,12 +1536,26 @@ static inline int nvme_setup_prps(struct nvme_rw_command *cmd,
 			cmd->prp2 = htole64(iova);
 		}
 	} else {
+		int max_prps = PAGE_SIZE / sizeof(__le64);
+		int prp_idx = 0;
+		__u64 prp_addr = iova;
+		size_t left = remaining;
+
 		cmd->prp2 = htole64(priv->prp_mapping.iova);
 
-		if (nvme_build_prp_list(data, io_buf, len,
-					priv->data_mapping.iova,
-					priv->prp_list,
-					PAGE_SIZE / sizeof(__le64)) < 0) {
+		/*
+		 * Build PRP list with sequential page-aligned addresses.
+		 * With IOMMU, the IOMMU creates a contiguous IOVA range,
+		 * so PRP entries are just sequential pages from the
+		 * starting IOVA.
+		 */
+		while (left > 0 && prp_idx < max_prps) {
+			priv->prp_list[prp_idx++] = htole64(prp_addr);
+			prp_addr += PAGE_SIZE;
+			left = (left > PAGE_SIZE) ? (left - PAGE_SIZE) : 0;
+		}
+		if (left > 0) {
+			ublk_err("PRP list overflow\n");
 			return -EINVAL;
 		}
 	}
@@ -1905,6 +1904,116 @@ err_close:
 	return -1;
 }
 
+/*
+ * Open VFIO cdev for a PCI device.
+ * Scans /sys/bus/pci/devices/{pci}/vfio-dev/ to find the vfioN name,
+ * then opens /dev/vfio/devices/vfioN.
+ */
+static int nvme_open_vfio_cdev(const char *pci_addr)
+{
+	char sysfs_path[256];
+	DIR *dir;
+	struct dirent *entry;
+	char dev_path[256];
+	int fd = -1;
+
+	snprintf(sysfs_path, sizeof(sysfs_path),
+		 "/sys/bus/pci/devices/%s/vfio-dev", pci_addr);
+
+	dir = opendir(sysfs_path);
+	if (!dir) {
+		ublk_err("opendir %s: %s\n", sysfs_path, strerror(errno));
+		return -1;
+	}
+
+	while ((entry = readdir(dir)) != NULL) {
+		if (entry->d_name[0] == '.')
+			continue;
+		snprintf(dev_path, sizeof(dev_path),
+			 "/dev/vfio/devices/%s", entry->d_name);
+		fd = open(dev_path, O_RDWR);
+		if (fd < 0)
+			ublk_err("open %s: %s\n", dev_path, strerror(errno));
+		break;
+	}
+
+	closedir(dir);
+
+	if (fd < 0)
+		ublk_err("No VFIO cdev found for %s\n", pci_addr);
+
+	return fd;
+}
+
+/*
+ * Setup iommufd-based VFIO device access.
+ * Opens /dev/iommu, the VFIO cdev, binds the device to iommufd,
+ * allocates an IOAS, and attaches the device to it.
+ */
+static int nvme_vfio_setup_iommufd(struct nvme_vfio_tgt_data *data)
+{
+	struct vfio_device_bind_iommufd bind = {};
+	struct iommu_ioas_alloc ioas_alloc = {};
+	struct vfio_device_attach_iommufd_pt attach = {};
+
+	/* Open /dev/iommu */
+	data->iommufd = open("/dev/iommu", O_RDWR);
+	if (data->iommufd < 0) {
+		ublk_err("open /dev/iommu: %s\n", strerror(errno));
+		return -1;
+	}
+
+	/* Open VFIO cdev */
+	data->device_fd = nvme_open_vfio_cdev(data->pci_addr);
+	if (data->device_fd < 0)
+		goto err_close_iommufd;
+
+	/* Bind device to iommufd */
+	bind.argsz = sizeof(bind);
+	bind.flags = 0;
+	bind.iommufd = data->iommufd;
+	if (ioctl(data->device_fd, VFIO_DEVICE_BIND_IOMMUFD, &bind) < 0) {
+		ublk_err("VFIO_DEVICE_BIND_IOMMUFD: %s\n", strerror(errno));
+		goto err_close_device;
+	}
+	data->dev_id = bind.out_devid;
+
+	/* Allocate IOAS */
+	ioas_alloc.size = sizeof(ioas_alloc);
+	ioas_alloc.flags = 0;
+	if (ioctl(data->iommufd, IOMMU_IOAS_ALLOC, &ioas_alloc) < 0) {
+		ublk_err("IOMMU_IOAS_ALLOC: %s\n", strerror(errno));
+		goto err_close_device;
+	}
+	data->ioas_id = ioas_alloc.out_ioas_id;
+
+	/* Attach device to IOAS */
+	attach.argsz = sizeof(attach);
+	attach.flags = 0;
+	attach.pt_id = data->ioas_id;
+	if (ioctl(data->device_fd, VFIO_DEVICE_ATTACH_IOMMUFD_PT, &attach) < 0) {
+		ublk_err("VFIO_DEVICE_ATTACH_IOMMUFD_PT: %s\n", strerror(errno));
+		goto err_destroy_ioas;
+	}
+
+	return 0;
+
+err_destroy_ioas:
+	{
+		struct iommu_destroy destroy = {};
+		destroy.size = sizeof(destroy);
+		destroy.id = data->ioas_id;
+		ioctl(data->iommufd, IOMMU_DESTROY, &destroy);
+	}
+err_close_device:
+	close(data->device_fd);
+	data->device_fd = -1;
+err_close_iommufd:
+	close(data->iommufd);
+	data->iommufd = -1;
+	return -1;
+}
+
 /* Per-queue private data */
 struct nvme_vfio_queue_data {
 	struct nvme_vfio_tgt_data *tgt_data;
@@ -1937,12 +2046,14 @@ static int nvme_vfio_setup_tgt(struct ublksrv_dev *dev)
 /*
  * Setup VFIO device and map BAR0.
  * Called after data->pci_addr is set.
+ *
+ * IOMMU mode:   uses iommufd + VFIO cdev (/dev/iommu + /dev/vfio/devices/vfioN)
+ * NoIOMMU mode: uses legacy VFIO container/group (/dev/vfio/vfio + /dev/vfio/{group})
  */
 static int nvme_vfio_setup(struct nvme_vfio_tgt_data *data)
 {
 	struct vfio_device_info device_info = { .argsz = sizeof(device_info) };
 	struct vfio_region_info region_info = { .argsz = sizeof(region_info) };
-	int version;
 
 	/* Setup VFIO binding */
 	if (setup_vfio_binding(data->pci_addr) < 0) {
@@ -1950,65 +2061,61 @@ static int nvme_vfio_setup(struct nvme_vfio_tgt_data *data)
 		return -1;
 	}
 
-	/* Get IOMMU group */
+	/* Get IOMMU group (needed to detect noiommu) */
 	data->iommu_group = get_iommu_group(data->pci_addr, &data->use_noiommu);
 	if (data->iommu_group < 0) {
 		ublk_err("Failed to get IOMMU group\n");
 		return -1;
 	}
 
-	/* Open container */
-	data->container_fd = open("/dev/vfio/vfio", O_RDWR);
-	if (data->container_fd < 0) {
-		ublk_err("open /dev/vfio/vfio: %s\n", strerror(errno));
-		return -1;
-	}
+	if (nvme_use_iommu(data)) {
+		/* IOMMU mode: use iommufd + VFIO cdev */
+		if (nvme_vfio_setup_iommufd(data) < 0)
+			return -1;
+	} else {
+		/* NoIOMMU mode: use legacy VFIO container/group */
+		int version;
 
-	/* Check API version */
-	version = ioctl(data->container_fd, VFIO_GET_API_VERSION);
-	if (version != VFIO_API_VERSION) {
-		ublk_err("VFIO API version mismatch\n");
-		return -1;
-	}
+		data->container_fd = open("/dev/vfio/vfio", O_RDWR);
+		if (data->container_fd < 0) {
+			ublk_err("open /dev/vfio/vfio: %s\n", strerror(errno));
+			return -1;
+		}
 
-	/* Check IOMMU support */
-	if (data->use_noiommu) {
+		version = ioctl(data->container_fd, VFIO_GET_API_VERSION);
+		if (version != VFIO_API_VERSION) {
+			ublk_err("VFIO API version mismatch\n");
+			return -1;
+		}
+
 		if (!ioctl(data->container_fd, VFIO_CHECK_EXTENSION, VFIO_NOIOMMU_IOMMU)) {
 			ublk_err("VFIO no-IOMMU not supported\n");
 			return -1;
 		}
-	} else {
-		if (!ioctl(data->container_fd, VFIO_CHECK_EXTENSION, VFIO_TYPE1_IOMMU)) {
-			ublk_err("VFIO Type1 IOMMU not supported\n");
+
+		data->group_fd = nvme_open_vfio_group(data->iommu_group,
+						      data->container_fd,
+						      &data->use_noiommu);
+		if (data->group_fd < 0)
+			return -1;
+
+		data->device_fd = ioctl(data->group_fd, VFIO_GROUP_GET_DEVICE_FD,
+					data->pci_addr);
+		if (data->device_fd < 0) {
+			ublk_err("VFIO_GROUP_GET_DEVICE_FD: %s\n", strerror(errno));
 			return -1;
 		}
 	}
 
-	/* Open VFIO group */
-	data->group_fd = nvme_open_vfio_group(data->iommu_group,
-					      data->container_fd,
-					      &data->use_noiommu);
-	if (data->group_fd < 0)
-		return -1;
-
-	/* Get device */
-	data->device_fd = ioctl(data->group_fd, VFIO_GROUP_GET_DEVICE_FD, data->pci_addr);
-	if (data->device_fd < 0) {
-		ublk_err("VFIO_GROUP_GET_DEVICE_FD: %s\n", strerror(errno));
-		return -1;
-	}
-
-	/* Get device info */
+	/* Common post-setup: device info, bus mastering, BAR0 mmap */
 	if (ioctl(data->device_fd, VFIO_DEVICE_GET_INFO, &device_info) < 0) {
 		ublk_err("VFIO_DEVICE_GET_INFO: %s\n", strerror(errno));
 		return -1;
 	}
 
-	/* Enable PCI Bus Mastering */
 	if (nvme_enable_pci_bus_master(data->device_fd) < 0)
 		return -1;
 
-	/* Map BAR0 */
 	region_info.index = 0;
 	if (ioctl(data->device_fd, VFIO_DEVICE_GET_REGION_INFO, &region_info) < 0) {
 		ublk_err("VFIO_DEVICE_GET_REGION_INFO: %s\n", strerror(errno));
@@ -2131,6 +2238,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	data->container_fd = -1;
 	data->group_fd = -1;
 	data->device_fd = -1;
+	data->iommufd = -1;
 	data->next_iova = 0x100000000ULL;
 	data->nr_io_queues = info->nr_hw_queues;
 	data->queue_depth = info->queue_depth;

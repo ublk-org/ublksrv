@@ -229,6 +229,10 @@ if test -z "$DOXYGEN"; then
 fi
 AM_CONDITIONAL([HAVE_DOXYGEN], [test -n "$DOXYGEN"])
 
+dnl Check for linux/iommufd.h (required for nvme_vfio target)
+AC_CHECK_HEADERS([linux/iommufd.h])
+AM_CONDITIONAL([HAVE_IOMMUFD], [test "x$ac_cv_header_linux_iommufd_h" = "xyes"])
+
 dnl Produce output files.
 AC_CONFIG_HEADERS([config.h])
 

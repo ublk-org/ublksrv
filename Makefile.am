@@ -14,7 +14,7 @@ AM_CXXFLAGS = -std=c++20 -Wunused
 TGT_DIR = targets
 TGT_INC = $(top_srcdir)/$(TGT_DIR)/include
 
-sbin_PROGRAMS = ublk ublk.null ublk.loop ublk.nbd ublk.nvme_vfio ublk.sheepdog ublk_user_id
+sbin_PROGRAMS = ublk ublk.null ublk.loop ublk.nbd ublk.sheepdog ublk_user_id
 noinst_PROGRAMS = demo_null demo_event
 dist_sbin_SCRIPTS = utils/ublk_chown.sh utils/ublk_chown_docker.sh
 
@@ -24,6 +24,10 @@ endif
 
 if HAVE_LIBISCSI
 sbin_PROGRAMS += ublk.iscsi
+endif
+
+if HAVE_IOMMUFD
+sbin_PROGRAMS += ublk.nvme_vfio
 endif
 
 ublk_SOURCES = $(TGT_DIR)/ublk.cpp $(TGT_DIR)/ublksrv_tgt.cpp
