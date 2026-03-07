@@ -75,6 +75,15 @@
 #define ublk_mb()	__sync_synchronize()
 #endif
 
+/* DMA read barrier - compiler barrier on x86 (matches kernel dma_rmb()) */
+#if defined(__x86_64__) || defined(__i386__)
+#define ublk_dma_rmb()  __asm__ __volatile__("" ::: "memory")
+#elif defined(__aarch64__)
+#define ublk_dma_rmb()  __asm__ __volatile__("dmb oshld" ::: "memory")
+#else
+#define ublk_dma_rmb()  ublk_rmb()
+#endif
+
 #ifdef DEBUG
 #define nvme_dbg  ublk_dbg
 #else
@@ -1409,9 +1418,14 @@ static inline bool nvme_cqe_pending(struct nvme_queue *nvmeq)
 /* Update CQ head and phase */
 static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
 {
-	nvmeq->cq_head = (nvmeq->cq_head + 1) % nvmeq->qsize;
-	if (nvmeq->cq_head == 0)
-		nvmeq->cq_phase = !nvmeq->cq_phase;
+	__u32 tmp = nvmeq->cq_head + 1;
+
+	if (tmp == nvmeq->qsize) {
+		nvmeq->cq_head = 0;
+		nvmeq->cq_phase ^= 1;
+	} else {
+		nvmeq->cq_head = tmp;
+	}
 }
 
 /* Perform synchronous user copy between ublk device and NVMe IO buffer.
@@ -1461,7 +1475,7 @@ static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
 
 		found = true;
 
-		ublk_rmb();
+		ublk_dma_rmb();
 
 		status_field = READ_ONCE(cqe->status);
 		cid = READ_ONCE(cqe->command_id);
@@ -1662,7 +1676,6 @@ static int nvme_queue_rw_io(const struct ublksrv_queue *q,
 			    const struct ublksrv_io_desc *iod, int tag,
 			    struct nvme_vfio_tgt_data *data)
 {
-	struct nvme_rw_command *cmd;
 	struct nvme_io_priv *priv;
 	__u64 slba, iova;
 	__u32 nlb;
@@ -1698,32 +1711,27 @@ static int nvme_queue_rw_io(const struct ublksrv_queue *q,
 			return ret;
 	}
 
-	/* Get SQ entry */
-	cmd = (struct nvme_rw_command *)nvmeq->sq_buffer + nvmeq->sq_tail;
+	/* Build command on stack (L1 cache), then copy to SQ (DMA memory) */
+	struct nvme_rw_command stack_cmd = {};
 
-	cmd->opcode = (op == UBLK_IO_OP_WRITE) ? NVME_CMD_WRITE : NVME_CMD_READ;
-	cmd->flags = 0;
-	cmd->cid = tag;
-	cmd->nsid = data->nsid;
-	cmd->rsvd2 = 0;
-	cmd->metadata = 0;
-	cmd->slba = htole64(slba);
-	cmd->length = htole16(nlb);
-	cmd->control = (ublksrv_get_flags(iod) & UBLK_IO_F_FUA) ? htole16(NVME_RW_FUA) : 0;
-	cmd->dsmgmt = 0;
-	cmd->reftag = 0;
-	cmd->apptag = 0;
-	cmd->appmask = 0;
+	stack_cmd.opcode = (op == UBLK_IO_OP_WRITE) ? NVME_CMD_WRITE : NVME_CMD_READ;
+	stack_cmd.cid = tag;
+	stack_cmd.nsid = data->nsid;
+	stack_cmd.slba = htole64(slba);
+	stack_cmd.length = htole16(nlb);
+	stack_cmd.control = (ublksrv_get_flags(iod) & UBLK_IO_F_FUA) ? htole16(NVME_RW_FUA) : 0;
 
 	/* Setup data pointers - use SGL if supported, otherwise PRP */
 	if (nvme_sgl_supported(data)) {
-		if (nvme_setup_sgl(cmd, data, priv, io_buf, iova, len) < 0)
+		if (nvme_setup_sgl(&stack_cmd, data, priv, io_buf, iova, len) < 0)
 			return -EINVAL;
 	} else {
-		if (nvme_setup_prps(cmd, data, priv, io_buf, iova, len) < 0)
+		if (nvme_setup_prps(&stack_cmd, data, priv, io_buf, iova, len) < 0)
 			return -EINVAL;
 	}
 
+	memcpy((struct nvme_rw_command *)nvmeq->sq_buffer + nvmeq->sq_tail,
+	       &stack_cmd, sizeof(stack_cmd));
 	nvme_sq_submit_cmd(nvmeq);
 
 	return 0;
@@ -1735,26 +1743,14 @@ static int nvme_queue_flush_io(const struct ublksrv_queue *q,
 			       const struct ublksrv_io_desc *iod, int tag,
 			       struct nvme_vfio_tgt_data *data)
 {
-	struct nvme_common_command *cmd;
+	struct nvme_common_command stack_cmd = {};
 
-	cmd = (struct nvme_common_command *)nvmeq->sq_buffer + nvmeq->sq_tail;
+	stack_cmd.opcode = NVME_CMD_FLUSH;
+	stack_cmd.cid = tag;
+	stack_cmd.nsid = data->nsid;
 
-	cmd->opcode = NVME_CMD_FLUSH;
-	cmd->flags = 0;
-	cmd->cid = tag;
-	cmd->nsid = data->nsid;
-	cmd->cdw2[0] = 0;
-	cmd->cdw2[1] = 0;
-	cmd->metadata = 0;
-	cmd->prp1 = 0;
-	cmd->prp2 = 0;
-	cmd->cdw10 = 0;
-	cmd->cdw11 = 0;
-	cmd->cdw12 = 0;
-	cmd->cdw13 = 0;
-	cmd->cdw14 = 0;
-	cmd->cdw15 = 0;
-
+	memcpy((struct nvme_common_command *)nvmeq->sq_buffer + nvmeq->sq_tail,
+	       &stack_cmd, sizeof(stack_cmd));
 	nvme_sq_submit_cmd(nvmeq);
 
 	return 0;
@@ -1766,7 +1762,6 @@ static int nvme_queue_discard_io(const struct ublksrv_queue *q,
 				 const struct ublksrv_io_desc *iod, int tag,
 				 struct nvme_vfio_tgt_data *data)
 {
-	struct nvme_common_command *cmd;
 	struct nvme_io_priv *priv;
 	struct nvme_dsm_range *range;
 	__u64 slba;
@@ -1785,17 +1780,17 @@ static int nvme_queue_discard_io(const struct ublksrv_queue *q,
 	range->nlb = htole32(nlb);
 	range->slba = htole64(slba);
 
-	cmd = (struct nvme_common_command *)nvmeq->sq_buffer + nvmeq->sq_tail;
-	memset(cmd, 0, sizeof(*cmd));
+	struct nvme_common_command stack_cmd = {};
 
-	cmd->opcode = NVME_CMD_DSM;
-	cmd->flags = 0;
-	cmd->cid = tag;
-	cmd->nsid = htole32(data->nsid);
-	cmd->prp1 = htole64(priv->prp_mapping.iova);
-	cmd->cdw10 = htole32(0);  /* Number of ranges - 1 (single range) */
-	cmd->cdw11 = htole32(NVME_DSMGMT_AD);  /* Deallocate attribute */
+	stack_cmd.opcode = NVME_CMD_DSM;
+	stack_cmd.cid = tag;
+	stack_cmd.nsid = htole32(data->nsid);
+	stack_cmd.prp1 = htole64(priv->prp_mapping.iova);
+	stack_cmd.cdw10 = htole32(0);  /* Number of ranges - 1 (single range) */
+	stack_cmd.cdw11 = htole32(NVME_DSMGMT_AD);  /* Deallocate attribute */
 
+	memcpy((struct nvme_common_command *)nvmeq->sq_buffer + nvmeq->sq_tail,
+	       &stack_cmd, sizeof(stack_cmd));
 	nvme_sq_submit_cmd(nvmeq);
 
 	return 0;
@@ -2420,9 +2415,8 @@ static void nvme_vfio_handle_io_background(const struct ublksrv_queue *q,
 	/* Flush any pending SQ submissions */
 	nvme_sq_flush(nvmeq);
 
-	/* Poll NVMe CQ for completions until no more are found */
-	while (nvme_poll_cq(q, nvmeq, data))
-		;
+	/* Poll NVMe CQ for completions */
+	while (nvme_poll_cq(q, nvmeq, data)) {};
 }
 
 static int nvme_vfio_handle_io_async(const struct ublksrv_queue *q,
