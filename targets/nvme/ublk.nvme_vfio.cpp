@@ -1393,16 +1393,21 @@ static inline void nvme_sq_flush(struct nvme_queue *nvmeq)
 /* Submit command to SQ */
 static inline void nvme_sq_submit_cmd(struct nvme_queue *nvmeq)
 {
-	__u16 next_tail;
+	__u16 next_tail, pending;
 
 	if (++nvmeq->sq_tail == nvmeq->qsize)
 		nvmeq->sq_tail = 0;
 
-	next_tail = nvmeq->sq_tail + 1;
-	if (next_tail == nvmeq->qsize)
-		next_tail = 0;
-	if (next_tail != nvmeq->last_sq_tail)
-		return;
+	/* Flush when batch reaches 32 or SQ is full */
+	pending = (nvmeq->sq_tail + nvmeq->qsize - nvmeq->last_sq_tail)
+		  % nvmeq->qsize;
+	if (pending < 32) {
+		next_tail = nvmeq->sq_tail + 1;
+		if (next_tail == nvmeq->qsize)
+			next_tail = 0;
+		if (next_tail != nvmeq->last_sq_tail)
+			return;
+	}
 
 	nvme_sq_flush(nvmeq);
 }
