@@ -520,81 +520,47 @@ static int unbind_driver(const char *pci_addr)
 	return 0;
 }
 
-/* Bind device to vfio-pci driver */
+/*
+ * Bind device to vfio-pci driver using driver_override.
+ *
+ * The driver_override approach is preferred over new_id + bind because
+ * writing to new_id triggers auto-probe which races with the explicit
+ * bind, causing EBUSY errors on the first attempt.
+ */
 static int bind_vfio_pci(const char *pci_addr)
 {
-	char path[256], vendor[16], device[16];
-	char vendor_device[32];
+	char path[256];
 	int fd;
 
-	/* Read vendor:device ID */
+	/* Set driver_override to vfio-pci */
 	snprintf(path, sizeof(path),
-		"/sys/bus/pci/devices/%s/vendor", pci_addr);
-	fd = open(path, O_RDONLY);
+		"/sys/bus/pci/devices/%s/driver_override", pci_addr);
+	fd = open(path, O_WRONLY);
 	if (fd < 0) {
-		ublk_err("open vendor: %s\n", strerror(errno));
+		ublk_err("open driver_override: %s\n", strerror(errno));
 		return -1;
 	}
-	if (read(fd, vendor, sizeof(vendor)) < 0) {
-		ublk_err("read vendor: %s\n", strerror(errno));
+	if (write(fd, "vfio-pci", 8) < 0) {
+		ublk_err("write driver_override: %s\n", strerror(errno));
 		close(fd);
 		return -1;
 	}
 	close(fd);
-	vendor[strcspn(vendor, "\n")] = 0;
 
-	snprintf(path, sizeof(path),
-		"/sys/bus/pci/devices/%s/device", pci_addr);
-	fd = open(path, O_RDONLY);
+	/* Trigger driver probe for the device */
+	fd = open("/sys/bus/pci/drivers_probe", O_WRONLY);
 	if (fd < 0) {
-		ublk_err("open device: %s\n", strerror(errno));
+		ublk_err("open drivers_probe: %s\n", strerror(errno));
 		return -1;
 	}
-	if (read(fd, device, sizeof(device)) < 0) {
-		ublk_err("read device: %s\n", strerror(errno));
-		close(fd);
-		return -1;
-	}
-	close(fd);
-	device[strcspn(device, "\n")] = 0;
-
-	/* Remove 0x prefix and format as "vendor device" */
-	snprintf(vendor_device, sizeof(vendor_device), "%s %s",
-		vendor + 2, device + 2);
-
-	/* Add device ID to vfio-pci */
-	fd = open("/sys/bus/pci/drivers/vfio-pci/new_id", O_WRONLY);
-	if (fd < 0) {
-		ublk_err("open new_id: %s\n", strerror(errno));
-		return -1;
-	}
-
-	if (write(fd, vendor_device, strlen(vendor_device)) < 0) {
-		if (errno != EEXIST) {
-			ublk_err("write new_id: %s\n", strerror(errno));
-			close(fd);
-			return -1;
-		}
-	}
-	close(fd);
-
-	/* Explicitly bind the device */
-	fd = open("/sys/bus/pci/drivers/vfio-pci/bind", O_WRONLY);
-	if (fd < 0) {
-		ublk_err("open vfio-pci bind: %s\n", strerror(errno));
-		return -1;
-	}
-
 	if (write(fd, pci_addr, strlen(pci_addr)) < 0) {
-		if (errno != EEXIST) {
-			ublk_err("bind to vfio-pci: %s\n", strerror(errno));
-			close(fd);
-			return -1;
-		}
+		ublk_err("write drivers_probe: %s\n", strerror(errno));
+		close(fd);
+		return -1;
 	}
 	close(fd);
 
-	usleep(200000);  /* 200ms delay */
+	usleep(200000);  /* 200ms for driver probe to complete */
 
 	return 0;
 }
