@@ -138,8 +138,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ublk_param_integrity,
 	csum_type,
 	tag_size)
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_param_dma_dev,
+	base_iova,
+	iommufd,
+	ioas_id,
+	vfio_dev_fd)
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(struct ublk_params,
-	len, types, basic, discard, devt, zoned, dma, seg, integrity)
+	len, types, basic, discard, devt, zoned, dma, seg, integrity, dma_dev)
 
 struct ublksrv_tgt_jbuf *ublksrv_tgt_get_jbuf(const struct ublksrv_ctrl_dev *cdev)
 {

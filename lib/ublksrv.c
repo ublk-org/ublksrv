@@ -248,6 +248,13 @@ void ublksrv_queue_dec_tgt_io_inflight(const struct ublksrv_queue *tq)
 	q->tgt_io_inflight--;
 }
 
+unsigned ublksrv_queue_get_tgt_io_inflight(const struct ublksrv_queue *tq)
+{
+	struct _ublksrv_queue *q = tq_to_local(tq);
+
+	return q->tgt_io_inflight;
+}
+
 /*
  * eventfd is treated as special target IO which has to be queued
  * when queue is setup

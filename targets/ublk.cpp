@@ -360,6 +360,9 @@ static int cmd_dev_get_features(int argc, char *argv[])
 		[const_ilog2(UBLK_F_INTEGRITY)] = "INTEGRITY",
 		[const_ilog2(UBLK_F_SAFE_STOP_DEV)] = "SAFE_STOP_DEV",
 		[const_ilog2(UBLK_F_NO_AUTO_PART_SCAN)] = "NO_AUTO_PART_SCAN",
+		[19] = "UNKNOWN",
+		[const_ilog2(UBLK_F_BPF)] = "BPF",
+		[const_ilog2(UBLK_F_BPF_DMA)] = "BPF_DMA",
 	};
 
 	if (!dev) {

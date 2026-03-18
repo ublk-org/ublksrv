@@ -35,9 +35,20 @@ int dma_buf_pool_init(struct dma_buf_pool *pool, size_t size)
 	}
 
 	pool->size = size;
+	pool->external = false;
 	pool->pagemap_cache = NULL;
 	pool->pagemap_nr_pages = 0;
 
+	return 0;
+}
+
+int dma_buf_pool_init_external(struct dma_buf_pool *pool, void *base, size_t size)
+{
+	pool->base = base;
+	pool->size = size;
+	pool->external = true;
+	pool->pagemap_cache = NULL;
+	pool->pagemap_nr_pages = 0;
 	return 0;
 }
 
@@ -127,12 +138,13 @@ void dma_buf_pool_deinit(struct dma_buf_pool *pool)
 		free(pool->pagemap_cache);
 		pool->pagemap_cache = NULL;
 	}
-	if (pool->base && pool->base != MAP_FAILED) {
+	if (pool->base && pool->base != MAP_FAILED && !pool->external) {
 		if (munmap(pool->base, pool->size) < 0)
 			ublk_err("dma_buf_pool: munmap failed: %s\n",
 				 strerror(errno));
-		pool->base = NULL;
 	}
+	pool->base = NULL;
 	pool->size = 0;
+	pool->external = false;
 	pool->pagemap_nr_pages = 0;
 }

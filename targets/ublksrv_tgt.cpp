@@ -366,6 +366,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "max_io_buf_bytes",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
 		{ "batch-io",	0,	NULL, 'b'},
+		{ "bpf",	0,	NULL, 0},
 		{ NULL }
 	};
 
@@ -424,6 +425,9 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 				*efd = strtol(optarg, NULL, 10);
 			if (!strcmp(longopts[option_index].name, "max_io_buf_bytes"))
 				data->max_io_buf_bytes = strtol(optarg, NULL, 10);
+			if (!strcmp(longopts[option_index].name, "bpf"))
+				data->flags |= UBLK_F_BPF | UBLK_F_BPF_DMA |
+					       UBLK_F_USER_COPY;
 			break;
 		}
 	}

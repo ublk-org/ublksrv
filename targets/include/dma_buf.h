@@ -2,6 +2,7 @@
 #ifndef UBLKSRV_DMA_BUF_H
 #define UBLKSRV_DMA_BUF_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -25,6 +26,7 @@ extern "C" {
 struct dma_buf_pool {
 	void *base;			/* mmap'd base address */
 	size_t size;			/* total allocated size */
+	bool external;			/* true = base is externally managed, skip munmap */
 
 	/* Pagemap cache for physical address lookup (noiommu mode) */
 	uint64_t *pagemap_cache;
@@ -72,6 +74,19 @@ uint64_t dma_buf_pool_virt_to_phys(struct dma_buf_pool *pool, void *vaddr);
  *
  * @param pool Pool to deinitialize
  */
+/**
+ * Initialize a DMA buffer pool with externally managed memory
+ *
+ * The pool will use the provided base/size but will NOT munmap on deinit.
+ * Used for BPF arena backing where the skeleton owns the mmap.
+ *
+ * @param pool Pool structure to initialize
+ * @param base Pre-allocated base address
+ * @param size Size of the region in bytes
+ * @return 0 on success
+ */
+int dma_buf_pool_init_external(struct dma_buf_pool *pool, void *base, size_t size);
+
 void dma_buf_pool_deinit(struct dma_buf_pool *pool);
 
 #ifdef __cplusplus

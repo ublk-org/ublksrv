@@ -26,7 +26,7 @@ if HAVE_LIBISCSI
 sbin_PROGRAMS += ublk.iscsi
 endif
 
-if HAVE_IOMMUFD
+if BUILD_NVME_VFIO
 sbin_PROGRAMS += ublk.nvme_vfio
 endif
 
@@ -56,10 +56,30 @@ ublk_nbd_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_nbd_CPPFLAGS = $(ublk_nbd_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_nbd_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
+BPF_DIR = bpf
+
+ARCH := $(shell uname -m | sed 's/x86_64/x86/' | sed 's/aarch64/arm64/')
+
+# Generate vmlinux.h from running kernel's BTF
+$(BPF_DIR)/vmlinux.h: /sys/kernel/btf/vmlinux
+	$(BPFTOOL) btf dump file $< format c > $@
+
+# BPF program compilation: .bpf.c → .bpf.o → .bpf.skel.h
+$(BPF_DIR)/ublk_nvme_vfio.bpf.o: $(BPF_DIR)/ublk_nvme_vfio.bpf.c $(BPF_DIR)/vmlinux.h
+	$(CLANG) -target bpf -O2 -g -Wall -D__TARGET_ARCH_$(ARCH) \
+		$(LIBBPF_CFLAGS) -I$(BPF_DIR) -c $< -o $@
+
+$(BPF_DIR)/ublk_nvme_vfio.bpf.skel.h: $(BPF_DIR)/ublk_nvme_vfio.bpf.o
+	$(BPFTOOL) gen skeleton $< name ublk_nvme_vfio > $@
+
+if HAVE_LIBBPF
+BUILT_SOURCES = $(BPF_DIR)/ublk_nvme_vfio.bpf.skel.h
+endif
+
 ublk_nvme_vfio_SOURCES = $(TGT_DIR)/nvme/ublk.nvme_vfio.cpp $(TGT_DIR)/dma_buf.c $(TGT_DIR)/ublksrv_tgt.cpp
-ublk_nvme_vfio_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
-ublk_nvme_vfio_CPPFLAGS = $(ublk_nvme_vfio_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
-ublk_nvme_vfio_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
+ublk_nvme_vfio_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS) $(LIBBPF_CFLAGS)
+ublk_nvme_vfio_CPPFLAGS = $(ublk_nvme_vfio_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC) -I$(top_srcdir)/bpf
+ublk_nvme_vfio_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS) $(LIBBPF_LIBS)
 
 ublk_sheepdog_SOURCES = $(TGT_DIR)/sheepdog/ublk.sheepdog.cpp $(TGT_DIR)/sheepdog/sheep.c $(TGT_DIR)/ublksrv_tgt.cpp
 ublk_sheepdog_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
@@ -89,7 +109,9 @@ ublk_user_id_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ublksrv.pc
 
-CLEANFILES = *~ test cscope.* include/*~ *.d nbd/*~ utils/*~ doc/html/*
+CLEANFILES = *~ test cscope.* include/*~ *.d nbd/*~ utils/*~ doc/html/* \
+	     $(BPF_DIR)/ublk_nvme_vfio.bpf.o $(BPF_DIR)/ublk_nvme_vfio.bpf.skel.h \
+	     $(BPF_DIR)/vmlinux.h
 
 R = 10
 D = tests/tmp/

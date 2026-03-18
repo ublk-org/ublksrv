@@ -55,8 +55,142 @@
 
 #include "dma_buf.h"
 
+#include <bpf/libbpf.h>
+#include <bpf/bpf.h>
+
+/* Types referenced by the BPF skeleton (must precede skel.h) */
+struct nvme_rw_cmd {
+	__u8  opcode;
+	__u8  flags;
+	__u16 cid;
+	__u32 nsid;
+	__u64 rsvd2;
+	__u64 metadata;
+	__u64 prp1;
+	__u64 prp2;
+	__u64 slba;
+	__u16 length;
+	__u16 control;
+	__u32 dsmgmt;
+	__u32 reftag;
+	__u16 apptag;
+	__u16 appmask;
+} __attribute__((aligned(64)));
+
+struct sq_state {
+	__u32 sq_lock;		/* bpf_spin_lock (opaque to userspace) */
+	__u32 _pad0;
+	__u64 sq_dma;
+	__u64 prp_base_iova;
+	__u32 sq_arena_off;	/* arena byte offset to SQ entries */
+	__u32 cq_arena_off;	/* arena byte offset to CQ entries */
+	__u32 prp_arena_off;	/* arena byte offset to PRP lists */
+	__u16 sq_tail;
+	__u16 last_sq_tail;
+	__u16 qsize;
+	__u16 qdepth;
+	__u32 db_offset;
+} __attribute__((aligned(64)));
+
+/* NVMe CQ entry — must match BPF's struct nvme_cqe */
+struct nvme_cqe {
+	__u32 result;
+	__u32 rsvd;
+	__u16 sq_head;
+	__u16 sq_id;
+	__u16 command_id;
+	__u16 status;
+};
+
+#include "ublk_nvme_vfio.bpf.skel.h"
+
 #define PAGE_SIZE 4096
+#define PAGE_ALIGN(x) (((x) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1))
 #define ADMIN_Q_SIZE 64
+
+/*
+ * Unified pool layout — computed once, used by both hugepage and arena paths.
+ *
+ * Layout (all sections page-aligned):
+ *   admin_sq | admin_cq | identify | io_sq[0..N-1] | io_cq[0..N-1] |
+ *   prp[0..N-1] | [io_buf[0..N-1]]
+ *
+ * Identify buffer placed after admin CQ so Phase 1 (admin-only) can use it.
+ */
+struct nvme_pool_layout {
+	size_t admin_sq_off, admin_sq_size;
+	size_t admin_cq_off, admin_cq_size;
+	size_t identify_off;
+	size_t io_sq_off, io_sq_stride;   /* io_sq[i] at io_sq_off + i * io_sq_stride */
+	size_t io_cq_off, io_cq_stride;
+	size_t prp_off, prp_stride;       /* prp[q] at prp_off + q * prp_stride */
+	size_t io_buf_off, io_buf_stride;  /* 0 if not needed (BPF/zero-copy) */
+	size_t total_size;
+};
+
+/*
+ * Compute unified pool layout.
+ *
+ * @nr_queues: number of IO queues (0 = admin-only layout)
+ * @depth: IO queue depth (entries, not including wrap slot)
+ * @io_buf_size: per-tag IO buffer size (0 = no IO buffers)
+ */
+static void nvme_compute_pool_layout(struct nvme_pool_layout *layout,
+				     int nr_queues, int depth,
+				     size_t io_buf_size)
+{
+	size_t off = 0;
+
+	layout->admin_sq_off = off;
+	layout->admin_sq_size = PAGE_ALIGN(ADMIN_Q_SIZE * 64);
+	off += layout->admin_sq_size;
+
+	layout->admin_cq_off = off;
+	layout->admin_cq_size = PAGE_ALIGN(ADMIN_Q_SIZE * 16);
+	off += layout->admin_cq_size;
+
+	layout->identify_off = off;
+	off += PAGE_SIZE;
+
+	if (nr_queues > 0) {
+		int qsize = depth + 1;
+
+		layout->io_sq_off = off;
+		layout->io_sq_stride = PAGE_ALIGN(qsize * 64);
+		off += nr_queues * layout->io_sq_stride;
+
+		layout->io_cq_off = off;
+		layout->io_cq_stride = PAGE_ALIGN(qsize * 16);
+		off += nr_queues * layout->io_cq_stride;
+
+		layout->prp_off = off;
+		layout->prp_stride = depth * PAGE_SIZE;
+		off += nr_queues * layout->prp_stride;
+
+		if (io_buf_size > 0) {
+			layout->io_buf_off = off;
+			layout->io_buf_stride = depth * io_buf_size;
+			off += nr_queues * layout->io_buf_stride;
+		} else {
+			layout->io_buf_off = 0;
+			layout->io_buf_stride = 0;
+		}
+	} else {
+		layout->io_sq_off = layout->io_cq_off = 0;
+		layout->io_sq_stride = layout->io_cq_stride = 0;
+		layout->prp_off = layout->prp_stride = 0;
+		layout->io_buf_off = layout->io_buf_stride = 0;
+	}
+
+	layout->total_size = off;
+}
+
+static size_t nvme_admin_pool_size(void)
+{
+	return PAGE_ALIGN(ADMIN_Q_SIZE * 64) +
+	       PAGE_ALIGN(ADMIN_Q_SIZE * 16) +
+	       PAGE_SIZE;
+}
 
 /*
  * Memory barriers (aligned with SPDK barrier.h)
@@ -128,6 +262,16 @@ struct nvme_io_priv {
 	struct nvme_dma_mapping data_mapping;  /* I/O data buffer mapping */
 	struct nvme_dma_mapping prp_mapping;   /* PRP list buffer mapping */
 	__le64 *prp_list;                       /* PRP list buffer (virtual addr) */
+
+	/*
+	 * BPF mode: NVMe CQE can arrive before the io_uring FETCH CQE
+	 * is consumed by userspace. We must defer ublksrv_complete_io
+	 * until the FETCH is consumed, otherwise COMMIT_AND_FETCH
+	 * conflicts with the pending FETCH in the io_uring CQ ring.
+	 */
+	bool fetch_done;	/* FETCH consumed by userspace */
+	bool cqe_early;		/* CQE arrived before FETCH consumed */
+	int  cqe_result;	/* saved result for deferred completion */
 };
 
 /* Queue Structure */
@@ -154,6 +298,9 @@ struct nvme_queue {
 	/* Doorbell registers */
 	volatile __u32 *sq_doorbell;
 	volatile __u32 *cq_doorbell;
+
+	/* Last CQE result (CDW0) — needed for Set Features response */
+	__u32 last_cqe_result;
 };
 
 /* Target Private Data */
@@ -163,6 +310,7 @@ struct nvme_vfio_tgt_data {
 	__u64 dev_size;
 
 	bool user_copy;  /* UBLK_F_USER_COPY mode flag */
+	bool zero_copy;  /* UBLK_F_BPF_DMA: kernel maps bio pages via iommufd */
 
 	/* VFIO handles */
 	int container_fd;
@@ -206,14 +354,8 @@ struct nvme_vfio_tgt_data {
 	/* DMA buffer pool for pinned DMA memory */
 	struct dma_buf_pool dma_pool;
 
-	/* Region layout (offsets from dma_pool.base) */
-	size_t queue_region_off;	/* end of queue region (= prp_region_off) */
-	size_t prp_region_off;		/* offset to PRP list region */
-	size_t io_buf_region_off;	/* offset to I/O buffer region */
-	size_t identify_buf_off;	/* offset to identify buffer */
-
-	/* Queue buffer allocation state (bump allocator) */
-	size_t queue_alloc_off;
+	/* Unified pool layout (offsets from dma_pool.base) */
+	struct nvme_pool_layout layout;
 
 	char pci_addr[16];
 	int numa_node;
@@ -223,6 +365,14 @@ struct nvme_vfio_tgt_data {
 
 	/* Hugepage size in bytes (read from /proc/meminfo) */
 	size_t hugepage_size;
+
+	/* BPF mode: SQ submission handled by BPF struct_ops */
+	bool bpf_mode;
+	struct ublk_nvme_vfio *bpf_skel;
+	struct bpf_link *bpf_link;
+	void *arena_mmap;		/* mmap'd arena base */
+	size_t arena_mmap_size;
+	struct nvme_dma_mapping arena_dma_mapping;
 };
 
 /* Helper: Read 32-bit register */
@@ -261,10 +411,11 @@ static int nvme_validate_params(struct nvme_vfio_tgt_data *data, __u64 cap)
 		return -EINVAL;
 	}
 
+	/* Clamp queue depth to MQES instead of erroring */
 	if (data->queue_depth > mqes) {
-		ublk_err("queue_depth %u exceeds NVMe MQES %u\n",
+		nvme_log("Clamping queue_depth %u to MQES %u\n",
 			 data->queue_depth, mqes);
-		return -EINVAL;
+		data->queue_depth = mqes;
 	}
 
 	return 0;
@@ -711,96 +862,91 @@ static int nvme_ensure_hugepages(size_t needed_bytes, size_t hugepage_size,
 	return 0;
 }
 
-static int nvme_dmabuf_pool_init(struct nvme_vfio_tgt_data *data)
+/*
+ * Two-phase hugepage pool init.
+ *
+ * Phase 1 (early_init): Allocate the full hugepage pool sized from CLI
+ * args (the maximum). Compute admin-only layout so controller init and
+ * Identify can use the pool head.
+ *
+ * Phase 2 (finish_init): Recompute layout with final params (nr_io_queues
+ * may have been clamped by Set Features). No memory operations — pool is
+ * already big enough. This is effectively a nop.
+ */
+static int nvme_hugepage_pool_early_init(struct nvme_vfio_tgt_data *data)
 {
-	size_t queue_region, prp_region, io_buf_region, total_size;
-	size_t admin_sq_size, admin_cq_size, io_sq_size, io_cq_size;
-	int nr_queues = data->nr_io_queues;
-	int depth = data->queue_depth;
-	size_t io_buf_size = data->max_io_buf_bytes;
+	size_t io_buf_size = data->zero_copy ? 0 : data->max_io_buf_bytes;
 	size_t hps = data->hugepage_size;
+	size_t total;
 	int ret;
 
-	/* Calculate region sizes */
-	admin_sq_size = (ADMIN_Q_SIZE * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	admin_cq_size = (ADMIN_Q_SIZE * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	io_sq_size = ((depth + 1) * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	io_cq_size = ((depth + 1) * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	/* Compute full layout using CLI args (maximum sizes) */
+	nvme_compute_pool_layout(&data->layout, data->nr_io_queues,
+				 data->queue_depth, io_buf_size);
+	total = (data->layout.total_size + hps - 1) & ~(hps - 1);
 
-	queue_region = (admin_sq_size + admin_cq_size) +
-		       nr_queues * (io_sq_size + io_cq_size);
-	prp_region = nr_queues * depth * PAGE_SIZE;
-	io_buf_region = nr_queues * depth * io_buf_size;
-
-	data->queue_region_off = queue_region;
-	data->prp_region_off = queue_region;
-	data->io_buf_region_off = queue_region + prp_region;
-	data->identify_buf_off = queue_region + prp_region + io_buf_region;
-
-	total_size = data->identify_buf_off + PAGE_SIZE;
-
-	/* Round up to hugepage size */
-	total_size = (total_size + hps - 1) & ~(hps - 1);
-
-	ret = nvme_ensure_hugepages(total_size, hps, &data->extra_hugepages);
+	ret = nvme_ensure_hugepages(total, hps, &data->extra_hugepages);
 	if (ret < 0)
 		return ret;
 
-	ret = dma_buf_pool_init(&data->dma_pool, total_size);
+	ret = dma_buf_pool_init(&data->dma_pool, total);
 	if (ret < 0) {
 		nvme_adjust_hugepages(-(long)data->extra_hugepages);
 		return ret;
 	}
 
-	data->queue_alloc_off = 0;
+	if (!nvme_use_iommu(data)) {
+		if (dma_buf_pool_read_pagemap(&data->dma_pool) < 0) {
+			dma_buf_pool_deinit(&data->dma_pool);
+			nvme_adjust_hugepages(-(long)data->extra_hugepages);
+			return -1;
+		}
+	}
 
-	nvme_log("DMA pool: hugepage_size=%zuKB, total_size=%zuMB, extra_hugepages=%lu\n",
-		 hps >> 10, total_size >> 20, data->extra_hugepages);
-	nvme_log("DMA pool layout: queue[0-%zx) prp[%zx-%zx) io_buf[%zx-%zx) identify[%zx-%zx)\n",
-		 data->queue_region_off,
-		 data->prp_region_off, data->io_buf_region_off,
-		 data->io_buf_region_off, data->identify_buf_off,
-		 data->identify_buf_off, data->identify_buf_off + PAGE_SIZE);
+	nvme_log("DMA pool: hugepage_size=%zuKB, total_size=%zuMB, extra=%lu\n",
+		 hps >> 10, total >> 20, data->extra_hugepages);
 
 	return 0;
 }
 
-static void nvme_dmabuf_pool_deinit(struct nvme_vfio_tgt_data *data)
+static int nvme_hugepage_pool_finish_init(struct nvme_vfio_tgt_data *data)
+{
+	size_t io_buf_size = data->zero_copy ? 0 : data->max_io_buf_bytes;
+
+	/* Recompute layout with final nr_io_queues (may be clamped) */
+	nvme_compute_pool_layout(&data->layout, data->nr_io_queues,
+				 data->queue_depth, io_buf_size);
+
+	nvme_log("DMA pool layout: %zuMB used of %zuMB allocated "
+		 "(%d queues x %d depth)\n",
+		 data->layout.total_size >> 20, data->dma_pool.size >> 20,
+		 data->nr_io_queues, data->queue_depth);
+
+	return 0;
+}
+
+static void nvme_pool_deinit(struct nvme_vfio_tgt_data *data)
 {
 	dma_buf_pool_deinit(&data->dma_pool);
 }
 
-/* Allocate from queue region */
-static void *nvme_pool_alloc_queue_buf(struct nvme_vfio_tgt_data *data, size_t size)
-{
-	size_t aligned_size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	void *ptr;
-
-	if (data->queue_alloc_off + aligned_size > data->queue_region_off) {
-		ublk_err("Queue region exhausted\n");
-		return NULL;
-	}
-
-	ptr = (char *)data->dma_pool.base + data->queue_alloc_off;
-	data->queue_alloc_off += aligned_size;
-	return ptr;
-}
-
-/* Get PRP list buffer for given queue/tag */
+/* Get PRP list buffer for given queue/tag — uses layout offsets */
 static void *nvme_pool_get_prp(struct nvme_vfio_tgt_data *data, int qid, int tag)
 {
-	int depth = data->queue_depth;
-	size_t offset = data->prp_region_off + (qid * depth + tag) * PAGE_SIZE;
+	size_t offset = data->layout.prp_off +
+			qid * data->layout.prp_stride +
+			tag * PAGE_SIZE;
 
 	return (char *)data->dma_pool.base + offset;
 }
 
-/* Get I/O buffer for given queue/tag */
-static inline void *nvme_pool_get_io_buf(struct nvme_vfio_tgt_data *data, int qid, int tag)
+/* Get I/O buffer for given queue/tag — uses layout offsets */
+static inline void *nvme_pool_get_io_buf(struct nvme_vfio_tgt_data *data,
+					  int qid, int tag)
 {
-	int depth = data->queue_depth;
-	size_t io_buf_size = data->max_io_buf_bytes;
-	size_t offset = data->io_buf_region_off + (qid * depth + tag) * io_buf_size;
+	size_t offset = data->layout.io_buf_off +
+			qid * data->layout.io_buf_stride +
+			tag * data->max_io_buf_bytes;
 
 	return (char *)data->dma_pool.base + offset;
 }
@@ -808,7 +954,7 @@ static inline void *nvme_pool_get_io_buf(struct nvme_vfio_tgt_data *data, int qi
 /* Get identify buffer */
 static void *nvme_pool_get_identify_buf(struct nvme_vfio_tgt_data *data)
 {
-	return (char *)data->dma_pool.base + data->identify_buf_off;
+	return (char *)data->dma_pool.base + data->layout.identify_off;
 }
 
 /*
@@ -862,37 +1008,61 @@ static void nvme_unmap_dma(struct nvme_vfio_tgt_data *data,
 /*
  * Initialize NVMe queue pair
  */
+/*
+ * Initialize an NVMe queue pair using layout offsets.
+ *
+ * For admin queue (qid=0): uses layout.admin_sq_off / admin_cq_off
+ * For IO queues (qid>0): uses layout.io_sq_off + idx * io_sq_stride
+ *
+ * In BPF mode, the arena is already IOMMU-mapped as a single region,
+ * so we derive IOVAs from the arena base IOVA + offset instead of
+ * calling nvme_map_dma() per buffer.
+ */
 static int nvme_queue_init(struct nvme_vfio_tgt_data *data,
 			   struct nvme_queue *q, __u16 qid, __u16 depth)
 {
 	volatile void *bar = data->bar0;
-	size_t sq_buf_size, cq_buf_size;
+	struct nvme_pool_layout *L = &data->layout;
+	size_t sq_off, cq_off, sq_buf_size, cq_buf_size;
 
-	sq_buf_size = (depth * 64 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	cq_buf_size = (depth * 16 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	if (qid == 0) {
+		/* Admin queue */
+		sq_off = L->admin_sq_off;
+		cq_off = L->admin_cq_off;
+		sq_buf_size = L->admin_sq_size;
+		cq_buf_size = L->admin_cq_size;
+	} else {
+		/* IO queue — qid is 1-based, array index is qid-1 */
+		int idx = qid - 1;
 
-	q->sq_buffer = nvme_pool_alloc_queue_buf(data, sq_buf_size);
-	if (!q->sq_buffer) {
-		ublk_err("Failed to allocate SQ buffer from pool\n");
-		return -ENOMEM;
+		sq_off = L->io_sq_off + idx * L->io_sq_stride;
+		cq_off = L->io_cq_off + idx * L->io_cq_stride;
+		sq_buf_size = L->io_sq_stride;
+		cq_buf_size = L->io_cq_stride;
 	}
+
+	q->sq_buffer = (char *)data->dma_pool.base + sq_off;
+	q->cq_buffer = (char *)data->dma_pool.base + cq_off;
 	memset(q->sq_buffer, 0, sq_buf_size);
-
-	q->cq_buffer = nvme_pool_alloc_queue_buf(data, cq_buf_size);
-	if (!q->cq_buffer) {
-		ublk_err("Failed to allocate CQ buffer from pool\n");
-		return -ENOMEM;
-	}
 	memset(q->cq_buffer, 0, cq_buf_size);
 
-	q->sq_iova = nvme_map_dma(data, q->sq_buffer, sq_buf_size, &q->sq_mapping);
-	q->cq_iova = nvme_map_dma(data, q->cq_buffer, cq_buf_size, &q->cq_mapping);
+	if (data->bpf_mode) {
+		/* Arena is already IOMMU-mapped — derive IOVAs from base */
+		__u64 arena_iova = data->arena_dma_mapping.iova;
 
-	if (!q->sq_iova || !q->cq_iova) {
-		ublk_err("Failed to map queue %d for DMA\n", qid);
-		nvme_unmap_dma(data, &q->sq_mapping);
-		nvme_unmap_dma(data, &q->cq_mapping);
-		return -ENOMEM;
+		q->sq_iova = arena_iova + sq_off;
+		q->cq_iova = arena_iova + cq_off;
+	} else {
+		q->sq_iova = nvme_map_dma(data, q->sq_buffer, sq_buf_size,
+					  &q->sq_mapping);
+		q->cq_iova = nvme_map_dma(data, q->cq_buffer, cq_buf_size,
+					  &q->cq_mapping);
+		if (!q->sq_iova || !q->cq_iova) {
+			ublk_err("Failed to map queue %d for DMA\n", qid);
+			nvme_unmap_dma(data, &q->sq_mapping);
+			nvme_unmap_dma(data, &q->cq_mapping);
+			return -ENOMEM;
+		}
 	}
 
 	q->qid = qid;
@@ -941,6 +1111,7 @@ static int nvme_wait_admin_completion(struct nvme_vfio_tgt_data *data)
 		if (phase == adminq->cq_phase) {
 			__u16 status = (cqe->status >> 1);
 
+			adminq->last_cqe_result = cqe->result;
 			adminq->cq_head = (adminq->cq_head + 1) % adminq->qsize;
 			if (adminq->cq_head == 0)
 				adminq->cq_phase = !adminq->cq_phase;
@@ -1042,6 +1213,46 @@ static int nvme_init_controller(struct nvme_vfio_tgt_data *data)
 	return 0;
 }
 
+/*
+ * Negotiate I/O queue count with the controller via Set Features.
+ *
+ * NVMe spec §5.21.1.7: The host must issue Set Features (Number of
+ * Queues) before creating any I/O queues. The controller returns the
+ * number it can actually support (may be less than requested).
+ */
+static int nvme_set_num_queues(struct nvme_vfio_tgt_data *data)
+{
+	struct nvme_features cmd = {};
+	int requested = data->nr_io_queues;
+	__u32 result;
+	int granted_sq, granted_cq, granted;
+
+	cmd.opcode = NVME_ADMIN_SET_FEATURES;
+	cmd.fid = NVME_FEAT_NUM_QUEUES;
+	cmd.dword11 = ((__u32)(requested - 1) << 16) | (requested - 1);
+
+	int ret = nvme_submit_admin_cmd(data, &cmd, sizeof(cmd));
+	if (ret < 0) {
+		ublk_err("Set Features (Number of Queues) failed\n");
+		return ret;
+	}
+
+	result = data->admin_queue.last_cqe_result;
+	granted_sq = (result & 0xFFFF) + 1;
+	granted_cq = ((result >> 16) & 0xFFFF) + 1;
+	granted = granted_sq < granted_cq ? granted_sq : granted_cq;
+
+	if (granted < requested) {
+		nvme_log("Controller granted %d I/O queues (requested %d)\n",
+			 granted, requested);
+		data->nr_io_queues = granted;
+	} else {
+		nvme_log("Controller supports %d I/O queues\n", granted);
+	}
+
+	return 0;
+}
+
 /* Identify controller - get controller capabilities including VWC */
 static int nvme_identify_controller(struct nvme_vfio_tgt_data *data)
 {
@@ -1136,7 +1347,8 @@ static int nvme_identify_namespace(struct nvme_vfio_tgt_data *data,
 	       (unsigned long long)data->dev_size, 1U << data->lba_shift);
 
 	/* Populate ublk parameters */
-	params->types = UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD;
+	/* TODO: re-enable discard after BPF DSM encoding is validated */
+	params->types = UBLK_PARAM_TYPE_BASIC;
 	params->basic.logical_bs_shift = data->lba_shift;
 	params->basic.physical_bs_shift = data->lba_shift;
 	params->basic.io_opt_shift = data->lba_shift;
@@ -1248,6 +1460,270 @@ static int nvme_delete_io_queue(struct nvme_vfio_tgt_data *data, int qid)
 }
 
 /*
+ * Load BPF struct_ops program for NVMe SQ submission from BPF.
+ *
+ * The BPF program uses an arena map for the SQ buffer. We:
+ * 1. Open/load the BPF skeleton (allocates arena pages)
+ * 2. Set .rodata params (nsid, lba_shift) before load
+ * 3. mmap the arena to get userspace VA of SQ entries
+ * 4. IOMMU-map the arena pages so NVMe hardware can read them
+ * 5. Set per-queue state in .bss (IOVA, qsize, doorbell offset)
+ * 6. Create NVMe I/O queues pointing SQ at arena IOVA
+ * 7. Attach the struct_ops
+ */
+/*
+ * Two-phase arena pool init.
+ *
+ * Phase 1 (early_init): Load BPF skeleton, get arena mmap, fault admin
+ * pages, IOMMU-map full arena capacity. Init pool as external.
+ * Called BEFORE controller init — rodata uses defaults (nsid=1, lba_shift=9).
+ *
+ * Phase 2 (finish_init): Compute full layout with final params, fault
+ * remaining pages, update pool size. Validate rodata matches Identify.
+ */
+static int nvme_arena_pool_early_init(struct nvme_vfio_tgt_data *data)
+{
+	struct ublk_nvme_vfio *skel;
+	void *arena_mmap;
+	size_t admin_size, arena_capacity;
+	__u64 arena_iova;
+	int ret;
+
+	nvme_log("BPF: opening skeleton...\n");
+	skel = ublk_nvme_vfio::open();
+	if (!skel) {
+		ret = -errno;
+		ublk_err("BPF: failed to open skeleton: %s (errno=%d)\n",
+			 strerror(errno), errno);
+		return ret;
+	}
+
+	/* Set .rodata defaults before load — validated after Identify */
+	skel->rodata->nsid = 1;
+	skel->rodata->lba_shift = 9;
+
+	nvme_log("BPF: loading (default nsid=1 lba_shift=9)...\n");
+	ret = ublk_nvme_vfio::load(skel);
+	if (ret) {
+		ublk_err("BPF: failed to load: %d (%s)\n",
+			 ret, strerror(-ret));
+		ublk_nvme_vfio::destroy(skel);
+		return ret;
+	}
+
+	/* Get arena mmap pointer from libbpf */
+	{
+		size_t mmap_sz;
+
+		arena_mmap = bpf_map__initial_value(skel->maps.arena, &mmap_sz);
+	}
+	if (!arena_mmap) {
+		ublk_err("BPF: arena not mapped by skeleton\n");
+		ublk_nvme_vfio::destroy(skel);
+		return -ENOMEM;
+	}
+
+	data->bpf_skel = skel;
+	data->arena_mmap = arena_mmap;
+
+	/* Compute admin-only layout */
+	nvme_compute_pool_layout(&data->layout, 0, 0, 0);
+	admin_size = data->layout.total_size;
+
+	/* Fault-in admin pages only */
+	for (size_t off = 0; off < admin_size; off += PAGE_SIZE)
+		((volatile char *)arena_mmap)[off];
+
+	/*
+	 * IOMMU-map the full arena capacity upfront.
+	 * Unfaulted pages cost only IOMMU page table entries, not RAM.
+	 */
+	arena_capacity = (__u32)bpf_map__max_entries(skel->maps.arena) *
+			 PAGE_SIZE;
+	data->arena_mmap_size = arena_capacity;
+
+	arena_iova = nvme_map_dma(data, arena_mmap, arena_capacity,
+				  &data->arena_dma_mapping);
+	if (!arena_iova) {
+		ublk_err("BPF: IOMMU-map arena failed\n");
+		ublk_nvme_vfio::destroy(skel);
+		data->bpf_skel = NULL;
+		return -ENOMEM;
+	}
+
+	/* Init pool as external (arena owns the mmap) */
+	dma_buf_pool_init_external(&data->dma_pool, arena_mmap, admin_size);
+
+	nvme_log("BPF: arena at %p, admin=%zu bytes, capacity=%zu bytes, "
+		 "IOVA=0x%llx\n", arena_mmap, admin_size, arena_capacity,
+		 (unsigned long long)arena_iova);
+
+	return 0;
+}
+
+static int nvme_arena_pool_finish_init(struct nvme_vfio_tgt_data *data)
+{
+	size_t admin_size, arena_capacity;
+
+	/*
+	 * Validate BPF rodata matches Identify results.
+	 * rodata was frozen at load time with defaults (nsid=1, lba_shift=9).
+	 */
+	if (data->nsid != 1)
+		nvme_log("WARNING: nsid=%u but BPF rodata has nsid=1\n",
+			 data->nsid);
+	if (data->lba_shift != 9)
+		nvme_log("WARNING: lba_shift=%u but BPF rodata has lba_shift=9\n",
+			 data->lba_shift);
+
+	/* Compute full layout (no IO buffers in BPF mode) */
+	nvme_compute_pool_layout(&data->layout, data->nr_io_queues,
+				 data->queue_depth, 0);
+
+	/* Validate against arena capacity */
+	arena_capacity = data->arena_mmap_size;
+	if (data->layout.total_size > arena_capacity) {
+		ublk_err("Arena too small: need %zu, have %zu "
+			 "(%d queues x %d depth)\n",
+			 data->layout.total_size, arena_capacity,
+			 data->nr_io_queues, data->queue_depth);
+		return -ENOSPC;
+	}
+
+	/* Fault-in remaining arena pages (admin pages already faulted) */
+	admin_size = nvme_admin_pool_size();
+	for (size_t off = admin_size; off < data->layout.total_size;
+	     off += PAGE_SIZE)
+		((volatile char *)data->arena_mmap)[off];
+
+	/* Update pool size to full layout */
+	data->dma_pool.size = data->layout.total_size;
+
+	nvme_log("BPF: arena %zu pages faulted (%zuKB) of %zu capacity\n",
+		 data->layout.total_size / PAGE_SIZE,
+		 data->layout.total_size >> 10,
+		 arena_capacity / PAGE_SIZE);
+
+	return 0;
+}
+
+/*
+ * Create BPF-mode I/O queues using unified layout offsets.
+ * Sets sq_state map entries and issues NVMe Create CQ/SQ admin commands.
+ */
+static int nvme_bpf_create_io_queues(struct nvme_vfio_tgt_data *data)
+{
+	__u64 arena_iova = data->arena_dma_mapping.iova;
+	struct nvme_pool_layout *L = &data->layout;
+	int ret;
+
+	for (int i = 0; i < data->nr_io_queues; i++) {
+		int qid = i + 1;
+		int qsize = data->queue_depth + 1;
+
+		/* Set BPF sq_state map entry with layout offsets */
+		struct sq_state qs = {};
+
+		qs.sq_dma = arena_iova + L->io_sq_off + i * L->io_sq_stride;
+		qs.prp_base_iova = arena_iova + L->prp_off +
+				    i * L->prp_stride;
+		qs.sq_arena_off = L->io_sq_off + i * L->io_sq_stride;
+		qs.cq_arena_off = L->io_cq_off + i * L->io_cq_stride;
+		qs.prp_arena_off = L->prp_off + i * L->prp_stride;
+		qs.sq_tail = 0;
+		qs.last_sq_tail = 0;
+		qs.qsize = qsize;
+		qs.qdepth = data->queue_depth;
+		qs.db_offset = 0x1000 + (2 * qid) * data->db_stride;
+
+		int map_fd = bpf_map__fd(data->bpf_skel->maps.sq_queues);
+		__u32 key = i;
+
+		if (bpf_map_update_elem(map_fd, &key, &qs, BPF_ANY) < 0) {
+			ublk_err("BPF: failed to init sq_queues[%d]\n", i);
+			return -1;
+		}
+
+		/* Create NVMe IO queue using nvme_queue_init (uses layout) */
+		ret = nvme_queue_init(data, &data->io_queues[i], qid, qsize);
+		if (ret < 0)
+			return ret;
+
+		/* Issue NVMe Create CQ + SQ admin commands */
+		struct nvme_create_cq create_cq = {};
+
+		create_cq.opcode = NVME_ADMIN_CREATE_CQ;
+		create_cq.prp1 = data->io_queues[i].cq_iova;
+		create_cq.cqid = qid;
+		create_cq.qsize = qsize - 1;
+		create_cq.cq_flags = 0x01;
+		create_cq.irq_vector = 0;
+
+		ret = nvme_submit_admin_cmd(data, &create_cq, sizeof(create_cq));
+		if (ret < 0) {
+			ublk_err("BPF: Create I/O CQ %d failed\n", qid);
+			return ret;
+		}
+
+		struct nvme_create_sq create_sq = {};
+
+		create_sq.opcode = NVME_ADMIN_CREATE_SQ;
+		create_sq.prp1 = data->io_queues[i].sq_iova;
+		create_sq.sqid = qid;
+		create_sq.qsize = qsize - 1;
+		create_sq.sq_flags = 0x01;
+		create_sq.cqid = qid;
+
+		ret = nvme_submit_admin_cmd(data, &create_sq, sizeof(create_sq));
+		if (ret < 0) {
+			ublk_err("BPF: Create I/O SQ %d failed\n", qid);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int nvme_bpf_attach(struct nvme_vfio_tgt_data *data)
+{
+	nvme_log("BPF: attaching struct_ops...\n");
+	data->bpf_link = bpf_map__attach_struct_ops(
+				data->bpf_skel->maps.ublk_nvme_vfio_bpf_ops);
+	if (!data->bpf_link) {
+		int ret = -errno;
+
+		ublk_err("BPF: failed to attach struct_ops: %d\n", ret);
+		return ret;
+	}
+
+	nvme_log("BPF struct_ops attached, arena %zuKB at IOVA 0x%llx\n",
+		 data->layout.total_size >> 10,
+		 (unsigned long long)data->arena_dma_mapping.iova);
+	return 0;
+}
+
+static void nvme_bpf_cleanup(struct nvme_vfio_tgt_data *data)
+{
+	if (data->bpf_skel) {
+		nvme_log("BPF stats: %llu SQ submissions, %llu doorbell rings\n",
+			 (unsigned long long)data->bpf_skel->bss->bpf_sq_submissions,
+			 (unsigned long long)data->bpf_skel->bss->bpf_doorbell_rings);
+	}
+	if (data->bpf_link) {
+		bpf_link__destroy(data->bpf_link);
+		data->bpf_link = NULL;
+	}
+	if (data->arena_mmap) {
+		nvme_unmap_dma(data, &data->arena_dma_mapping);
+		/* arena mmap is owned by skeleton — don't munmap */
+		data->arena_mmap = NULL;
+	}
+	if (data->bpf_skel) {
+		ublk_nvme_vfio::destroy(data->bpf_skel);
+		data->bpf_skel = NULL;
+	}
+}
+/*
  * Perform NVMe controller shutdown sequence.
  * Sets SHN to normal, waits for shutdown complete, then disables controller.
  */
@@ -1298,11 +1774,17 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 	if (!data)
 		return;
 
+	if (data->bpf_mode)
+		nvme_bpf_cleanup(data);
+
 	/* Delete I/O queues */
 	if (data->io_queues) {
 		for (i = 0; i < data->nr_io_queues; i++) {
 			nvme_delete_io_queue(data, i + 1);
-			nvme_queue_deinit(data, &data->io_queues[i]);
+			if (data->bpf_mode) {
+				/* SQ and CQ both in arena — no separate unmap */
+			} else
+				nvme_queue_deinit(data, &data->io_queues[i]);
 		}
 		free(data->io_queues);
 	}
@@ -1341,7 +1823,7 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 	}
 
 	pthread_spin_destroy(&data->iova_lock);
-	nvme_dmabuf_pool_deinit(data);
+	nvme_pool_deinit(data);
 	nvme_adjust_hugepages(-(long)data->extra_hugepages);
 
 	free(data);
@@ -1431,11 +1913,11 @@ static int nvme_user_copy_sync(const struct ublksrv_queue *q, int tag,
 }
 
 /* Poll completion queue */
-static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
-				struct nvme_queue *nvmeq,
-				struct nvme_vfio_tgt_data *data)
+static inline int nvme_poll_cq(const struct ublksrv_queue *q,
+			       struct nvme_queue *nvmeq,
+			       struct nvme_vfio_tgt_data *data)
 {
-	bool found = false;
+	int nr_cqes = 0;
 
 	while (nvme_cqe_pending(nvmeq)) {
 		struct nvme_completion *cqe = &((struct nvme_completion *)nvmeq->cq_buffer)[nvmeq->cq_head];
@@ -1443,8 +1925,6 @@ static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
 		int tag, result;
 		const struct ublk_io_data *io_data;
 		const struct ublksrv_io_desc *iod;
-
-		found = true;
 
 		ublk_dma_rmb();
 
@@ -1462,8 +1942,14 @@ static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
 				result = 0;
 			} else {
 				result = iod->nr_sectors << 9;
-				/* For READ with user_copy, copy data from NVMe buffer to ublk device */
-				if (data->user_copy && ublksrv_get_op(iod) == UBLK_IO_OP_READ) {
+				/*
+				 * For READ with user_copy (non-zero-copy), copy
+				 * data from NVMe buffer to ublk device.
+				 * In zero-copy mode, the device DMA'd directly
+				 * to the bio pages - no copy needed.
+				 */
+				if (data->user_copy && !data->zero_copy &&
+				    ublksrv_get_op(iod) == UBLK_IO_OP_READ) {
 					void *io_buf = nvme_pool_get_io_buf(data, q->q_id, tag);
 					int ret = nvme_user_copy_sync(q, tag, io_buf, result, true);
 					if (ret < 0)
@@ -1476,16 +1962,40 @@ static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
 			result = -EIO;
 		}
 
+		/*
+		 * In BPF mode, check if the FETCH for this tag has been
+		 * consumed by the io_uring event loop. If not, defer the
+		 * completion — calling ublksrv_complete_io now would send
+		 * COMMIT_AND_FETCH while the original FETCH CQE is still
+		 * unconsumed in the io_uring CQ ring, corrupting the
+		 * io_uring command sequence for this tag.
+		 */
+		if (data->bpf_mode) {
+			struct nvme_io_priv *priv = nvme_get_io_priv(q, tag);
+
+			if (!priv->fetch_done) {
+				/* Defer: save result, complete when
+				 * FETCH is consumed in queue_io */
+				priv->cqe_early = true;
+				priv->cqe_result = result;
+				nvme_update_cq_head(nvmeq);
+				nr_cqes++;
+				continue;
+			}
+			priv->fetch_done = false;
+		}
+
 		ublksrv_queue_dec_tgt_io_inflight(q);
 		ublksrv_complete_io(q, tag, result);
 
 		nvme_update_cq_head(nvmeq);
+		nr_cqes++;
 	}
 
-	if (found)
+	if (nr_cqes)
 		nvme_writel_mmio(nvmeq->cq_head, nvmeq->cq_doorbell);
 
-	return found;
+	return nr_cqes;
 }
 
 /* Setup PRP entries for a command */
@@ -1530,9 +2040,9 @@ static inline int nvme_setup_prps(struct nvme_rw_command *cmd,
 
 		/*
 		 * Build PRP list with sequential page-aligned addresses.
-		 * With IOMMU, the IOMMU creates a contiguous IOVA range,
-		 * so PRP entries are just sequential pages from the
-		 * starting IOVA.
+		 * With IOMMU (including zero-copy), iommu_map_sg() creates
+		 * a contiguous IOVA range, so PRP entries are just
+		 * sequential pages from the starting IOVA.
 		 */
 		while (left > 0 && prp_idx < max_prps) {
 			priv->prp_list[prp_idx++] = htole64(prp_addr);
@@ -1659,27 +2169,40 @@ static int nvme_queue_rw_io(const struct ublksrv_queue *q,
 	len = iod->nr_sectors << 9;
 
 	priv = nvme_get_io_priv(q, tag);
-	io_buf = nvme_pool_get_io_buf(data, q->q_id, tag);
-
-	/* Get or create DMA mapping */
-	iova = priv->data_mapping.iova;
-	if (!iova) {
-		size_t buf_size = data->max_io_buf_bytes;
-
-		iova = nvme_map_dma(data, io_buf, buf_size, &priv->data_mapping);
-		if (!iova) {
-			ublk_err("Failed to map I/O buffer tag %d\n", tag);
-			return -ENOMEM;
-		}
-	}
-
 	op = ublksrv_get_op(iod);
 
-	/* For WRITE with user_copy, copy data from ublk device to NVMe buffer first */
-	if (data->user_copy && op == UBLK_IO_OP_WRITE) {
-		int ret = nvme_user_copy_sync(q, tag, io_buf, len, false);
-		if (ret < 0)
-			return ret;
+	if (data->zero_copy) {
+		/*
+		 * DMA zero-copy: the kernel has already mapped bio pages
+		 * into our device's IOAS and placed the IOVA in iod->addr.
+		 * No data copy or userspace DMA mapping needed.
+		 */
+		iova = iod->addr;
+		io_buf = NULL;
+	} else {
+		io_buf = nvme_pool_get_io_buf(data, q->q_id, tag);
+
+		/* Get or create DMA mapping */
+		iova = priv->data_mapping.iova;
+		if (!iova) {
+			size_t buf_size = data->max_io_buf_bytes;
+
+			iova = nvme_map_dma(data, io_buf, buf_size,
+					    &priv->data_mapping);
+			if (!iova) {
+				ublk_err("Failed to map I/O buffer tag %d\n",
+					 tag);
+				return -ENOMEM;
+			}
+		}
+
+		/* For WRITE with user_copy, copy data first */
+		if (data->user_copy && op == UBLK_IO_OP_WRITE) {
+			int ret = nvme_user_copy_sync(q, tag, io_buf, len,
+						      false);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	/* Build command on stack (L1 cache), then copy to SQ (DMA memory) */
@@ -2124,6 +2647,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 		{ "noiommu",		no_argument, NULL, OPT_NOIOMMU },
 		{ NULL }
 	};
+	int use_bpf = 0;
 	size_t hps = nvme_get_hugepage_size();
 
 	if (hps == 0) {
@@ -2201,6 +2725,28 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 			goto err;
 	}
 
+	if ((info->flags & UBLK_F_BPF_DMA) && force_noiommu) {
+		ublk_err("BPF_DMA requires IOMMU (incompatible with --noiommu)\n");
+		goto err;
+	}
+
+	use_bpf = !!(info->flags & UBLK_F_BPF);
+	nvme_log("flags=0x%llx use_bpf=%d bpf_dma=%d\n",
+		 (unsigned long long)info->flags, use_bpf,
+		 !!(info->flags & UBLK_F_BPF_DMA));
+
+	if (use_bpf && !(info->flags & UBLK_F_BPF_DMA)) {
+		ublk_err("BPF mode requires BPF_DMA (--bpf)\n");
+		goto err;
+	}
+
+	if (use_bpf && force_noiommu) {
+		ublk_err("BPF mode requires IOMMU (incompatible with --noiommu)\n");
+		goto err;
+	}
+
+	data->zero_copy = !!(info->flags & UBLK_F_BPF_DMA);
+
 	data->container_fd = -1;
 	data->group_fd = -1;
 	data->device_fd = -1;
@@ -2232,22 +2778,30 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	if (nvme_validate_params(data, cap) < 0)
 		goto err;
 
-	/* Initialize dma_buf pool */
-	if (nvme_dmabuf_pool_init(data) < 0) {
-		ublk_err("Failed to initialize dma_buf pool\n");
-		goto err;
-	}
+	if (use_bpf)
+		data->bpf_mode = true;
 
-	/* Pre-read pagemap for noiommu mode */
-	if (!nvme_use_iommu(data)) {
-		if (dma_buf_pool_read_pagemap(&data->dma_pool) < 0) {
-			ublk_err("Failed to read pagemap\n");
+	/*
+	 * Two-phase pool init:
+	 *
+	 * Phase 1 (early_init): Allocate pool backing + admin-only layout.
+	 *   - Hugepage: full pool sized from CLI args (max), pagemap read.
+	 *   - Arena: BPF skeleton load, admin pages faulted, IOMMU map.
+	 */
+	if (data->bpf_mode) {
+		if (nvme_arena_pool_early_init(data) < 0)
 			goto err;
-		}
+	} else {
+		if (nvme_hugepage_pool_early_init(data) < 0)
+			goto err;
 	}
 
-	/* Initialize controller */
+	/* Initialize controller (admin queue from pool head) */
 	if (nvme_init_controller(data) < 0)
+		goto err;
+
+	/* Negotiate I/O queue count with controller */
+	if (nvme_set_num_queues(data) < 0)
 		goto err;
 
 	/* Get controller capabilities */
@@ -2257,18 +2811,79 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	if (nvme_identify_namespace(data, &p) < 0)
 		goto err;
 
-	/* Setup I/O queues */
-	data->io_queues = (struct nvme_queue *)calloc(data->nr_io_queues, sizeof(struct nvme_queue));
+	/*
+	 * Phase 2 (finish_init): Finalize layout with actual params.
+	 *   - Hugepage: recompute layout (nop for memory — pool is big enough).
+	 *   - Arena: fault remaining pages, update pool size, validate fit.
+	 */
+	if (data->bpf_mode) {
+		if (nvme_arena_pool_finish_init(data) < 0)
+			goto err;
+	} else {
+		if (nvme_hugepage_pool_finish_init(data) < 0)
+			goto err;
+	}
+
+	/* Allocate IO queue array */
+	data->io_queues = (struct nvme_queue *)calloc(data->nr_io_queues,
+						      sizeof(struct nvme_queue));
 	if (!data->io_queues) {
 		ublk_err("calloc io_queues: %s\n", strerror(errno));
 		goto err;
 	}
 
-	for (int i = 0; i < data->nr_io_queues; i++) {
-		int qsize = data->queue_depth + 1;
-		if (nvme_create_io_queue(data, i + 1, qsize) < 0) {
+	/* Create IO queues using unified layout */
+	if (data->bpf_mode) {
+		if (nvme_bpf_create_io_queues(data) < 0)
 			goto err;
+		if (nvme_bpf_attach(data) < 0)
+			goto err;
+	} else {
+		for (int i = 0; i < data->nr_io_queues; i++) {
+			int qsize = data->queue_depth + 1;
+
+			if (nvme_create_io_queue(data, i + 1, qsize) < 0)
+				goto err;
 		}
+	}
+
+	/*
+	 * DMA zero-copy: pass iommufd context to the kernel so it can map
+	 * bio pages directly into the device's IOAS. The kernel-provided
+	 * IOVA will appear in iod->addr for each dispatched request.
+	 *
+	 * base_iova is set above userspace's DMA allocation range
+	 * (0x100000000) to avoid conflicts. The kernel will reserve this
+	 * range in the IOAS.
+	 */
+	if (data->zero_copy) {
+		/*
+		 * Total kernel IOVA space:
+		 * nr_queues * queue_depth * max_io_buf_bytes
+		 */
+		__u64 kernel_iova_base = 0x200000000ULL;
+
+		p.types |= UBLK_PARAM_TYPE_DMA_DEV;
+		p.dma_dev.base_iova = kernel_iova_base;
+		p.dma_dev.iommufd = data->iommufd;
+		p.dma_dev.ioas_id = data->ioas_id;
+		p.dma_dev.vfio_dev_fd = -1;
+		if (data->bpf_mode)
+			p.dma_dev.vfio_dev_fd = data->device_fd;
+
+		/*
+		 * DMA alignment and segment constraints reduce sub-page
+		 * SG entries at the block layer level, complementing the
+		 * kernel-side page-alignment in ublk_fill_dma_addrs().
+		 */
+		p.types |= UBLK_PARAM_TYPE_DMA_ALIGN;
+		p.dma.alignment = PAGE_SIZE - 1;
+
+		p.types |= UBLK_PARAM_TYPE_SEGMENT;
+		p.basic.virt_boundary_mask = PAGE_SIZE - 1;
+		p.seg.seg_boundary_mask = PAGE_SIZE - 1;
+		p.seg.max_segment_size = data->max_io_buf_bytes;
+		p.seg.max_segments = 64;
 	}
 
 	/* Setup JSON data */
@@ -2354,6 +2969,43 @@ static int nvme_vfio_queue_io(const struct ublksrv_queue *q,
 	unsigned int op = ublksrv_get_op(iod);
 	int ret;
 
+	/*
+	 * In BPF mode, the BPF queue_io_cmd already built the NVMe
+	 * command in the arena SQ and rang the doorbell. Userspace
+	 * only needs to track inflight count for CQ polling.
+	 */
+	/*
+	 * In BPF mode, READ/WRITE was already submitted by BPF
+	 * queue_io_cmd (SQ entry + doorbell). Just track inflight.
+	 * Other ops (FLUSH, DISCARD) go through the normal path
+	 * since BPF returns 0 (forward to userspace) for them.
+	 */
+	/*
+	 * In BPF mode, all NVMe commands (READ/WRITE/FLUSH/DISCARD) are
+	 * submitted by BPF queue_io_cmd. Userspace only tracks inflight
+	 * count and handles deferred CQ completions.
+	 */
+	if (data->bpf_mode) {
+		struct nvme_io_priv *priv = nvme_get_io_priv(q, tag);
+
+		ublksrv_queue_inc_tgt_io_inflight(q);
+		priv->fetch_done = true;
+
+		/*
+		 * Check if the NVMe CQE arrived before this FETCH was
+		 * consumed. If so, complete the IO now (deferred from
+		 * nvme_poll_cq which couldn't call ublksrv_complete_io
+		 * because the FETCH hadn't been consumed yet).
+		 */
+		if (priv->cqe_early) {
+			priv->cqe_early = false;
+			priv->fetch_done = false;
+			ublksrv_queue_dec_tgt_io_inflight(q);
+			ublksrv_complete_io(q, tag, priv->cqe_result);
+		}
+		return 0;
+	}
+
 	switch (op) {
 	case UBLK_IO_OP_READ:
 	case UBLK_IO_OP_WRITE:
@@ -2382,12 +3034,40 @@ static void nvme_vfio_handle_io_background(const struct ublksrv_queue *q,
 {
 	struct nvme_vfio_tgt_data *data = (struct nvme_vfio_tgt_data *)q->dev->tgt.tgt_data;
 	struct nvme_queue *nvmeq = &data->io_queues[q->q_id];
+	int total_completed = 0;
+	int nr;
 
-	/* Flush any pending SQ submissions */
-	nvme_sq_flush(nvmeq);
+	/* Flush any pending SQ submissions (skip in BPF mode —
+	 * BPF handles doorbell writes directly) */
+	if (!data->bpf_mode)
+		nvme_sq_flush(nvmeq);
 
 	/* Poll NVMe CQ for completions */
-	while (nvme_poll_cq(q, nvmeq, data)) {};
+	while ((nr = nvme_poll_cq(q, nvmeq, data)) > 0)
+		total_completed += nr;
+
+	/*
+	 * If NVMe pipeline is busy but we only drained a tiny batch,
+	 * completions are arriving imminently. Spin-wait on CQ to
+	 * accumulate more before returning to io_uring event loop.
+	 * This reduces io_uring_enter syscall frequency.
+	 *
+	 * tgt_io_inflight: IOs submitted to NVMe hardware, awaiting CQE.
+	 * When high, device is actively producing completions.
+	 *
+	 * Skip in BPF mode: BPF submits NVMe commands from kernel
+	 * dispatch context, so tgt_io_inflight can be high before
+	 * CQEs arrive. Spinning here blocks io_uring_enter, preventing
+	 * COMMIT processing and causing deadlock.
+	 */
+	if (!data->bpf_mode &&
+	    ublksrv_queue_get_tgt_io_inflight(q) >= 32 &&
+	    total_completed <= 2) {
+		while (total_completed < 4 && !ublksrv_queue_is_done(q)) {
+			while ((nr = nvme_poll_cq(q, nvmeq, data)) > 0)
+				total_completed += nr;
+		}
+	}
 }
 
 static int nvme_vfio_handle_io_async(const struct ublksrv_queue *q,
@@ -2413,6 +3093,7 @@ static void nvme_vfio_cmd_usage(void)
 	printf("\tnvme_vfio: --pci PCI_ADDR [--noiommu]\n");
 	printf("\t  --pci: PCI address of NVMe device (e.g., 0000:01:00.0)\n");
 	printf("\t  --noiommu: Force noiommu mode (use virtual addresses as IOVAs)\n");
+	printf("\t  BPF SQ submission: --bpf\n");
 }
 
 static const struct ublksrv_tgt_type nvme_vfio_tgt_type = {

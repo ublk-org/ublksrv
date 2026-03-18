@@ -370,6 +370,21 @@
 /* Disable automatic partition scanning when device is started */
 #define UBLK_F_NO_AUTO_PART_SCAN (1ULL << 18)
 
+/*
+ * DMA zero-copy: kernel maps bio pages into the target device's IOMMU
+ * address space via iommufd, creating a contiguous IOVA mapping.
+ * The IOVA is written to ublksrv_io_desc.addr when dispatching each
+ * request. The length is in ublksrv_io_desc.nr_sectors << 9.
+ *
+ * UBLK_PARAM_TYPE_DMA_DEV must be set to provide the iommufd context
+ * and a base IOVA for kernel-managed mappings.
+ *
+ * Requires UBLK_F_USER_COPY. Not available for UBLK_F_UNPRIVILEGED_DEV.
+ */
+#define UBLK_F_NO_AUTO_PART_SCAN (1ULL << 18)
+#define UBLK_F_BPF (1ULL << 20)
+#define UBLK_F_BPF_DMA (1ULL << 21)
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1
@@ -722,6 +737,33 @@ struct ublk_param_integrity {
 	__u8	pad[5];
 };
 
+/*
+ * DMA device parameter for UBLK_F_BPF_DMA.
+ *
+ * Identifies the target device's IOMMU address space for DMA zero-copy.
+ * The kernel maps bio pages into the IOAS via iommufd, creating
+ * contiguous IOVA mappings visible to the device.
+ *
+ * base_iova: starting IOVA for kernel-managed mappings (must be
+ *   page-aligned). Must not overlap with userspace IOMMU_IOAS_MAP
+ *   mappings. The kernel reserves this range in the IOAS and allocates
+ *   per-tag fixed IOVA slots:
+ *     iova = base_iova + (qid * depth + tag) * max_io_buf_bytes
+ *
+ * iommufd: file descriptor from open("/dev/iommu"). The device must
+ *   already be bound and attached to the IOAS identified by ioas_id.
+ *
+ * ioas_id: IOAS object ID from IOMMU_IOAS_ALLOC. The target device
+ *   must be attached to this IOAS via VFIO_DEVICE_ATTACH_IOMMUFD_PT.
+ */
+struct ublk_param_dma_dev {
+	__u64	base_iova;	/* base IOVA for kernel DMA mappings */
+	__s32	iommufd;	/* iommufd file descriptor */
+	__u32	ioas_id;	/* IOAS to map into */
+	__s32	vfio_dev_fd;	/* VFIO device fd for BAR access (BPF mode) */
+	__u32	reserved;
+};
+
 struct ublk_params {
 	/*
 	 * Total length of parameters, userspace has to set 'len' for both
@@ -737,6 +779,7 @@ struct ublk_params {
 #define UBLK_PARAM_TYPE_DMA_ALIGN       (1 << 4)
 #define UBLK_PARAM_TYPE_SEGMENT         (1 << 5)
 #define UBLK_PARAM_TYPE_INTEGRITY       (1 << 6) /* requires UBLK_F_INTEGRITY */
+#define UBLK_PARAM_TYPE_DMA_DEV         (1 << 7) /* requires UBLK_F_BPF_DMA */
 	__u32	types;			/* types of parameter included */
 
 	struct ublk_param_basic		basic;
@@ -746,6 +789,7 @@ struct ublk_params {
 	struct ublk_param_dma_align	dma;
 	struct ublk_param_segment	seg;
 	struct ublk_param_integrity	integrity;
+	struct ublk_param_dma_dev	dma_dev;
 };
 
 #endif

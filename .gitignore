@@ -46,3 +46,4 @@ Makefile.in
 /ublk.*
 /ublksrv.pc
 /doc/html
+bpf/ublk_nvme_vfio.bpf.skel.h

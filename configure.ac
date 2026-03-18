@@ -150,6 +150,31 @@ else
 fi
 AM_CONDITIONAL([LIBISCSI], [test "x$HAVE_LIBISCSI" = "x1"])
 
+dnl Check for libbpf + clang + bpftool (required for nvme_vfio target)
+PKG_CHECK_MODULES([LIBBPF], [libbpf >= 1.0],
+	[HAVE_LIBBPF=1],
+	[HAVE_LIBBPF=0])
+if test "$HAVE_LIBBPF" = "1"; then
+	AC_PATH_PROG([CLANG], [clang], [no])
+	AC_PATH_PROG([BPFTOOL], [bpftool], [no])
+	if test "x$CLANG" = "xno" -o "x$BPFTOOL" = "xno"; then
+		AC_MSG_WARN([clang or bpftool not found, disabling nvme_vfio target])
+		HAVE_LIBBPF=0
+	else
+		AC_MSG_CHECKING([whether clang supports BPF arena addr_space_cast])
+		if echo | $CLANG -target bpf -dM -E - 2>/dev/null | grep -q __BPF_FEATURE_ADDR_SPACE_CAST; then
+			AC_MSG_RESULT([yes])
+		else
+			AC_MSG_RESULT([no (need clang 20+)])
+			AC_MSG_WARN([clang too old for BPF arena, disabling nvme_vfio target])
+			HAVE_LIBBPF=0
+		fi
+	fi
+fi
+AM_CONDITIONAL([HAVE_LIBBPF], [test "$HAVE_LIBBPF" = "1"])
+AC_SUBST([CLANG])
+AC_SUBST([BPFTOOL])
+
 #gnutls is only for nbd target, borrowed from nbd-client project
 AC_ARG_WITH([gnutls],
 	[AS_HELP_STRING([--without-gnutls],
@@ -231,7 +256,7 @@ AM_CONDITIONAL([HAVE_DOXYGEN], [test -n "$DOXYGEN"])
 
 dnl Check for linux/iommufd.h (required for nvme_vfio target)
 AC_CHECK_HEADERS([linux/iommufd.h])
-AM_CONDITIONAL([HAVE_IOMMUFD], [test "x$ac_cv_header_linux_iommufd_h" = "xyes"])
+AM_CONDITIONAL([BUILD_NVME_VFIO], [test "x$ac_cv_header_linux_iommufd_h" = "xyes" -o "$HAVE_LIBBPF" = "1"])
 
 dnl Produce output files.
 AC_CONFIG_HEADERS([config.h])

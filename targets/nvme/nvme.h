@@ -33,6 +33,11 @@
 #define NVME_ADMIN_DELETE_CQ    0x04
 #define NVME_ADMIN_CREATE_CQ    0x05
 #define NVME_ADMIN_IDENTIFY     0x06
+#define NVME_ADMIN_SET_FEATURES 0x09
+#define NVME_ADMIN_GET_FEATURES 0x0A
+
+/* Feature Identifiers */
+#define NVME_FEAT_NUM_QUEUES    0x07
 
 /* Identify CNS values */
 #define NVME_ID_CNS_NS          0x00  /* Identify Namespace */
@@ -162,6 +167,19 @@ struct nvme_identify {
 	__u64	prp2;
 	__u32	cns;
 	__u32	rsvd11[5];
+};
+
+struct nvme_features {
+	__u8	opcode;
+	__u8	flags;
+	__u16	cid;
+	__u32	nsid;
+	__u64	rsvd2[2];
+	__u64	prp1;
+	__u64	prp2;
+	__u32	fid;		/* CDW10: feature ID (bits 7:0) */
+	__u32	dword11;	/* CDW11: feature-specific */
+	__u32	rsvd12[4];
 };
 
 struct nvme_completion {

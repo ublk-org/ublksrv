@@ -1187,6 +1187,17 @@ extern void ublksrv_queue_inc_tgt_io_inflight(const struct ublksrv_queue *q);
 extern void ublksrv_queue_dec_tgt_io_inflight(const struct ublksrv_queue *q);
 
 /**
+ * Get target IO inflight counter.
+ *
+ * Returns the number of IOs submitted to external target hardware
+ * that have not yet completed.
+ *
+ * @param q the ublksrv queue instance
+ * @return current inflight count
+ */
+extern unsigned ublksrv_queue_get_tgt_io_inflight(const struct ublksrv_queue *q);
+
+/**
  * Reap events received from queue
  *
  * @param tq the pointer for ublksrv_queue
