@@ -14,6 +14,16 @@
  *
  * Idea is from SPDK project.
  *
+ * DMA coherency note:
+ *   SQ/CQ/PRP list buffers are allocated from hugepage-backed memory
+ *   (MAP_HUGETLB), which is normal write-back cacheable memory. This relies
+ *   on the PCIe interconnect being cache-coherent with the CPU, which is
+ *   guaranteed on x86 (all PCIe DMA transactions snoop CPU caches). On
+ *   architectures without hardware-guaranteed PCIe cache coherency, these
+ *   buffers would require explicit cache maintenance (flush/invalidate)
+ *   around DMA transfers, which this driver does not perform. Therefore,
+ *   this target only works correctly on cache-coherent architectures (x86).
+ *
  * Usage:
  *   Standard mode (with IOMMU):
  *     sudo ublk.nvme_vfio add -q 1 -d 128 --pci 0000:01:00.0
@@ -2130,6 +2140,13 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 		ublk_err("Failed to get hugepage size from /proc/meminfo\n");
 		return -EINVAL;
 	}
+
+#if !defined(__x86_64__) && !defined(__i386__)
+	ublk_err("WARNING: nvme_vfio uses hugepage-backed DMA buffers which "
+		 "require PCIe cache coherency.\n"
+		 "This is only guaranteed on x86. On this architecture, DMA "
+		 "data corruption may occur.\n");
+#endif
 
 	/* Check for unsupported zero copy modes */
 	if (info->flags & UBLK_F_AUTO_BUF_REG) {
