@@ -157,6 +157,9 @@ static inline enum io_uring_op ublk_to_uring_fs_op(
 
 int ublksrv_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]);
 
+/* Shared memory zero-copy buffer lookup */
+extern void *ublk_shmem_get_buf(unsigned idx, unsigned offset);
+
 static inline unsigned short ublk_cmd_op_nr(unsigned int op)
 {
 	return _IOC_NR(op);

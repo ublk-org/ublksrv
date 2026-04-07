@@ -2,9 +2,266 @@
 
 #include "config.h"
 #include <semaphore.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <poll.h>
+#include <sys/mman.h>
+#include <sys/eventfd.h>
 #include "ublksrv_tgt.h"
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
+
+/* ---------- Shared memory zero-copy (UBLK_F_SHMEM_ZC) ---------- */
+#define UBLK_SHMEM_SOCK_DIR	"/run/ublk"
+
+struct ublk_shmem_entry {
+	int fd;
+	void *mmap_base;
+	size_t size;
+};
+
+static struct ublk_shmem_entry shmem_table[UBLK_BUF_MAX];
+static int shmem_count;
+
+/* Saved across parse/add phases for shmem_zc setup */
+static char *shmem_htlb_path;
+static bool shmem_rdonly;
+
+static void ublk_shmem_sock_path(int dev_id, char *buf, size_t len)
+{
+	snprintf(buf, len, "%s/ublkb%d.sock", UBLK_SHMEM_SOCK_DIR, dev_id);
+}
+
+static int ublk_shmem_sock_create(int dev_id)
+{
+	struct sockaddr_un addr;
+	char path[108];
+	int fd;
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	mkdir(UBLK_SHMEM_SOCK_DIR, 0755);
+	ublk_shmem_sock_path(dev_id, path, sizeof(path));
+	unlink(path);
+
+	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	if (fd < 0)
+		return -1;
+
+	snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		close(fd);
+		return -1;
+	}
+
+	listen(fd, 4);
+	return fd;
+}
+
+static void ublk_shmem_sock_destroy(int dev_id, int sock_fd)
+{
+	char path[108];
+
+	if (sock_fd >= 0)
+		close(sock_fd);
+	ublk_shmem_sock_path(dev_id, path, sizeof(path));
+	unlink(path);
+}
+
+static int ublk_shmem_recv_fd(int client_fd)
+{
+	char buf[1];
+	struct iovec iov = { .iov_base = buf, .iov_len = sizeof(buf) };
+	union {
+		char cmsg_buf[CMSG_SPACE(sizeof(int))];
+		struct cmsghdr align;
+	} u;
+	struct msghdr msg;
+	struct cmsghdr *cmsg;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = u.cmsg_buf;
+	msg.msg_controllen = sizeof(u.cmsg_buf);
+
+	if (recvmsg(client_fd, &msg, 0) <= 0)
+		return -1;
+
+	cmsg = CMSG_FIRSTHDR(&msg);
+	if (!cmsg || cmsg->cmsg_level != SOL_SOCKET ||
+	    cmsg->cmsg_type != SCM_RIGHTS)
+		return -1;
+
+	return *(int *)CMSG_DATA(cmsg);
+}
+
+static void ublk_shmem_unregister_all(void)
+{
+	for (int i = 0; i < shmem_count; i++) {
+		if (shmem_table[i].mmap_base) {
+			munmap(shmem_table[i].mmap_base,
+			       shmem_table[i].size);
+			close(shmem_table[i].fd);
+			shmem_table[i].mmap_base = NULL;
+		}
+	}
+	shmem_count = 0;
+}
+
+static void ublk_shmem_handle_client(int sock_fd,
+				     struct ublksrv_ctrl_dev *cdev)
+{
+	int client_fd, memfd, idx;
+	int32_t reply;
+	off_t size;
+	void *base;
+	int ret;
+
+	client_fd = accept(sock_fd, NULL, NULL);
+	if (client_fd < 0)
+		return;
+
+	memfd = ublk_shmem_recv_fd(client_fd);
+	if (memfd < 0) {
+		reply = -1;
+		goto out;
+	}
+
+	size = lseek(memfd, 0, SEEK_END);
+	if (size <= 0) {
+		reply = -1;
+		close(memfd);
+		goto out;
+	}
+	base = mmap(NULL, size, PROT_READ | PROT_WRITE,
+		    MAP_SHARED | MAP_POPULATE, memfd, 0);
+	if (base == MAP_FAILED) {
+		reply = -1;
+		close(memfd);
+		goto out;
+	}
+
+	if (shmem_count >= UBLK_BUF_MAX) {
+		munmap(base, size);
+		close(memfd);
+		reply = -ENOMEM;
+		goto out;
+	}
+
+	ret = ublksrv_ctrl_reg_buf(cdev, base, size, 0);
+	if (ret < 0) {
+		munmap(base, size);
+		close(memfd);
+		reply = ret;
+		goto out;
+	}
+
+	idx = shmem_count++;
+	shmem_table[idx].fd = memfd;
+	shmem_table[idx].mmap_base = base;
+	shmem_table[idx].size = size;
+	reply = idx;
+out:
+	send(client_fd, &reply, sizeof(reply), 0);
+	close(client_fd);
+}
+
+struct shmem_listener_info {
+	int dev_id;
+	int stop_efd;
+	int sock_fd;
+	struct ublksrv_ctrl_dev *cdev;
+};
+
+static void *ublk_shmem_listener_fn(void *data)
+{
+	struct shmem_listener_info *info = (struct shmem_listener_info *)data;
+	struct pollfd pfds[2];
+
+	info->sock_fd = ublk_shmem_sock_create(info->dev_id);
+	if (info->sock_fd < 0)
+		return NULL;
+
+	pfds[0].fd = info->sock_fd;
+	pfds[0].events = POLLIN;
+	pfds[1].fd = info->stop_efd;
+	pfds[1].events = POLLIN;
+
+	while (1) {
+		int ret = poll(pfds, 2, -1);
+
+		if (ret < 0)
+			break;
+		if (pfds[1].revents & POLLIN)
+			break;
+		if (pfds[0].revents & POLLIN)
+			ublk_shmem_handle_client(info->sock_fd, info->cdev);
+	}
+
+	return NULL;
+}
+
+static int ublk_shmem_htlb_setup(const char *htlb_path, bool rdonly,
+				  struct ublksrv_ctrl_dev *cdev)
+{
+	int fd, idx, ret;
+	struct stat st;
+	void *base;
+
+	fd = open(htlb_path, O_RDWR);
+	if (fd < 0) {
+		fprintf(stderr, "htlb: can't open %s: %m\n", htlb_path);
+		return -errno;
+	}
+
+	if (fstat(fd, &st) < 0 || st.st_size <= 0) {
+		fprintf(stderr, "htlb: invalid file size\n");
+		close(fd);
+		return -EINVAL;
+	}
+
+	base = mmap(NULL, st.st_size,
+		    rdonly ? PROT_READ : PROT_READ | PROT_WRITE,
+		    MAP_SHARED | MAP_POPULATE, fd, 0);
+	if (base == MAP_FAILED) {
+		fprintf(stderr, "htlb: mmap failed: %m\n");
+		close(fd);
+		return -ENOMEM;
+	}
+
+	if (shmem_count >= UBLK_BUF_MAX) {
+		munmap(base, st.st_size);
+		close(fd);
+		return -ENOMEM;
+	}
+
+	ret = ublksrv_ctrl_reg_buf(cdev, base, st.st_size,
+				   rdonly ? UBLK_SHMEM_BUF_READ_ONLY : 0);
+	if (ret < 0) {
+		fprintf(stderr, "htlb: reg_buf failed: %d\n", ret);
+		munmap(base, st.st_size);
+		close(fd);
+		return ret;
+	}
+
+	idx = shmem_count++;
+	shmem_table[idx].fd = fd;
+	shmem_table[idx].mmap_base = base;
+	shmem_table[idx].size = st.st_size;
+
+	return 0;
+}
+
+/* Get shmem buffer address for I/O handling */
+void *ublk_shmem_get_buf(unsigned idx, unsigned offset)
+{
+	if (idx >= UBLK_BUF_MAX || !shmem_table[idx].mmap_base)
+		return NULL;
+	return (char *)shmem_table[idx].mmap_base + offset;
+}
+
+/* ------ end shmem_zc ------ */
 
 struct ublksrv_queue_info {
 	const struct ublksrv_dev *dev;
@@ -204,8 +461,12 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	char buf[32];
 	const struct ublksrv_dev *dev;
 	struct ublksrv_queue_info *info_array;
+	struct shmem_listener_info linfo = {};
+	linfo.sock_fd = -1;
+	pthread_t listener;
 	int i, ret = -EINVAL;
 	sem_t queue_sem;
+	bool has_shmem_zc = dinfo->flags & UBLK_F_SHMEM_ZC;
 
 	snprintf(buf, 32, "%s-%d", "ublksrvd", dev_id);
 	openlog(buf, LOG_PID, LOG_USER);
@@ -247,8 +508,40 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 		goto free;
 	}
 
+	/* Register hugetlbfs buffer after device is started */
+	if (has_shmem_zc && shmem_htlb_path) {
+		ret = ublk_shmem_htlb_setup(shmem_htlb_path, shmem_rdonly,
+					     ctrl_dev);
+		if (ret < 0) {
+			fprintf(stderr, "htlb setup failed: %d\n", ret);
+			ublksrv_ctrl_stop_dev(ctrl_dev);
+			goto free;
+		}
+	}
+
+	/* Start shmem listener thread for memfd fd-passing */
+	if (has_shmem_zc) {
+		linfo.dev_id = dev_id;
+		linfo.cdev = ctrl_dev;
+		linfo.stop_efd = eventfd(0, 0);
+		if (linfo.stop_efd >= 0)
+			pthread_create(&listener, NULL,
+				       ublk_shmem_listener_fn, &linfo);
+	}
+
 	/* wait until we are terminated */
 	ublksrv_drain_fetch_commands(dev, info_array);
+
+	/* Stop shmem listener thread */
+	if (has_shmem_zc && linfo.stop_efd >= 0) {
+		uint64_t stop_val = 1;
+		write(linfo.stop_efd, &stop_val, sizeof(stop_val));
+		pthread_join(listener, NULL);
+		close(linfo.stop_efd);
+		ublk_shmem_sock_destroy(dev_id, linfo.sock_fd);
+	}
+	if (has_shmem_zc)
+		ublk_shmem_unregister_all();
 free:
 	free(info_array);
 
@@ -347,6 +640,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 	int unprivileged = 0;
 	int zero_copy = 0;
 	int batch_io = 0;
+	int shmem_zc = 0;
 	int option_index = 0;
 	unsigned int debug_mask = 0;
 	static const struct option longopts[] = {
@@ -366,6 +660,9 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "max_io_buf_bytes",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
 		{ "batch-io",	0,	NULL, 'b'},
+		{ "shmem_zc",	0,	NULL, 0},
+		{ "htlb",	1,	NULL, 0},
+		{ "rdonly_shmem_buf",	0,	NULL, 0},
 		{ NULL }
 	};
 
@@ -424,6 +721,12 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 				*efd = strtol(optarg, NULL, 10);
 			if (!strcmp(longopts[option_index].name, "max_io_buf_bytes"))
 				data->max_io_buf_bytes = strtol(optarg, NULL, 10);
+			if (!strcmp(longopts[option_index].name, "shmem_zc"))
+				shmem_zc = 1;
+			if (!strcmp(longopts[option_index].name, "htlb"))
+				shmem_htlb_path = strdup(optarg);
+			if (!strcmp(longopts[option_index].name, "rdonly_shmem_buf"))
+				shmem_rdonly = true;
 			break;
 		}
 	}
@@ -448,6 +751,8 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		data->flags |= UBLK_F_SUPPORT_ZERO_COPY;
 	if (batch_io)
 		data->flags |= UBLK_F_BATCH_IO;
+	if (shmem_zc)
+		data->flags |= UBLK_F_SHMEM_ZC;
 
 	ublk_set_debug_mask(debug_mask);
 
@@ -459,7 +764,6 @@ static void ublksrv_print_std_opts(void)
 	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
 	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
 	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
-	printf("\t-b | --batch-io (enable batch IO mode)\n");
 	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
 }
 
@@ -496,21 +800,32 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 		goto fail_send_event;
 	}
 
-	if (data.flags & (UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_BATCH_IO)) {
+	if (data.flags & (UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_BATCH_IO |
+			  UBLK_F_SHMEM_ZC)) {
 		__u64 features = 0;
 
 		ret = ublksrv_ctrl_get_features(dev, &features);
 		if (ret)
-			return ret;
+			goto fail;
 
 		if ((data.flags & UBLK_F_SUPPORT_ZERO_COPY) &&
-		    !(features & UBLK_F_SUPPORT_ZERO_COPY))
-			return -ENOTSUP;
+		    !(features & UBLK_F_SUPPORT_ZERO_COPY)) {
+			ret = -ENOTSUP;
+			goto fail;
+		}
 
 		if ((data.flags & UBLK_F_BATCH_IO) &&
 		    !(features & UBLK_F_BATCH_IO)) {
 			fprintf(stderr, "UBLK_F_BATCH_IO not supported by kernel\n");
-			return -ENOTSUP;
+			ret = -ENOTSUP;
+			goto fail;
+		}
+
+		if ((data.flags & UBLK_F_SHMEM_ZC) &&
+		    !(features & UBLK_F_SHMEM_ZC)) {
+			fprintf(stderr, "UBLK_F_SHMEM_ZC not supported by kernel\n");
+			ret = -ENOTSUP;
+			goto fail;
 		}
 
 		/* disable UBLK_F_AUTO_BUF_REG if it isn't supported yet */
@@ -556,13 +871,12 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 static char *ublksrv_pop_cmd(int *argc, char *argv[])
 {
 	char *cmd = argv[1];
-
-	if (*argc < 2)
+	if (*argc < 2) {
 		return NULL;
+	}
 
-	if (*argc > 2)
-		memmove(&argv[1], &argv[2], (*argc - 2) * sizeof(argv[0]));
 	(*argc)--;
+	memmove(&argv[1], &argv[2], *argc * sizeof(argv[0]));
 
 	return cmd;
 }
