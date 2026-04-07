@@ -556,6 +556,18 @@ extern int ublksrv_ctrl_get_features(struct ublksrv_ctrl_dev *dev,
 		__u64 *features);
 
 /**
+ * Register a shared memory buffer for UBLK_F_SHMEM_ZC.
+ * Returns buffer index (>= 0) on success, negative error on failure.
+ */
+extern int ublksrv_ctrl_reg_buf(struct ublksrv_ctrl_dev *dev, void *addr,
+		size_t size, unsigned int flags);
+
+/**
+ * Unregister a shared memory buffer by index.
+ */
+extern int ublksrv_ctrl_unreg_buf(struct ublksrv_ctrl_dev *dev, int buf_index);
+
+/**
  * Return run dir of ublk device
  *
  * Device pid file and json string stored under this dir

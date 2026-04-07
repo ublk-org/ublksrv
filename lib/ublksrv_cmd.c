@@ -527,7 +527,7 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
                         info->max_io_buf_bytes,
 			info->ublksrv_pid,
 			ublksrv_dev_state_desc(dev));
-        printf("\tflags 0x%llx [%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s ]\n",
+        printf("\tflags 0x%llx [%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s ]\n",
                         info->flags,
                         info->flags & UBLK_F_SUPPORT_ZERO_COPY ? " SUPPORT_ZERO_COPY" : "",
                         info->flags & UBLK_F_AUTO_BUF_REG ? " AUTO_ZC" : "",
@@ -547,7 +547,8 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
                         info->flags & UBLK_F_BATCH_IO ? " BATCH_IO" : "",
                         info->flags & UBLK_F_INTEGRITY ? " INTEGRITY" : "",
                         info->flags & UBLK_F_SAFE_STOP_DEV ? " SAFE_STOP_DEV" : "",
-                        info->flags & UBLK_F_NO_AUTO_PART_SCAN ? " NO_AUTO_PART_SCAN" : "");
+                        info->flags & UBLK_F_NO_AUTO_PART_SCAN ? " NO_AUTO_PART_SCAN" : "",
+                        info->flags & UBLK_F_SHMEM_ZC ? " SHMEM_ZC" : "");
 	printf("\tublkc: %u:%d ublkb: %u:%u owner: %u:%u\n",
 			p.devt.char_major, p.devt.char_minor,
 			p.devt.disk_major, p.devt.disk_minor,
@@ -676,7 +677,37 @@ int ublksrv_ctrl_get_features(struct ublksrv_ctrl_dev *dev,
 	};
 
 	memset(features, 0, sizeof(*features));
-	
+
+	return __ublksrv_ctrl_cmd(dev, &data);
+}
+
+int ublksrv_ctrl_reg_buf(struct ublksrv_ctrl_dev *dev, void *addr,
+		size_t size, unsigned int flags)
+{
+	struct ublk_shmem_buf_reg buf_reg = {
+		.addr = (unsigned long)addr,
+		.len = size,
+		.flags = flags,
+	};
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op = UBLK_U_CMD_REG_BUF,
+		.flags = CTRL_CMD_HAS_BUF | CTRL_CMD_NO_TRANS,
+		.addr = (__u64)&buf_reg,
+		.len = sizeof(buf_reg),
+	};
+
+	return __ublksrv_ctrl_cmd(dev, &data);
+}
+
+int ublksrv_ctrl_unreg_buf(struct ublksrv_ctrl_dev *dev, int buf_index)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		.cmd_op = UBLK_U_CMD_UNREG_BUF,
+		.flags = CTRL_CMD_HAS_DATA | CTRL_CMD_NO_TRANS,
+	};
+
+	data.data[0] = buf_index;
+
 	return __ublksrv_ctrl_cmd(dev, &data);
 }
 
