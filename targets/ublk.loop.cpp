@@ -12,6 +12,7 @@ struct loop_tgt_data {
 	bool user_copy;
 	bool auto_zc;
 	bool zero_copy;
+	bool shmem_zc;
 	bool block_device;
 	unsigned long offset;
 };
@@ -110,6 +111,7 @@ static int loop_setup_tgt(struct ublksrv_dev *dev, int type)
 	tgt_data->auto_zc = info->flags & UBLK_F_AUTO_BUF_REG;
 	tgt_data->zero_copy = info->flags & UBLK_F_SUPPORT_ZERO_COPY;
 	tgt_data->user_copy = info->flags & UBLK_F_USER_COPY;
+	tgt_data->shmem_zc = info->flags & UBLK_F_SHMEM_ZC;
 	if (tgt_data->zero_copy || tgt_data->user_copy)
 		tgt->tgt_ring_depth *= 2;
 
@@ -331,6 +333,37 @@ static int lo_rw_user_copy(const struct ublksrv_queue *q,
 	return 2;
 }
 
+/*
+ * Shared memory zero-copy I/O: when UBLK_IO_F_SHMEM_ZC is set, the
+ * request's data lives in a registered shared memory buffer. Decode
+ * index + offset from iod->addr and use the server's mmap as the
+ * I/O buffer for the backing file.
+ */
+static int lo_rw_shmem_zc(const struct ublksrv_queue *q,
+		const struct ublksrv_io_desc *iod, int tag,
+		const struct loop_tgt_data *tgt_data)
+{
+	unsigned ublk_op = ublksrv_get_op(iod);
+	enum io_uring_op op = ublk_to_uring_fs_op(iod, false);
+	__u32 shmem_idx = ublk_shmem_zc_index(iod->addr);
+	__u32 shmem_off = ublk_shmem_zc_offset(iod->addr);
+	struct io_uring_sqe *sqe[1];
+	void *addr;
+
+	addr = ublk_shmem_get_buf(shmem_idx, shmem_off);
+	if (!addr)
+		return -EINVAL;
+
+	ublk_queue_alloc_sqes(q, sqe, 1);
+	io_uring_prep_rw(op, sqe[0], 1 /*fds[1]*/,
+			 addr, iod->nr_sectors << 9,
+			 (iod->start_sector + tgt_data->offset) << 9);
+	io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE);
+	lo_rw_handle_fua(sqe[0], iod);
+	sqe[0]->user_data = build_user_data(tag, ublk_op, 0, 1);
+	return 1;
+}
+
 static int lo_rw(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *tgt_data)
@@ -398,6 +431,9 @@ static int loop_queue_tgt_rw(const struct ublksrv_queue *q,
 		const struct ublksrv_io_desc *iod, int tag,
 		const struct loop_tgt_data *data)
 {
+	/* shmem_zc: kernel matched pages, use shared buffer directly */
+	if (iod->op_flags & UBLK_IO_F_SHMEM_ZC)
+		return lo_rw_shmem_zc(q, iod, tag, data);
 	/* auto_zc has top priority */
 	if (data->auto_zc)
 		return lo_rw(q, iod, tag, data);

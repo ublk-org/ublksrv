@@ -159,7 +159,7 @@ __run_fio_libaio() {
         --iodepth_batch_complete_min=$BATCH \
         --filename=$DEVS --gtod_reduce=1 \
         --direct=1 --runtime=$RTIME --numjobs=$JOBS --rw=$RW \
-        --name=test > /dev/null 2>&1
+        --name=test $EXTRA_FIO_OPTS > /dev/null 2>&1
 }
 
 __ublk_loop_backing_file() {

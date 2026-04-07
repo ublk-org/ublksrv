@@ -1,0 +1,46 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+# Test UBLK_F_SHMEM_ZC with hugetlbfs for loop target
+
+. common/fio_common
+. common/loop_common
+
+HTLB_MNT=/mnt/hugetlb_ublksrv
+HTLB_BUF=${HTLB_MNT}/ublk_shmem_buf
+
+_setup_hugetlb() {
+	echo 10 > /proc/sys/vm/nr_hugepages
+	local avail=$(cat /proc/sys/vm/nr_hugepages)
+	if [ "$avail" -lt 1 ]; then
+		echo "SKIP: no hugepages available"
+		return 1
+	fi
+
+	mkdir -p ${HTLB_MNT}
+	mount -t hugetlbfs none ${HTLB_MNT} 2>/dev/null
+	# Allocate the buffer file
+	fallocate -l 4M ${HTLB_BUF}
+	return 0
+}
+
+_cleanup_hugetlb() {
+	rm -f ${HTLB_BUF}
+	umount ${HTLB_MNT} 2>/dev/null
+	rmdir ${HTLB_MNT} 2>/dev/null
+}
+
+echo "run loop shmem_zc (hugetlb) test"
+
+if ! _setup_hugetlb; then
+	exit 0
+fi
+
+file=`_create_loop_image "data" $LO_IMG_SZ`
+export T_TYPE_PARAMS="-t loop -q 1 -f $file --shmem_zc --htlb ${HTLB_BUF}"
+export EXTRA_FIO_OPTS="--mem=mmaphuge:${HTLB_BUF}"
+
+__run_dev_perf 1
+
+_remove_loop_image $file
+_cleanup_hugetlb
