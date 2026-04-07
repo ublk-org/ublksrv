@@ -261,6 +261,13 @@ void *ublk_shmem_get_buf(unsigned idx, unsigned offset)
 	return (char *)shmem_table[idx].mmap_base + offset;
 }
 
+size_t ublk_shmem_get_size(unsigned idx)
+{
+	if (idx >= UBLK_BUF_MAX || !shmem_table[idx].mmap_base)
+		return 0;
+	return shmem_table[idx].size;
+}
+
 /* ------ end shmem_zc ------ */
 
 struct ublksrv_queue_info {

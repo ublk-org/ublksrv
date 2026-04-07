@@ -159,6 +159,7 @@ int ublksrv_main(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[]
 
 /* Shared memory zero-copy buffer lookup */
 extern void *ublk_shmem_get_buf(unsigned idx, unsigned offset);
+extern size_t ublk_shmem_get_size(unsigned idx);
 
 static inline unsigned short ublk_cmd_op_nr(unsigned int op)
 {

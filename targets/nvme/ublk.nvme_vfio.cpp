@@ -234,6 +234,9 @@ struct nvme_vfio_tgt_data {
 
 	/* Hugepage size in bytes (read from /proc/meminfo) */
 	size_t hugepage_size;
+
+	/* Shmem ZC DMA mappings (one per registered shmem buffer) */
+	struct nvme_dma_mapping shmem_dma[UBLK_BUF_MAX];
 };
 
 /* Helper: Read 32-bit register */
@@ -1327,6 +1330,11 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 	if (!data)
 		return;
 
+	/* Unmap shmem DMA mappings */
+	for (i = 0; i < UBLK_BUF_MAX; i++)
+		if (data->shmem_dma[i].iova)
+			nvme_unmap_dma(data, &data->shmem_dma[i]);
+
 	/* Delete I/O queues */
 	if (data->io_queues) {
 		for (i = 0; i < data->nr_io_queues; i++) {
@@ -1381,21 +1389,17 @@ static inline void nvme_sq_submit_cmd(struct nvme_queue *nvmeq)
 	if (++nvmeq->sq_tail == nvmeq->qsize)
 		nvmeq->sq_tail = 0;
 
-	/* Batch up to 32 submissions before ringing the doorbell */
+	/* Flush when batch reaches 32 or SQ is full */
 	pending = (nvmeq->sq_tail + nvmeq->qsize - nvmeq->last_sq_tail)
 		  % nvmeq->qsize;
-	if (pending >= 32)
-		goto flush;
+	if (pending < 32) {
+		next_tail = nvmeq->sq_tail + 1;
+		if (next_tail == nvmeq->qsize)
+			next_tail = 0;
+		if (next_tail != nvmeq->last_sq_tail)
+			return;
+	}
 
-	/* Also flush if SQ is about to be full */
-	next_tail = nvmeq->sq_tail + 1;
-	if (next_tail == nvmeq->qsize)
-		next_tail = 0;
-	if (next_tail == nvmeq->last_sq_tail)
-		goto flush;
-
-	return;
-flush:
 	nvme_sq_flush(nvmeq);
 }
 
@@ -1484,7 +1488,8 @@ static inline bool nvme_poll_cq(const struct ublksrv_queue *q,
 			} else {
 				result = iod->nr_sectors << 9;
 				/* For READ with user_copy, copy data from NVMe buffer to ublk device */
-				if (data->user_copy && ublksrv_get_op(iod) == UBLK_IO_OP_READ) {
+				if (data->user_copy && ublksrv_get_op(iod) == UBLK_IO_OP_READ &&
+				    !(iod->op_flags & UBLK_IO_F_SHMEM_ZC)) {
 					void *io_buf = nvme_pool_get_io_buf(data, q->q_id, tag);
 					int ret = nvme_user_copy_sync(q, tag, io_buf, result, true);
 					if (ret < 0)
@@ -1714,6 +1719,71 @@ static int nvme_queue_rw_io(const struct ublksrv_queue *q,
 	stack_cmd.control = (ublksrv_get_flags(iod) & UBLK_IO_F_FUA) ? htole16(NVME_RW_FUA) : 0;
 
 	/* Setup data pointers - use SGL if supported, otherwise PRP */
+	if (nvme_sgl_supported(data)) {
+		if (nvme_setup_sgl(&stack_cmd, data, priv, io_buf, iova, len) < 0)
+			return -EINVAL;
+	} else {
+		if (nvme_setup_prps(&stack_cmd, data, priv, io_buf, iova, len) < 0)
+			return -EINVAL;
+	}
+
+	memcpy((struct nvme_rw_command *)nvmeq->sq_buffer + nvmeq->sq_tail,
+	       &stack_cmd, sizeof(stack_cmd));
+	nvme_sq_submit_cmd(nvmeq);
+
+	return 0;
+}
+
+/* Queue read/write I/O using shmem zero-copy buffer */
+static int nvme_queue_rw_shmem_zc_io(const struct ublksrv_queue *q,
+				     struct nvme_queue *nvmeq,
+				     const struct ublksrv_io_desc *iod, int tag,
+				     struct nvme_vfio_tgt_data *data)
+{
+	struct nvme_io_priv *priv;
+	__u64 slba, iova;
+	__u32 nlb;
+	size_t len;
+	unsigned int op;
+	void *io_buf;
+	__u32 shmem_idx = ublk_shmem_zc_index(iod->addr);
+	__u32 shmem_off = ublk_shmem_zc_offset(iod->addr);
+
+	slba = iod->start_sector >> (data->lba_shift - 9);
+	nlb = (iod->nr_sectors >> (data->lba_shift - 9)) - 1;
+	len = iod->nr_sectors << 9;
+
+	priv = nvme_get_io_priv(q, tag);
+
+	io_buf = ublk_shmem_get_buf(shmem_idx, shmem_off);
+	if (!io_buf)
+		return -EINVAL;
+
+	/* DMA-map shmem buffer on first use (safe: I/Os drained at register) */
+	if (!data->shmem_dma[shmem_idx].iova) {
+		void *base = ublk_shmem_get_buf(shmem_idx, 0);
+		size_t size = ublk_shmem_get_size(shmem_idx);
+
+		if (!nvme_map_dma(data, base, size, &data->shmem_dma[shmem_idx])) {
+			ublk_err("Failed to DMA-map shmem buffer %u\n", shmem_idx);
+			return -ENOMEM;
+		}
+	}
+	iova = data->shmem_dma[shmem_idx].iova + shmem_off;
+
+	op = ublksrv_get_op(iod);
+
+	/* No user_copy needed: data is already in shared memory */
+
+	struct nvme_rw_command stack_cmd = {};
+
+	stack_cmd.opcode = (op == UBLK_IO_OP_WRITE) ? NVME_CMD_WRITE : NVME_CMD_READ;
+	stack_cmd.cid = tag;
+	stack_cmd.nsid = data->nsid;
+	stack_cmd.slba = htole64(slba);
+	stack_cmd.length = htole16(nlb);
+	stack_cmd.control = (ublksrv_get_flags(iod) & UBLK_IO_F_FUA) ? htole16(NVME_RW_FUA) : 0;
+
 	if (nvme_sgl_supported(data)) {
 		if (nvme_setup_sgl(&stack_cmd, data, priv, io_buf, iova, len) < 0)
 			return -EINVAL;
@@ -2033,7 +2103,6 @@ static int nvme_vfio_setup(struct nvme_vfio_tgt_data *data)
 			  MAP_SHARED, data->device_fd, region_info.offset);
 	if (data->bar0 == MAP_FAILED) {
 		ublk_err("mmap BAR0: %s\n", strerror(errno));
-		data->bar0 = NULL;
 		return -1;
 	}
 
@@ -2109,7 +2178,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	    info->max_io_buf_bytes > hps ||
 	    (info->max_io_buf_bytes & (info->max_io_buf_bytes - 1))) {
 		ublk_err("max_io_buf_bytes %u invalid (must be power of 2, %u-%u)\n",
-			 info->max_io_buf_bytes, PAGE_SIZE, 2 << 20);
+			 info->max_io_buf_bytes, PAGE_SIZE, 32 << 20);
 		return -EINVAL;
 	}
 
@@ -2179,6 +2248,11 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 
 	if (nvme_vfio_setup(data) < 0)
 		goto err;
+
+	if ((info->flags & UBLK_F_SHMEM_ZC) && !nvme_use_iommu(data)) {
+		ublk_err("shmem_zc requires IOMMU mode\n");
+		goto err;
+	}
 
 	/* Read capabilities */
 	cap = nvme_readq(data->bar0, NVME_REG_CAP);
@@ -2312,7 +2386,10 @@ static int nvme_vfio_queue_io(const struct ublksrv_queue *q,
 	switch (op) {
 	case UBLK_IO_OP_READ:
 	case UBLK_IO_OP_WRITE:
-		ret = nvme_queue_rw_io(q, nvmeq, iod, tag, data);
+		if (iod->op_flags & UBLK_IO_F_SHMEM_ZC)
+			ret = nvme_queue_rw_shmem_zc_io(q, nvmeq, iod, tag, data);
+		else
+			ret = nvme_queue_rw_io(q, nvmeq, iod, tag, data);
 		break;
 	case UBLK_IO_OP_FLUSH:
 		ret = nvme_queue_flush_io(q, nvmeq, iod, tag, data);
