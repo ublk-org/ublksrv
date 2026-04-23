@@ -237,6 +237,16 @@ dnl Check for linux/iommufd.h (required for nvme_vfio target)
 AC_CHECK_HEADERS([linux/iommufd.h])
 AM_CONDITIONAL([HAVE_IOMMUFD], [test "x$ac_cv_header_linux_iommufd_h" = "xyes"])
 
+if test "x$ac_cv_header_linux_iommufd_h" = "xyes"; then
+  dnl Check for vfio iommu detach
+  AC_CHECK_MEMBER([struct vfio_device_detach_iommufd_pt.pasid],
+    [with_type1_iommu=1],[],
+    [[#include <linux/vfio.h>]])
+fi
+if test "x$with_type1_iommu" = "x1"; then
+  AC_DEFINE(HAVE_TYPE1_IOMMU, 1, [Define to 1 if VFIO_DEVICE_ATTACH_IOMMUFD_PT is present])
+fi
+
 dnl Produce output files.
 AC_CONFIG_HEADERS([config.h])
 
