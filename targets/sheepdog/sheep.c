@@ -44,7 +44,7 @@ static uint32_t sd_inode_get_idx(struct sheepdog_vdi *sd_vdi,
 	vid = sd_vdi->inode.data_vdi_id[idx];
 	pthread_mutex_unlock(&sd_vdi->inode_lock);
 
-	return vid;
+	return oid_to_vid(vid);
 }
 
 /* locking is done by the caller */
@@ -451,7 +451,7 @@ recheck:
 		return vid;
 
 	if (!sd_refresh_required(fd, sd_vdi))
-		return 0;
+		return vid;
 
 	ret = sd_read_inode(fd, sd_vdi, false);
 	if (ret < 0)
@@ -482,7 +482,7 @@ int sd_exec_read(int fd, struct sheepdog_vdi *sd_vdi,
 	vid = ret;
 	oid = vid_to_data_oid(vid, idx);
 	ublk_err("%s: read oid %lx from vid %x\n",
-		 __func__, oid, vid);
+		 __func__, oid, vid, idx);
 	ret = sd_read_object(fd, sd_io, oid, (void *)iod->addr,
 			     start, total, &need_reload);
 	if (ret < 0)
@@ -506,8 +506,9 @@ int sd_exec_discard(int fd, struct sheepdog_vdi *sd_vdi,
 	ret = sd_resolve_vid(fd, sd_vdi, idx);
 	if (ret < 0)
 		return ret;
-	if (!ret && write_zeroes) {
-		memset((void *)iod->addr, 0, total);
+	if (!ret) {
+		if (write_zeroes)
+			memset((void *)iod->addr, 0, total);
 		return 0;
 	}
 	orig_vid = ret;
@@ -518,7 +519,7 @@ retry:
 	sd_io->req.flags |= SD_FLAG_CMD_TGT;
 
 	pthread_mutex_lock(&sd_vdi->inode_lock);
-	orig_vid = sd_vdi->inode.data_vdi_id[idx];
+	orig_vid = oid_to_vid(sd_vdi->inode.data_vdi_id[idx]);
 	sd_vdi->inode.data_vdi_id[idx] = new_vid;
 	pthread_mutex_unlock(&sd_vdi->inode_lock);
 
@@ -600,6 +601,7 @@ static void sd_prep_write(struct sheepdog_vdi *sd_vdi,
 	pthread_mutex_unlock(&sd_vdi->inode_lock);
 
 }
+
 int sd_exec_write(int fd, struct sheepdog_vdi *sd_vdi,
 		const struct ublksrv_io_desc *iod,
 		struct sd_io_context *sd_io)
@@ -609,7 +611,6 @@ int sd_exec_write(int fd, struct sheepdog_vdi *sd_vdi,
 	uint32_t total = iod->nr_sectors << 9;
 	uint64_t start = offset % object_size;
 	uint32_t idx = offset / object_size;
-	uint64_t oid = 0, cow_oid = 0;
 	int ret;
 
 retry:
@@ -617,8 +618,6 @@ retry:
 	sd_prep_write(sd_vdi, sd_io, idx);
 
 	sd_io->addr = (void *)iod->addr;
-	sd_io->req.obj.oid = oid;
-	sd_io->req.obj.cow_oid = cow_oid;
 	sd_io->req.obj.offset = start;
 	sd_io->req.data_length = total;
 	sd_io->req.obj.copies = sd_vdi->inode.nr_copies;

@@ -722,6 +722,10 @@ struct ublk_param_integrity {
 	__u8	pad[5];
 };
 
+struct ublk_param_uuid {
+	__u8 uuid[16];
+};
+
 struct ublk_params {
 	/*
 	 * Total length of parameters, userspace has to set 'len' for both
@@ -737,6 +741,7 @@ struct ublk_params {
 #define UBLK_PARAM_TYPE_DMA_ALIGN       (1 << 4)
 #define UBLK_PARAM_TYPE_SEGMENT         (1 << 5)
 #define UBLK_PARAM_TYPE_INTEGRITY       (1 << 6) /* requires UBLK_F_INTEGRITY */
+#define UBLK_PARAM_TYPE_UUID            (1 << 7)
 	__u32	types;			/* types of parameter included */
 
 	struct ublk_param_basic		basic;
@@ -746,6 +751,7 @@ struct ublk_params {
 	struct ublk_param_dma_align	dma;
 	struct ublk_param_segment	seg;
 	struct ublk_param_integrity	integrity;
+	struct ublk_param_uuid		uuid;
 };
 
 #endif

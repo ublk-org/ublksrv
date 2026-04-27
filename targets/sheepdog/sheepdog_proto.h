@@ -331,6 +331,11 @@ struct recovery_throttling {
 	bool throttling;
 };
 
+#define SD_DEFAULT_STORE_POLICY 0
+#define SD_HYPER_STORE_POLICY 1
+#define SD_UUID_POLICY_MASK 0x80
+#define SD_STORE_POLICY_MASK 0x7f
+
 struct sd_inode {
 	char name[SD_MAX_VDI_LEN];
 	char tag[SD_MAX_VDI_TAG_LEN];
@@ -363,6 +368,15 @@ struct sd_indirect_idx {
 	uint32_t idx; /* Max index of data object within this indirect node */
 	uint64_t oid;
 };
+
+#define SD_INODE_STORE_POLICY(i) ((i)->store_policy & SD_STORE_POLICY_MASK)
+#define SD_INODE_USE_UUID(i) ((i)->store_policy & SD_UUID_POLICY_MASK)
+
+static inline bool sd_store_policy_is_hyper(const struct sd_inode *inode)
+{
+	uint8_t policy = inode->store_policy & SD_STORE_POLICY_MASK;
+	return policy == SD_HYPER_STORE_POLICY;
+}
 
 #define INODE_BTREE_MAGIC	0x6274
 

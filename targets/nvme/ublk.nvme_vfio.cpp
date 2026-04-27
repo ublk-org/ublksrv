@@ -425,7 +425,11 @@ static void nvme_log_numa_info(const struct nvme_vfio_tgt_data *data)
 
 static inline bool nvme_use_iommu(struct nvme_vfio_tgt_data *data)
 {
+#ifdef HAVE_TYPE1_IOMMU
 	return !data->use_noiommu && !data->force_noiommu;
+#else
+	return false;
+#endif
 }
 
 /* Check if controller supports SGL for NVM commands */
@@ -1325,6 +1329,7 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 	if (data->bar0 && data->bar0 != MAP_FAILED)
 		munmap((void *)data->bar0, data->bar0_size);
 
+#ifdef HAVE_TYPE1_IOMMU
 	if (data->iommufd >= 0) {
 		/* iommufd path: detach device, destroy IOAS, then close fds */
 		struct vfio_device_detach_iommufd_pt detach = {};
@@ -1341,6 +1346,7 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 			close(data->device_fd);
 		close(data->iommufd);
 	} else {
+#endif
 		/* Legacy noiommu path */
 		if (data->device_fd >= 0)
 			close(data->device_fd);
@@ -1348,8 +1354,9 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 			close(data->group_fd);
 		if (data->container_fd >= 0)
 			close(data->container_fd);
+#ifdef HAVE_TYPE1_IOMMU
 	}
-
+#endif
 	pthread_spin_destroy(&data->iova_lock);
 	nvme_dmabuf_pool_deinit(data);
 	nvme_adjust_hugepages(-(long)data->extra_hugepages);
@@ -1884,6 +1891,7 @@ err_close:
 	return -1;
 }
 
+#ifdef HAVE_IOMMU_TYPE1
 /*
  * Open VFIO cdev for a PCI device.
  * Scans /sys/bus/pci/devices/{pci}/vfio-dev/ to find the vfioN name,
@@ -1993,6 +2001,7 @@ err_close_iommufd:
 	data->iommufd = -1;
 	return -1;
 }
+#endif
 
 /* Per-queue private data */
 struct nvme_vfio_queue_data {
@@ -2048,11 +2057,14 @@ static int nvme_vfio_setup(struct nvme_vfio_tgt_data *data)
 		return -1;
 	}
 
+#ifdef HAVE_TYPE1_IOMMU
 	if (nvme_use_iommu(data)) {
 		/* IOMMU mode: use iommufd + VFIO cdev */
 		if (nvme_vfio_setup_iommufd(data) < 0)
 			return -1;
+		goto post_setup:
 	} else {
+#endif
 		/* NoIOMMU mode: use legacy VFIO container/group */
 		int version;
 
@@ -2085,7 +2097,9 @@ static int nvme_vfio_setup(struct nvme_vfio_tgt_data *data)
 			ublk_err("VFIO_GROUP_GET_DEVICE_FD: %s\n", strerror(errno));
 			return -1;
 		}
+#ifdef HAVE_TYPE1_IOMMU
 	}
+#endif
 
 	/* Common post-setup: device info, bus mastering, BAR0 mmap */
 	if (ioctl(data->device_fd, VFIO_DEVICE_GET_INFO, &device_info) < 0) {

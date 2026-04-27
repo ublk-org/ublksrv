@@ -12,6 +12,7 @@
 #include <linux/falloc.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <uuid/uuid.h>
 
 #include "ublksrv_tgt.h"
 #include "sheepdog_proto.h"
@@ -160,12 +161,14 @@ static int sheepdog_init_tgt(struct ublksrv_dev *ub_dev, int type,
 		{ "send_tmo",	required_argument, NULL, 's'},
 		{ "read_tmo",	required_argument, NULL, 'r'},
 		{ "lbs",	required_argument, NULL, 'b'},
+		{ "uuid",	required_argument, NULL, 'U'},
 		{ "unlock",	no_argument, &unlock, 'u'},
 		{ NULL }
 	};
 	int opt, lbs = 9, ret;
 	unsigned long send_tmo = SD_SEND_TMO, recv_tmo = SD_RECV_TMO;
 	char *vdi_name = NULL;
+	uuid_t uuid;
 	const char *cluster_host = "127.0.0.1";
 	const char *cluster_port = "7000";
 	struct sheepdog_dev *dev;
@@ -195,8 +198,9 @@ static int sheepdog_init_tgt(struct ublksrv_dev *ub_dev, int type,
 		return sheepdog_recover_tgt(ub_dev, 0);
 
 	strcpy(tgt_json.name, "sheepdog");
+	uuid_clear(uuid);
 
-	while ((opt = getopt_long(argc, argv, "h:p:v:b:s:r:",
+	while ((opt = getopt_long(argc, argv, "h:p:v:b:s:r:U:",
 				  sheepdog_longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'v':
@@ -232,6 +236,10 @@ static int sheepdog_init_tgt(struct ublksrv_dev *ub_dev, int type,
 			if (recv_tmo < send_tmo)
 				return -EINVAL;
 			break;
+		case 'U':
+			if (uuid_parse(optarg, uuid))
+				return -EINVAL;
+			break;
 		}
 	}
 
@@ -262,7 +270,14 @@ static int sheepdog_init_tgt(struct ublksrv_dev *ub_dev, int type,
 
 	ublk_json_write_tgt_ulong(cdev, "vid", dev->vdi.vid);
 	ublk_json_write_tgt_ulong(cdev, "ctime", dev->vdi.inode.create_time);
-
+	if (uuid_is_null(uuid) && SD_INODE_USE_UUID(&dev->vdi.inode)) {
+		memcpy((char *)uuid, &dev->vdi.inode.vm_clock_nsec, 8);
+		memcpy((char *)(uuid + 8), &dev->vdi.inode.vm_state_size, 8);
+	}
+	if (!uuid_is_null(uuid)) {
+		memcpy(p.uuid.uuid, uuid, 16);
+		p.types |= UBLK_PARAM_TYPE_UUID;
+	}
 	p.basic.physical_bs_shift = dev->vdi.inode.block_size_shift;
 	p.basic.chunk_sectors = 1 << (p.basic.physical_bs_shift - 9);
 	p.basic.dev_sectors = dev->vdi.inode.vdi_size >> 9;
