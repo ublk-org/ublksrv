@@ -26,7 +26,7 @@ if HAVE_LIBISCSI
 sbin_PROGRAMS += ublk.iscsi
 endif
 
-if HAVE_IOMMUFD
+if HAVE_VFIO
 sbin_PROGRAMS += ublk.nvme_vfio
 endif
 

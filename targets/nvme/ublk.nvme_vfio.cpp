@@ -52,7 +52,9 @@
 #include <sys/epoll.h>
 #include <limits.h>
 #include <linux/vfio.h>
+#ifdef HAVE_VFIO_IOMMUFD
 #include <linux/iommufd.h>
+#endif
 #include <dirent.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -186,8 +188,9 @@ struct nvme_vfio_tgt_data {
 	__u32 ioas_id;
 	__u32 dev_id;
 
-	/* NoIOMMU mode flag */
+	/* Mode control flags */
 	int force_noiommu;	/* --noiommu flag: use virtual addresses as IOVAs */
+	int force_legacy;	/* --force-legacy flag: use container instead of iommufd */
 
 	/* MMIO mapping */
 	volatile void *bar0;
@@ -428,6 +431,15 @@ static inline bool nvme_use_iommu(struct nvme_vfio_tgt_data *data)
 	return !data->use_noiommu && !data->force_noiommu;
 }
 
+static inline bool nvme_use_iommufd(struct nvme_vfio_tgt_data *data)
+{
+#ifdef HAVE_VFIO_IOMMUFD
+	return nvme_use_iommu(data) && !data->force_legacy;
+#else
+	return false;
+#endif
+}
+
 /* Check if controller supports SGL for NVM commands */
 static inline bool nvme_sgl_supported(struct nvme_vfio_tgt_data *data)
 {
@@ -457,28 +469,53 @@ static __u64 nvme_get_iova(struct nvme_vfio_tgt_data *data, void *vaddr, size_t 
 }
 
 /*
- * Perform VFIO DMA mapping if needed
+ * Perform VFIO DMA mapping if needed.
+ * iommufd mode: uses IOMMU_IOAS_MAP
+ * container mode: uses VFIO_IOMMU_MAP_DMA
+ * noiommu mode: no mapping needed (physical addresses used directly)
  */
 static int nvme_do_vfio_map(struct nvme_vfio_tgt_data *data,
 			    void *vaddr, __u64 iova, size_t size)
 {
-	struct iommu_ioas_map map = {};
+	size_t map_size = (size + PAGE_SIZE - 1) & ~((__u64)PAGE_SIZE - 1);
 
 	if (!nvme_use_iommu(data))
 		return 0;
 
-	map.size = sizeof(map);
-	map.flags = IOMMU_IOAS_MAP_FIXED_IOVA |
-		    IOMMU_IOAS_MAP_WRITEABLE |
-		    IOMMU_IOAS_MAP_READABLE;
-	map.ioas_id = data->ioas_id;
-	map.user_va = (__u64)vaddr;
-	map.length = (size + PAGE_SIZE - 1) & ~((__u64)PAGE_SIZE - 1);
-	map.iova = iova;
+#ifdef HAVE_VFIO_IOMMUFD
+	if (data->iommufd >= 0) {
+		struct iommu_ioas_map map = {};
 
-	if (ioctl(data->iommufd, IOMMU_IOAS_MAP, &map) < 0) {
-		ublk_err("IOMMU_IOAS_MAP: %s\n", strerror(errno));
-		return -1;
+		map.size = sizeof(map);
+		map.flags = IOMMU_IOAS_MAP_FIXED_IOVA |
+			    IOMMU_IOAS_MAP_WRITEABLE |
+			    IOMMU_IOAS_MAP_READABLE;
+		map.ioas_id = data->ioas_id;
+		map.user_va = (__u64)vaddr;
+		map.length = map_size;
+		map.iova = iova;
+
+		if (ioctl(data->iommufd, IOMMU_IOAS_MAP, &map) < 0) {
+			ublk_err("IOMMU_IOAS_MAP: %s\n", strerror(errno));
+			return -1;
+		}
+		return 0;
+	}
+#endif
+
+	{
+		struct vfio_iommu_type1_dma_map dma_map = {};
+
+		dma_map.argsz = sizeof(dma_map);
+		dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
+		dma_map.vaddr = (__u64)vaddr;
+		dma_map.iova = iova;
+		dma_map.size = map_size;
+
+		if (ioctl(data->container_fd, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
+			ublk_err("VFIO_IOMMU_MAP_DMA: %s\n", strerror(errno));
+			return -1;
+		}
 	}
 
 	return 0;
@@ -855,13 +892,26 @@ static void nvme_unmap_dma(struct nvme_vfio_tgt_data *data,
 		return;
 
 	if (nvme_use_iommu(data)) {
-		struct iommu_ioas_unmap unmap = {};
+#ifdef HAVE_VFIO_IOMMUFD
+		if (data->iommufd >= 0) {
+			struct iommu_ioas_unmap unmap = {};
 
-		unmap.size = sizeof(unmap);
-		unmap.ioas_id = data->ioas_id;
-		unmap.iova = mapping->iova;
-		unmap.length = mapping->size;
-		ioctl(data->iommufd, IOMMU_IOAS_UNMAP, &unmap);
+			unmap.size = sizeof(unmap);
+			unmap.ioas_id = data->ioas_id;
+			unmap.iova = mapping->iova;
+			unmap.length = mapping->size;
+			ioctl(data->iommufd, IOMMU_IOAS_UNMAP, &unmap);
+		} else
+#endif
+		{
+			struct vfio_iommu_type1_dma_unmap dma_unmap = {};
+
+			dma_unmap.argsz = sizeof(dma_unmap);
+			dma_unmap.iova = mapping->iova;
+			dma_unmap.size = mapping->size;
+			ioctl(data->container_fd, VFIO_IOMMU_UNMAP_DMA,
+			      &dma_unmap);
+		}
 	}
 
 	mapping->vaddr = 0;
@@ -1325,6 +1375,7 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 	if (data->bar0 && data->bar0 != MAP_FAILED)
 		munmap((void *)data->bar0, data->bar0_size);
 
+#ifdef HAVE_VFIO_IOMMUFD
 	if (data->iommufd >= 0) {
 		/* iommufd path: detach device, destroy IOAS, then close fds */
 		struct vfio_device_detach_iommufd_pt detach = {};
@@ -1340,8 +1391,10 @@ static void nvme_vfio_cleanup(struct nvme_vfio_tgt_data *data, bool shutdown_ctr
 		if (data->device_fd >= 0)
 			close(data->device_fd);
 		close(data->iommufd);
-	} else {
-		/* Legacy noiommu path */
+	} else
+#endif
+	{
+		/* Legacy container path (TYPE1 IOMMU or NoIOMMU) */
 		if (data->device_fd >= 0)
 			close(data->device_fd);
 		if (data->group_fd >= 0)
@@ -1884,6 +1937,7 @@ err_close:
 	return -1;
 }
 
+#ifdef HAVE_VFIO_IOMMUFD
 /*
  * Open VFIO cdev for a PCI device.
  * Scans /sys/bus/pci/devices/{pci}/vfio-dev/ to find the vfioN name,
@@ -1993,6 +2047,59 @@ err_close_iommufd:
 	data->iommufd = -1;
 	return -1;
 }
+#endif /* HAVE_VFIO_IOMMUFD */
+
+/*
+ * Setup legacy VFIO container/group device access.
+ * Handles both TYPE1 IOMMU and NoIOMMU modes.
+ */
+static int nvme_vfio_setup_container(struct nvme_vfio_tgt_data *data)
+{
+	int version, vfio_ext;
+
+	data->container_fd = open("/dev/vfio/vfio", O_RDWR);
+	if (data->container_fd < 0) {
+		ublk_err("open /dev/vfio/vfio: %s\n", strerror(errno));
+		return -1;
+	}
+
+	version = ioctl(data->container_fd, VFIO_GET_API_VERSION);
+	if (version != VFIO_API_VERSION) {
+		ublk_err("VFIO API version mismatch\n");
+		goto err;
+	}
+
+	vfio_ext = nvme_use_iommu(data) ? VFIO_TYPE1_IOMMU : VFIO_NOIOMMU_IOMMU;
+	if (!ioctl(data->container_fd, VFIO_CHECK_EXTENSION, vfio_ext)) {
+		ublk_err("VFIO %s not supported\n",
+			 nvme_use_iommu(data) ? "TYPE1 IOMMU" : "no-IOMMU");
+		goto err;
+	}
+
+	data->group_fd = nvme_open_vfio_group(data->iommu_group,
+					      data->container_fd,
+					      &data->use_noiommu);
+	if (data->group_fd < 0)
+		goto err;
+
+	data->device_fd = ioctl(data->group_fd, VFIO_GROUP_GET_DEVICE_FD,
+				data->pci_addr);
+	if (data->device_fd < 0) {
+		ublk_err("VFIO_GROUP_GET_DEVICE_FD: %s\n", strerror(errno));
+		goto err;
+	}
+
+	return 0;
+
+err:
+	if (data->group_fd >= 0) {
+		close(data->group_fd);
+		data->group_fd = -1;
+	}
+	close(data->container_fd);
+	data->container_fd = -1;
+	return -1;
+}
 
 /* Per-queue private data */
 struct nvme_vfio_queue_data {
@@ -2027,8 +2134,9 @@ static int nvme_vfio_setup_tgt(struct ublksrv_dev *dev)
  * Setup VFIO device and map BAR0.
  * Called after data->pci_addr is set.
  *
- * IOMMU mode:   uses iommufd + VFIO cdev (/dev/iommu + /dev/vfio/devices/vfioN)
- * NoIOMMU mode: uses legacy VFIO container/group (/dev/vfio/vfio + /dev/vfio/{group})
+ * iommufd mode:   iommufd + VFIO cdev (/dev/iommu + /dev/vfio/devices/vfioN)
+ * container mode: legacy container/group + TYPE1 IOMMU (VFIO_IOMMU_MAP_DMA)
+ * noiommu mode:   legacy container/group + no IOMMU (physical addresses)
  */
 static int nvme_vfio_setup(struct nvme_vfio_tgt_data *data)
 {
@@ -2048,43 +2156,20 @@ static int nvme_vfio_setup(struct nvme_vfio_tgt_data *data)
 		return -1;
 	}
 
-	if (nvme_use_iommu(data)) {
-		/* IOMMU mode: use iommufd + VFIO cdev */
+#ifdef HAVE_VFIO_IOMMUFD
+	if (nvme_use_iommufd(data)) {
+		/* iommufd mode: use iommufd + VFIO cdev */
 		if (nvme_vfio_setup_iommufd(data) < 0)
 			return -1;
-	} else {
-		/* NoIOMMU mode: use legacy VFIO container/group */
-		int version;
-
-		data->container_fd = open("/dev/vfio/vfio", O_RDWR);
-		if (data->container_fd < 0) {
-			ublk_err("open /dev/vfio/vfio: %s\n", strerror(errno));
+		nvme_log("Using iommufd mode\n");
+	} else
+#endif
+	{
+		/* Legacy container mode (TYPE1 IOMMU or NoIOMMU) */
+		if (nvme_vfio_setup_container(data) < 0)
 			return -1;
-		}
-
-		version = ioctl(data->container_fd, VFIO_GET_API_VERSION);
-		if (version != VFIO_API_VERSION) {
-			ublk_err("VFIO API version mismatch\n");
-			return -1;
-		}
-
-		if (!ioctl(data->container_fd, VFIO_CHECK_EXTENSION, VFIO_NOIOMMU_IOMMU)) {
-			ublk_err("VFIO no-IOMMU not supported\n");
-			return -1;
-		}
-
-		data->group_fd = nvme_open_vfio_group(data->iommu_group,
-						      data->container_fd,
-						      &data->use_noiommu);
-		if (data->group_fd < 0)
-			return -1;
-
-		data->device_fd = ioctl(data->group_fd, VFIO_GROUP_GET_DEVICE_FD,
-					data->pci_addr);
-		if (data->device_fd < 0) {
-			ublk_err("VFIO_GROUP_GET_DEVICE_FD: %s\n", strerror(errno));
-			return -1;
-		}
+		nvme_log("Using legacy container mode (%s)\n",
+			 nvme_use_iommu(data) ? "TYPE1 IOMMU" : "NoIOMMU");
 	}
 
 	/* Common post-setup: device info, bus mastering, BAR0 mmap */
@@ -2128,15 +2213,18 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 	__u64 cap;
 	int opt;
 	int force_noiommu = 0;
+	int force_legacy = 0;
 	struct ublksrv_tgt_base_json tgt_json = { 0 };
 	struct ublk_params p = {};
 	enum {
 		OPT_PCI = 256,
 		OPT_NOIOMMU,
+		OPT_FORCE_LEGACY,
 	};
 	static const struct option longopts[] = {
 		{ "pci",		required_argument, NULL, OPT_PCI },
 		{ "noiommu",		no_argument, NULL, OPT_NOIOMMU },
+		{ "force-legacy",	no_argument, NULL, OPT_FORCE_LEGACY },
 		{ NULL }
 	};
 	size_t hps = nvme_get_hugepage_size();
@@ -2197,6 +2285,9 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 		case OPT_NOIOMMU:
 			force_noiommu = 1;
 			break;
+		case OPT_FORCE_LEGACY:
+			force_legacy = 1;
+			break;
 		}
 	}
 
@@ -2215,6 +2306,7 @@ static int nvme_vfio_init_tgt(struct ublksrv_dev *dev, int type, int argc, char 
 
 	dev->tgt.tgt_data = data;
 	data->force_noiommu = force_noiommu;
+	data->force_legacy = force_legacy;
 	data->user_copy = info->flags & UBLK_F_USER_COPY;
 
 	/* Enable noiommu mode if requested */
@@ -2432,9 +2524,10 @@ static void nvme_vfio_free_io_buf(const struct ublksrv_queue *q, void *buf, int 
 
 static void nvme_vfio_cmd_usage(void)
 {
-	printf("\tnvme_vfio: --pci PCI_ADDR [--noiommu]\n");
+	printf("\tnvme_vfio: --pci PCI_ADDR [--noiommu] [--force-legacy]\n");
 	printf("\t  --pci: PCI address of NVMe device (e.g., 0000:01:00.0)\n");
 	printf("\t  --noiommu: Force noiommu mode (use virtual addresses as IOVAs)\n");
+	printf("\t  --force-legacy: Force legacy VFIO container mode instead of iommufd\n");
 }
 
 static const struct ublksrv_tgt_type nvme_vfio_tgt_type = {

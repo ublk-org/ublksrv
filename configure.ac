@@ -229,9 +229,29 @@ if test -z "$DOXYGEN"; then
 fi
 AM_CONDITIONAL([HAVE_DOXYGEN], [test -n "$DOXYGEN"])
 
-dnl Check for linux/iommufd.h (required for nvme_vfio target)
+dnl Check for linux/vfio.h (required for nvme_vfio target)
+AC_CHECK_HEADERS([linux/vfio.h])
+AM_CONDITIONAL([HAVE_VFIO], [test "x$ac_cv_header_linux_vfio_h" = "xyes"])
+
+dnl Check for linux/iommufd.h
 AC_CHECK_HEADERS([linux/iommufd.h])
 AM_CONDITIONAL([HAVE_IOMMUFD], [test "x$ac_cv_header_linux_iommufd_h" = "xyes"])
+
+dnl Check for VFIO iommufd cdev support (requires both headers + cdev ioctls)
+if test "x$ac_cv_header_linux_iommufd_h" = "xyes"; then
+    AC_MSG_CHECKING([for VFIO iommufd cdev support])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+        #include <linux/vfio.h>
+        #include <linux/iommufd.h>
+    ]], [[
+        int x = VFIO_DEVICE_ATTACH_IOMMUFD_PT;
+        struct iommu_ioas_alloc a;
+        (void)x; (void)a;
+    ]])],
+    [AC_MSG_RESULT([yes])
+     AC_DEFINE([HAVE_VFIO_IOMMUFD], [1], [Define to 1 if VFIO iommufd cdev is supported])],
+    [AC_MSG_RESULT([no])])
+fi
 
 dnl Produce output files.
 AC_CONFIG_HEADERS([config.h])
