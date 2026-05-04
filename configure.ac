@@ -238,6 +238,7 @@ AC_CHECK_HEADERS([linux/iommufd.h])
 AM_CONDITIONAL([HAVE_IOMMUFD], [test "x$ac_cv_header_linux_iommufd_h" = "xyes"])
 
 dnl Check for VFIO iommufd cdev support (requires both headers + cdev ioctls)
+have_vfio_iommufd=no
 if test "x$ac_cv_header_linux_iommufd_h" = "xyes"; then
     AC_MSG_CHECKING([for VFIO iommufd cdev support])
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
@@ -249,9 +250,11 @@ if test "x$ac_cv_header_linux_iommufd_h" = "xyes"; then
         (void)x; (void)a;
     ]])],
     [AC_MSG_RESULT([yes])
+     have_vfio_iommufd=yes
      AC_DEFINE([HAVE_VFIO_IOMMUFD], [1], [Define to 1 if VFIO iommufd cdev is supported])],
     [AC_MSG_RESULT([no])])
 fi
+AM_CONDITIONAL([HAVE_VFIO_IOMMUFD], [test "x$have_vfio_iommufd" = "xyes"])
 
 dnl Produce output files.
 AC_CONFIG_HEADERS([config.h])
