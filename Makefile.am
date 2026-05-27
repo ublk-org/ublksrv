@@ -42,9 +42,9 @@ ublk_null_CPPFLAGS = $(ublk_null_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
 ublk_null_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS)
 
 ublk_iscsi_SOURCES = $(TGT_DIR)/ublk.iscsi.cpp $(TGT_DIR)/ublksrv_tgt.cpp
-ublk_iscsi_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
+ublk_iscsi_CFLAGS = $(WARNINGS_CFLAGS) $(LIBISCSI_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)
 ublk_iscsi_CPPFLAGS = $(ublk_iscsi_CFLAGS) -I$(top_srcdir)/include -I$(TGT_INC)
-ublk_iscsi_LDADD = lib/libublksrv.la $(LIBURING_LIBS) $(PTHREAD_LIBS) -liscsi
+ublk_iscsi_LDADD = lib/libublksrv.la $(LIBISCSI_LIBS) $(LIBURING_LIBS) $(PTHREAD_LIBS) -liscsi
 
 ublk_loop_SOURCES = $(TGT_DIR)/ublk.loop.cpp $(TGT_DIR)/ublksrv_tgt.cpp
 ublk_loop_CFLAGS = $(WARNINGS_CFLAGS) $(LIBURING_CFLAGS) $(PTHREAD_CFLAGS)

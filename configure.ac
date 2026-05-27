@@ -135,20 +135,15 @@ AC_ARG_WITH([libiscsi],
 )
 if test "x$with_libiscsi" != "xno"; then
     	AC_MSG_CHECKING([for libiscsi])
-	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-#include <iscsi/iscsi.h>
-	]], [[
-		int i = LIBISCSI_IMMEDIATE_SOCKET_WRITE;
-	]])],
+        PKG_CHECK_MODULES([libiscsi], [libiscsi],
 	[AC_MSG_RESULT([yes])
-	 AM_CONDITIONAL([HAVE_LIBISCSI], true)
+         AC_SUBST([LIBISCSI_CFLAGS])
+         AC_SUBST([LIBISCSI_LIBS])
 	 AC_DEFINE([HAVE_LIBISCSI], [1], [Define to 1 if libiscsi is available])],
-	[AC_MSG_RESULT([no])
-	 AM_CONDITIONAL([HAVE_LIBISCSI], false)])
-else
-	 AM_CONDITIONAL([HAVE_LIBISCSI], false)
+	[AC_MSG_RESULT([no])]
+        )
 fi
-AM_CONDITIONAL([LIBISCSI], [test "x$HAVE_LIBISCSI" = "x1"])
+AM_CONDITIONAL([HAVE_LIBISCSI], [test "x$LIBISCSI_LIBS" != "x"])
 
 #gnutls is only for nbd target, borrowed from nbd-client project
 AC_ARG_WITH([gnutls],
