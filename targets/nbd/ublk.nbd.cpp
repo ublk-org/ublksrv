@@ -97,10 +97,22 @@ static int req_to_nbd_cmd_type(const struct ublksrv_io_desc *iod)
 	}
 }
 
+/*
+ * The recv side of the NBD connection is driven by a single shared slot,
+ * not by any per-IO tag. We reserve one extra tag at q->q_depth via
+ * tgt->extra_ios = 1 in nbd_setup_tgt(); that slot's ublk_io_data is what
+ * carries the recv coroutine and the deferred recv CQE. All four sites
+ * that need to refer to "the recv slot" should go through this helper.
+ */
+static inline unsigned nbd_recv_tag(const struct ublksrv_queue *q)
+{
+	return q->q_depth;
+}
+
 static inline bool is_recv_io(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
-	return data->tag >= q->q_depth;
+	return data->tag == nbd_recv_tag(q);
 }
 
 #define NBD_COOKIE_BITS 32
@@ -366,7 +378,7 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
-	unsigned int tag = q->q_depth;	//recv always use this extra tag
+	unsigned int tag = nbd_recv_tag(q);
 	struct io_uring_sqe *sqe[1];
 
 	ublk_queue_alloc_sqes(q, sqe, 1);
@@ -666,10 +678,10 @@ static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
 {
 	if (q_data->in_flight_ios && !q_data->recv_started) {
 		const struct ublk_io_data *data =
-			ublksrv_queue_get_io_data(q, q->q_depth);
+			ublksrv_queue_get_io_data(q, nbd_recv_tag(q));
 		struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-		ublk_assert(data->tag == q->q_depth);
+		ublk_assert(data->tag == nbd_recv_tag(q));
 
 		io->co = __nbd_handle_recv(q, data, io);
 	}
@@ -677,10 +689,10 @@ static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
 	/* reply or read io data is comming */
 	if (q_data->need_handle_recv) {
 		const struct ublk_io_data *data =
-			ublksrv_queue_get_io_data(q, q->q_depth);
+			ublksrv_queue_get_io_data(q, nbd_recv_tag(q));
 		struct ublk_io_tgt *io = __ublk_get_io_tgt_data(data);
 
-		ublk_assert(data->tag == q->q_depth);
+		ublk_assert(data->tag == nbd_recv_tag(q));
 
 		io->tgt_io_cqe = &q_data->recv_cqe;
 		io->co.resume();
