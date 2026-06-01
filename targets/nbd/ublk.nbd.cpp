@@ -41,27 +41,27 @@ struct nbd_tgt_data {
 #endif
 
 struct nbd_queue_data {
-	unsigned short in_flight_ios;
+	unsigned short in_flight_ios;		/* total ios awaiting NBD reply */
 
-	unsigned short recv_started:1;
-	unsigned short use_send_zc:1;
-	unsigned short use_unix_sock:1;
-	unsigned short need_handle_recv:1;
-	unsigned short chain_active:1;
+	unsigned short recv_started:1;		/* recv coroutine is running */
+	unsigned short use_send_zc:1;		/* sendmsg_zc instead of sendmsg */
+	unsigned short use_unix_sock:1;		/* AF_UNIX backend vs TCP */
+	unsigned short need_handle_recv:1;	/* recv CQE saved, resume in bg */
+	unsigned short chain_submitted:1;	/* link chain handed to kernel; */
+						/* false again once last CQE in. */
 
-	unsigned int chained_send_ios;
+	unsigned int chained_send_ios;		/* sends still in current chain */
 
 	/*
-	 * When the current chain is busy, staggering send ios
-	 * into this queue(next_chain). After the current chain
-	 * is consumed, submit all send ios in 'next_chain' as
-	 * one whole batch.
+	 * Staging queue for ios that arrived while the previous link chain
+	 * was still in flight (chain_submitted=true). nbd_handle_send_bg()
+	 * flushes the whole vector as one fresh chain once that clears.
 	 */
 	std::vector <const struct ublk_io_data *> next_chain;
 
-	struct io_uring_sqe *last_send_sqe;
-	struct nbd_reply reply;
-	struct io_uring_cqe recv_cqe;
+	struct io_uring_sqe *last_send_sqe;	/* tail of the in-build chain */
+	struct nbd_reply reply;			/* recv buffer for one reply */
+	struct io_uring_cqe recv_cqe;		/* deferred recv CQE */
 };
 
 struct nbd_io_data {
@@ -501,7 +501,7 @@ handle_read_io:
 /* The current chain is busy iff it has been submitted to kernel */
 static inline bool nbd_send_chain_busy(const struct nbd_queue_data *q_data)
 {
-	return q_data->chained_send_ios > 0 && q_data->chain_active;
+	return q_data->chained_send_ios > 0 && q_data->chain_submitted;
 }
 
 static int nbd_handle_io_async(const struct ublksrv_queue *q,
@@ -543,7 +543,7 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 
 	ublk_assert(q_data->chained_send_ios);
 	if (--q_data->chained_send_ios == 0)
-		q_data->chain_active = false;
+		q_data->chain_submitted = false;
 
 	/*
 	 * In case of failure, how to tell recv work to handle the
@@ -625,11 +625,11 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
  *   with IOSQE_IO_LINK; chained_send_ios++
  *         |
  *   nbd_handle_io_bg() runs last, just before io_uring_enter:
- *       - submits the linked send chain  -> chain_active = true
+ *       - submits the linked send chain  -> chain_submitted = true
  *       - then queues the recv sqe       (recv stays out of the chain)
  *         |
  *   send CQE -> nbd_send_req_done -> chained_send_ios--; if 0,
- *               chain_active = false (chain has fully drained)
+ *               chain_submitted = false (chain has fully drained)
  *         |
  *   nbd_handle_send_bg() flushes anything that was staged into
  *   next_chain while the previous chain was busy.
@@ -703,10 +703,10 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 
-	NBD_IO_DBG("%s: pending ios %d/%d chain_active %d next_chain %ld recv(%d) sqes %u\n",
+	NBD_IO_DBG("%s: pending ios %d/%d chain_submitted %d next_chain %ld recv(%d) sqes %u\n",
 				__func__, q_data->in_flight_ios,
 				q_data->chained_send_ios,
-				q_data->chain_active,
+				q_data->chain_submitted,
 				q_data->next_chain.size(),
 				q_data->recv_started,
 				nr_queued_io);
@@ -744,7 +744,7 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 	 * io_uring_enter()
 	 */
 	if (q_data->chained_send_ios > 0)
-		q_data->chain_active = true;
+		q_data->chain_submitted = true;
 }
 
 static int nbd_init_queue(const struct ublksrv_queue *q,
