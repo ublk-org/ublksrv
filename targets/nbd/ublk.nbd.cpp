@@ -501,7 +501,11 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 	struct nbd_io_data *nbd_data = io_tgt_to_nbd_data(io);
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	int fd = q->dev->tgt.fds[q->q_id + 1];
-	unsigned int len;
+	/*
+	 * io_uring_cqe ends in a flexible array member, so it can't live by
+	 * value in this coroutine's frame; back it with a plain buffer and
+	 * use it through a pointer instead.
+	 */
 	u64 cqe_buf[2] = {0};
 	struct io_uring_cqe *fake_cqe = (struct io_uring_cqe *)cqe_buf;
 
@@ -510,50 +514,56 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 	while (q_data->in_flight_ios > 0) {
 		const struct ublk_io_data *io_data = NULL;
 		int ret;
-read_reply:
-		ret = nbd_do_recv(q, nbd_data, fd, &q_data->reply,
-				sizeof(q_data->reply));
-		if (ret == sizeof(q_data->reply)) {
-			nbd_data->done = ret;
-			fake_cqe->res = 0;
-			io->tgt_io_cqe = fake_cqe;
-			goto handle_recv;
-		} else if (ret < 0)
-			break;
 
-		co_await__suspend_always(data->tag);
-		if (io->tgt_io_cqe->res == -EAGAIN)
-			goto read_reply;
+		/*
+		 * Receive one reply header. nbd_do_recv() either drains it
+		 * in-line (returns the full length), queues a recv sqe and
+		 * returns 0 (we suspend until its CQE), or fails. When drained
+		 * in-line we drive handling with a zero-res fake CQE; otherwise
+		 * the real recv CQE carries the byte count. A -EAGAIN CQE just
+		 * means "retry the recv".
+		 */
+		do {
+			ret = nbd_do_recv(q, nbd_data, fd, &q_data->reply,
+					sizeof(q_data->reply));
+			if (ret == sizeof(q_data->reply)) {
+				nbd_data->done = ret;
+				fake_cqe->res = 0;
+				io->tgt_io_cqe = fake_cqe;
+				break;
+			}
+			if (ret < 0)
+				goto out;
+			co_await__suspend_always(data->tag);
+		} while (io->tgt_io_cqe->res == -EAGAIN);
 
-handle_recv:
 		ret = nbd_handle_recv_reply(q, nbd_data, io->tgt_io_cqe, &io_data);
 		if (ret < 0)
 			break;
-		if (!ret)
+		if (!ret)	/* non-read reply already completed its io */
 			continue;
-read_io:
+
+		/* read reply: receive the payload into the io buffer */
 		ublk_assert(io_data != NULL);
+		unsigned int len = io_data->iod->nr_sectors << 9;
 
-		len = io_data->iod->nr_sectors << 9;
-		ret = nbd_do_recv(q, nbd_data, fd, (void *)io_data->iod->addr, len);
-		if (ret == (int)len) {
-			nbd_data->done = ret;
-			fake_cqe->res = 0;
-			io->tgt_io_cqe = fake_cqe;
-			goto handle_read_io;
-		} else if (ret < 0)
-			break;
+		do {
+			ret = nbd_do_recv(q, nbd_data, fd,
+					(void *)io_data->iod->addr, len);
+			if (ret == (int)len) {
+				nbd_data->done = ret;
+				fake_cqe->res = 0;
+				io->tgt_io_cqe = fake_cqe;
+				break;
+			}
+			if (ret < 0)
+				goto out;
+			co_await__suspend_always(data->tag);
+		} while (io->tgt_io_cqe->res == -EAGAIN);
 
-		/* still wait on recv coroutine context */
-		co_await__suspend_always(data->tag);
-
-		ret = io->tgt_io_cqe->res;
-		if (ret == -EAGAIN)
-			goto read_io;
-
-handle_read_io:
 		__nbd_resume_read_req(io_data, io->tgt_io_cqe, nbd_data->done);
 	}
+out:
 	q_data->recv_started = 0;
 	co_return;
 }
