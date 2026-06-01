@@ -803,7 +803,13 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type,
 	const struct ublksrv_ctrl_dev *cdev = ublksrv_get_ctrl_dev(dev);
 	const struct ublksrv_ctrl_dev_info *info = ublksrv_ctrl_get_dev_info(cdev);
 	int i;
-	struct nbd_tgt_data *data = (struct nbd_tgt_data *)dev->tgt.tgt_data;
+	struct nbd_tgt_data *data;
+
+	if (!tgt->tgt_data)
+		tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
+	if (!tgt->tgt_data)
+		return -ENOMEM;
+	data = (struct nbd_tgt_data *)tgt->tgt_data;
 
 	const char *port;
 	uint16_t needed_flags = 0;
@@ -917,8 +923,6 @@ static int nbd_recover_tgt(struct ublksrv_dev *dev, int type)
 {
 	uint16_t flags = 0;
 
-	dev->tgt.tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
-
 	return nbd_setup_tgt(dev, type, &flags);
 }
 
@@ -988,8 +992,6 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	ublk_json_write_tgt_str(cdev, "export_name", exp_name);
 	ublk_json_write_tgt_str(cdev, "port", port);
 	ublk_json_write_tgt_long(cdev, "send_zc", send_zc);
-
-	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
 
 	ret = nbd_setup_tgt(dev, type, &flags);
 	if (ret)
