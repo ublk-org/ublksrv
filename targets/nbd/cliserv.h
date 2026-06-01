@@ -80,8 +80,6 @@ void err_nonfatal(const char *s);
 void nbd_err(const char *s) G_GNUC_NORETURN;
 #define err(S) nbd_err(S)
 
-void logging(const char* name);
-
 #ifndef ntohll
 uint64_t ntohll(uint64_t a);
 #endif

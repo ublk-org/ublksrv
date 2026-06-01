@@ -81,14 +81,6 @@ void err(const char *s) {
 	exit(EXIT_FAILURE);
 }
 
-void logging(const char* name) {
-#ifdef ISSERVER
-	openlog(name, LOG_PID, LOG_DAEMON);
-#endif
-	setvbuf(stdout, NULL, _IONBF, 0);
-	setvbuf(stderr, NULL, _IONBF, 0);
-}
-
 #ifndef ntohll
 #ifdef WORDS_BIGENDIAN
 uint64_t ntohll(uint64_t a) {
