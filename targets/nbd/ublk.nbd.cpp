@@ -29,10 +29,17 @@
 #define NBD_MAX_NAME	512
 
 #define NBD_OP_READ_REPLY  0x81
+/*
+ * Marks the data half of an auto_zc WRITE, which is split into a header
+ * send + a registered-buffer data send. The send-completion path uses it
+ * to compute the per-sqe expected length (data only, not header+data).
+ */
+#define NBD_OP_WRITE_DATA  0x82
 
 struct nbd_tgt_data {
 	bool unix_sock;
 	bool use_send_zc;
+	bool auto_zc;
 };
 
 #ifndef HAVE_LIBURING_SEND_ZC
@@ -217,14 +224,9 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	const struct ublksrv_io_desc *iod = data->iod;
 	unsigned ublk_op = ublksrv_get_op(iod);
 	unsigned msg_flags = MSG_NOSIGNAL;
-	struct io_uring_sqe *sqe[1];
-
-	ublk_queue_alloc_sqes(q, sqe, 1);
-	if (!sqe[0]) {
-		nbd_err("%s: get sqe failed, tag %d op %d\n",
-				__func__, data->tag, ublk_op);
-		return -ENOMEM;
-	}
+	bool zc_write = ublksrv_tgt_queue_auto_zc(q) &&
+		ublk_op == UBLK_IO_OP_WRITE;
+	struct io_uring_sqe *sqe[2];
 
 	/*
 	 * Always set WAITALL, so io_uring will handle retry in case of
@@ -235,6 +237,20 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	 * note: It was added for recv* in 5.18 and send* in 5.19.
 	 */
 	msg_flags |= MSG_WAITALL;
+
+	/*
+	 * A zc WRITE is two linked sends: the header sendmsg below (one iov,
+	 * see __nbd_handle_io_async) plus the data send appended afterwards.
+	 * Both sqes must come from one allocation: ublk_queue_alloc_sqes() may
+	 * submit when the SQ is low, and a mid-chain submit would cut the link
+	 * chain and reorder writes on the single TCP stream.
+	 */
+	ublk_queue_alloc_sqes(q, sqe, zc_write ? 2 : 1);
+	if (!sqe[0] || (zc_write && !sqe[1])) {
+		nbd_err("%s: get sqe failed, tag %d op %d\n",
+				__func__, data->tag, ublk_op);
+		return -ENOMEM;
+	}
 
 	if (q_data->use_send_zc)
 		io_uring_prep_sendmsg_zc(sqe[0], q->q_id + 1, msg, msg_flags);
@@ -251,6 +267,24 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	io_uring_sqe_set_flags(sqe[0], /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
 	nbd_chain_append_send(q_data, sqe[0]);
+
+	/*
+	 * auto_zc can't bounce data through iod->addr (not mapped), so send the
+	 * write data straight from the request's kernel-registered buffer
+	 * (index == tag) via a linked IORING_RECVSEND_FIXED_BUF send. The
+	 * NBD_OP_WRITE_DATA tag makes the send-completion short-send check use
+	 * the data-only expected length.
+	 */
+	if (zc_write) {
+		io_uring_prep_send(sqe[1], q->q_id + 1, NULL,
+				iod->nr_sectors << 9, msg_flags);
+		sqe[1]->ioprio |= IORING_RECVSEND_FIXED_BUF;
+		sqe[1]->buf_index = data->tag;
+		sqe[1]->user_data = build_user_data(data->tag, NBD_OP_WRITE_DATA,
+				iod->nr_sectors, 1);
+		io_uring_sqe_set_flags(sqe[1], IOSQE_FIXED_FILE | IOSQE_IO_LINK);
+		nbd_chain_append_send(q_data, sqe[1]);
+	}
 
 	NBD_IO_DBG("%s: queue io op %d(%llu %x %llx) ios(%u %u)"
 			" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
@@ -283,7 +317,13 @@ static co_io_job __nbd_handle_io_async(const struct ublksrv_queue *q,
 	};
 	struct msghdr msg = {
 		.msg_iov = iov,
-		.msg_iovlen = (op == UBLK_IO_OP_WRITE) ? 2UL : 1UL,
+		/*
+		 * Under auto_zc the write data is sent separately from the
+		 * request's registered buffer, so the header sendmsg carries
+		 * the 28-byte header only.
+		 */
+		.msg_iovlen = (op == UBLK_IO_OP_WRITE &&
+				!ublksrv_tgt_queue_auto_zc(q)) ? 2UL : 1UL,
 	};
 
 	if (type == -1)
@@ -419,10 +459,18 @@ static void __nbd_resume_read_req(const struct ublk_io_data *data,
 	io->co.resume();
 }
 
-/* recv completion drives the whole IO flow */
+/*
+ * recv completion drives the whole IO flow
+ *
+ * Under auto_zc the READ data is recv'd straight into the request's
+ * kernel-registered buffer via IORING_RECVSEND_FIXED_BUF. That buffer has
+ * no userspace address, so for the (non-reply) data recv @buf is unused and
+ * @tag selects the registered buffer (index == tag), with the resume offset
+ * @done passed as the in-buffer offset (sqe->addr).
+ */
 static inline int nbd_start_recv(const struct ublksrv_queue *q,
 		struct nbd_io_data *nbd_data, void *buf, int len,
-		bool reply, unsigned done)
+		bool reply, unsigned done, int zc_buf_idx)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	unsigned int op = reply ? NBD_OP_READ_REPLY : UBLK_IO_OP_READ;
@@ -437,7 +485,15 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
 	}
 
 	nbd_data->done = done;
-	io_uring_prep_recv(sqe[0], q->q_id + 1, (char *)buf + done, len - done, MSG_WAITALL);
+	if (zc_buf_idx >= 0) {
+		io_uring_prep_recv(sqe[0], q->q_id + 1,
+				(void *)(uintptr_t)done, len - done, MSG_WAITALL);
+		sqe[0]->ioprio |= IORING_RECVSEND_FIXED_BUF;
+		sqe[0]->buf_index = zc_buf_idx;
+	} else {
+		io_uring_prep_recv(sqe[0], q->q_id + 1, (char *)buf + done,
+				len - done, MSG_WAITALL);
+	}
 	io_uring_sqe_set_flags(sqe[0], IOSQE_FIXED_FILE);
 
 	/* bit63 marks us as tgt io */
@@ -462,13 +518,21 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
  */
 static int nbd_do_recv(const struct ublksrv_queue *q,
 		struct nbd_io_data *nbd_data, int fd,
-		void *buf, unsigned len)
+		void *buf, unsigned len, int zc_buf_idx)
 {
 	unsigned msg_flags = MSG_DONTWAIT | MSG_WAITALL;
 	int i = 0;
 	unsigned done = 0;
 	const int loops = len < 512 ? 16 : 32;
 	int ret;
+
+	/*
+	 * Under auto_zc the READ data lands in the request's kernel-registered
+	 * buffer (index == @zc_buf_idx), which has no userspace address, so the
+	 * sync recv() fast path can't be used. Recv straight into that buffer.
+	 */
+	if (zc_buf_idx >= 0)
+		return nbd_start_recv(q, nbd_data, buf, len, false, 0, zc_buf_idx);
 
 	while (i++ < loops && done < len) {
 		ret = recv(fd, (char *)buf + done, len - done, msg_flags);
@@ -483,7 +547,7 @@ static int nbd_do_recv(const struct ublksrv_queue *q,
 
 	NBD_IO_DBG("%s: sync(non-blocking) recv %d(%s)/%d/%u\n",
 			__func__, ret, strerror(errno), done, len);
-	ret = nbd_start_recv(q, nbd_data, buf, len, len < 512, done);
+	ret = nbd_start_recv(q, nbd_data, buf, len, len < 512, done, zc_buf_idx);
 
 	return ret;
 }
@@ -508,6 +572,7 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 	 */
 	u64 cqe_buf[2] = {0};
 	struct io_uring_cqe *fake_cqe = (struct io_uring_cqe *)cqe_buf;
+	bool use_zc = ublksrv_tgt_queue_auto_zc(q);
 
 	q_data->recv_started = 1;
 
@@ -525,7 +590,7 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 		 */
 		do {
 			ret = nbd_do_recv(q, nbd_data, fd, &q_data->reply,
-					sizeof(q_data->reply));
+					sizeof(q_data->reply), -1);
 			if (ret == sizeof(q_data->reply)) {
 				nbd_data->done = ret;
 				fake_cqe->res = 0;
@@ -547,9 +612,15 @@ static co_io_job __nbd_handle_recv(const struct ublksrv_queue *q,
 		ublk_assert(io_data != NULL);
 		unsigned int len = io_data->iod->nr_sectors << 9;
 
+		/*
+		 * Under auto_zc, pass io_data->tag so nbd_do_recv() recvs into
+		 * the request's registered buffer; otherwise pass -1 and recv
+		 * into @addr on the non-zc path.
+		 */
 		do {
 			ret = nbd_do_recv(q, nbd_data, fd,
-					(void *)io_data->iod->addr, len);
+					(void *)io_data->iod->addr, len,
+					use_zc ? (int)io_data->tag : -1);
 			if (ret == (int)len) {
 				nbd_data->done = ret;
 				fake_cqe->res = 0;
@@ -618,9 +689,15 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 
 	/*
 	 * We have set MSG_WAITALL, so short send shouldn't be possible,
-	 * but just warn in case of io_uring regression
+	 * but just warn in case of io_uring regression.
+	 *
+	 * Under auto_zc a WRITE is two sends: a header (op == UBLK_IO_OP_WRITE,
+	 * 28 bytes) and a registered-buffer data send (op == NBD_OP_WRITE_DATA,
+	 * data bytes only). Non-auto_zc WRITE is a single header+data sendmsg.
 	 */
-	if (ublk_op == UBLK_IO_OP_WRITE)
+	if (ublk_op == NBD_OP_WRITE_DATA)
+		total = nr_sects << 9;
+	else if (ublk_op == UBLK_IO_OP_WRITE && !ublksrv_tgt_queue_auto_zc(q))
 		total = sizeof(nbd_request) + (nr_sects << 9);
 	else
 		total = sizeof(nbd_request);
@@ -936,8 +1013,20 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type,
 	 * the preferred queue depth should be 127 or 255,
 	 * then half of SQ memory consumption can be saved
 	 * especially we use IORING_SETUP_SQE128
+	 *
+	 * Under auto_zc a WRITE is split into two linked send sqes (header +
+	 * registered-buffer data), so a full in-order send chain needs up to
+	 * 2 * queue_depth sqes. The whole chain must be queued and submitted
+	 * within a single io_uring_enter(): io_uring link chains cannot span
+	 * submissions, so if ublk_queue_alloc_sqes() runs out of SQ space and
+	 * forces a mid-chain io_uring_submit(), the chain is cut and the
+	 * remaining sends race the earlier ones, reordering writes on the
+	 * single TCP stream. Size the ring so that never happens.
 	 */
-	tgt->tgt_ring_depth = info->queue_depth + 1;
+	if (info->flags & UBLK_F_AUTO_BUF_REG)
+		tgt->tgt_ring_depth = 2 * (info->queue_depth + 1);
+	else
+		tgt->tgt_ring_depth = info->queue_depth + 1;
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
 	data->unix_sock = strlen(unix_path) > 0;
@@ -948,7 +1037,26 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type,
 
 	ublksrv_dev_set_cq_depth(dev, 2 * tgt->tgt_ring_depth);
 
-	if (info->flags & (UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_AUTO_BUF_REG))
+	/*
+	 * Zero copy is only supported via UBLK_F_AUTO_BUF_REG: the kernel
+	 * auto-registers each request's buffer at index == tag, and the send/
+	 * recv data sqes reference it with IORING_RECVSEND_FIXED_BUF. The
+	 * explicit register/unregister UBLK_F_SUPPORT_ZERO_COPY (without the
+	 * auto upgrade, i.e. an old kernel) and UBLK_F_USER_COPY are rejected.
+	 */
+	if (info->flags & UBLK_F_AUTO_BUF_REG) {
+		/*
+		 * An auto_zc WRITE is sent as two sqes (header + registered-
+		 * buffer data). Combining that with sendmsg_zc's NOTIF
+		 * completions isn't supported, so reject the combination.
+		 */
+		if (data->use_send_zc) {
+			nbd_err("%s: send_zc not supported with auto buf register\n",
+					__func__);
+			return -EINVAL;
+		}
+		data->auto_zc = true;
+	} else if (info->flags & UBLK_F_SUPPORT_ZERO_COPY)
 		return -EINVAL;
 	return 0;
 }
