@@ -722,11 +722,8 @@ static int nbd_init_queue(const struct ublksrv_queue *q,
 	if (!data)
 		return -ENOMEM;
 
-	data->next_chain.clear();
 	data->use_send_zc = ddata->unix_sock ? false : ddata->use_send_zc;
 	data->use_unix_sock = ddata->unix_sock;
-	data->recv_started = 0;
-	//nbd_err("%s send zc %d\n", __func__, data->use_send_zc);
 
 	*queue_data_ptr = (void *)data;
 	return 0;
