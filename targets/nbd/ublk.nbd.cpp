@@ -28,7 +28,6 @@
 
 #define NBD_MAX_NAME	512
 
-#define NBD_OP_READ_REQ  0x80
 #define NBD_OP_READ_REPLY  0x81
 
 struct nbd_tgt_data {
