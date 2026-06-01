@@ -603,6 +603,41 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
 	nbd_send_req_done(q, data, cqe);
 }
 
+/*
+ * Send/recv chain state machine
+ * =============================
+ *
+ * Every NBD I/O is a request -> reply pair on a single TCP socket. To keep
+ * requests strictly in-order on the wire we chain their sendmsg sqes with
+ * IOSQE_IO_LINK, so the kernel only starts the next send once the previous
+ * one has fully drained. The recv side uses one shared extra slot (tag ==
+ * q->q_depth) that consumes replies plus any read data; it MUST NOT share
+ * the link chain with sends or it would block sends behind unrelated
+ * recvs and break NBD's in-order delivery guarantee.
+ *
+ *   new io arrives
+ *         |
+ *         v
+ *   nbd_send_chain_busy()? --yes--> push into next_chain (staged)
+ *         | no
+ *         v
+ *   __nbd_handle_io_async coroutine builds & queues a sendmsg sqe
+ *   with IOSQE_IO_LINK; chained_send_ios++
+ *         |
+ *   nbd_handle_io_bg() runs last, just before io_uring_enter:
+ *       - submits the linked send chain  -> chain_active = true
+ *       - then queues the recv sqe       (recv stays out of the chain)
+ *         |
+ *   send CQE -> nbd_send_req_done -> chained_send_ios--; if 0,
+ *               chain_active = false (chain has fully drained)
+ *         |
+ *   nbd_handle_send_bg() flushes anything that was staged into
+ *   next_chain while the previous chain was busy.
+ *
+ * The five fields in struct nbd_queue_data plus next_chain encode this
+ * machine; nbd_send_chain_busy() is the single predicate that decides
+ * whether a new io runs inline or is staged.
+ */
 static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 		struct nbd_queue_data *q_data)
 {
