@@ -155,7 +155,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	unsigned msg_flags = MSG_NOSIGNAL;
 	struct io_uring_sqe *sqe[1];
 
-       ublk_queue_alloc_sqes(q, sqe, 1);
+	ublk_queue_alloc_sqes(q, sqe, 1);
 	if (!sqe[0]) {
 		nbd_err("%s: get sqe failed, tag %d op %d\n",
 				__func__, data->tag, ublk_op);
@@ -370,7 +370,7 @@ static inline int nbd_start_recv(const struct ublksrv_queue *q,
 	unsigned int tag = q->q_depth;	//recv always use this extra tag
 	struct io_uring_sqe *sqe[1];
 
-       ublk_queue_alloc_sqes(q, sqe, 1);
+	ublk_queue_alloc_sqes(q, sqe, 1);
 	if (!sqe[0]) {
 		nbd_err("%s: get sqe failed, len %d reply %d done %d\n",
 				__func__, len, reply, done);
