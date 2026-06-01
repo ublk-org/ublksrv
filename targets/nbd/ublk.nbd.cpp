@@ -267,13 +267,14 @@ fail:
 }
 
 static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
-		struct nbd_io_data *nbd_data,
+		struct nbd_io_data *recv_nbd_data,
 		const struct io_uring_cqe *cqe,
 		const struct ublk_io_data **io_data)
 {
 	struct nbd_queue_data *q_data = nbd_get_queue_data(q);
 	const struct ublk_io_data *data;
 	struct ublk_io_tgt *io;
+	struct nbd_io_data *io_nbd_data;
 	u64 handle;
 	int tag, hwq;
 	unsigned ublk_op;
@@ -283,7 +284,7 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 				__LINE__, cqe->res);
 		return cqe->res;
 	}
-	if (cqe->res == 0 && !nbd_data->done) {
+	if (cqe->res == 0 && !recv_nbd_data->done) {
 		nbd_err("%s %d: zero reply cqe %d %llx\n", __func__,
 				__LINE__, cqe->res, cqe->user_data);
 	}
@@ -295,13 +296,13 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 		return -EPROTO;
 	}
 
-	if (cqe->res + nbd_data->done != sizeof(struct nbd_reply)) {
+	if (cqe->res + recv_nbd_data->done != sizeof(struct nbd_reply)) {
 		nbd_err("%s %d: bad reply cqe %d %llx, done %u\n",
 				__func__, __LINE__,
 				cqe->res, cqe->user_data,
-				nbd_data->done);
+				recv_nbd_data->done);
 	}
-	ublk_assert(cqe->res + nbd_data->done == sizeof(struct nbd_reply));
+	ublk_assert(cqe->res + recv_nbd_data->done == sizeof(struct nbd_reply));
 
 	memcpy(&handle, q_data->reply.handle, sizeof(handle));
 	tag = nbd_handle_to_tag(handle);
@@ -322,11 +323,11 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 
 	data = ublksrv_queue_get_io_data(q, tag);
 	io = __ublk_get_io_tgt_data(data);
-	nbd_data = io_tgt_to_nbd_data(io);
-	if (nbd_data->cmd_cookie != nbd_handle_to_cookie(handle)) {
+	io_nbd_data = io_tgt_to_nbd_data(io);
+	if (io_nbd_data->cmd_cookie != nbd_handle_to_cookie(handle)) {
 		nbd_err("%s %d: cookie not match tag %d: %x %lx\n",
 				__func__, __LINE__, data->tag,
-				nbd_data->cmd_cookie, handle);
+				io_nbd_data->cmd_cookie, handle);
 		return -EINVAL;
 	}
 
