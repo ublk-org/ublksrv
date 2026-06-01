@@ -831,7 +831,7 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type,
 	tgt->tgt_ring_depth = info->queue_depth + 1;
 	tgt->nr_fds = info->nr_hw_queues;
 	tgt->extra_ios = 1;	//one extra slot for receiving nbd reply
-	data->unix_sock = strlen(unix_path) > 0 ? true : false;
+	data->unix_sock = strlen(unix_path) > 0;
 	data->use_send_zc = !!send_zc;
 
 	tgt->io_data_size = sizeof(struct ublk_io_tgt) +
