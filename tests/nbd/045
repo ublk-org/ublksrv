@@ -1,0 +1,53 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0
+
+. common/fio_common
+. common/nbd_common
+
+echo "run zero copy(auto buf reg) test via ublk-nbd(nbd server: $NBDSRV:nbdkit memory $NBD_SIZE)"
+
+file=`_create_image "nbd" "none" $NBD_SIZE`
+
+# -z negotiates UBLK_F_SUPPORT_ZERO_COPY, which the lib upgrades to
+# UBLK_F_AUTO_BUF_REG when the kernel supports it.
+export T_TYPE_PARAMS="-t nbd -q 1 -d 127 --host $NBDSRV -z"
+DEV=`__create_ublk_dev`
+
+if [ "$DEV" == "/dev/ublkb-unknown" ]; then
+	echo "FAIL: ublk-nbd zero copy device not created"
+	_remove_image "nbd" $file
+	exit 1
+fi
+
+# Confirm zero copy is actually active rather than silently falling back.
+dev_id=`__ublk_dev_id $DEV`
+if eval $UBLK list -n $dev_id | grep -q "AUTO_ZC"; then
+	echo -e "\tzero copy active: AUTO_ZC"
+else
+	echo "FAIL: AUTO_ZC not negotiated on $DEV"
+	__remove_ublk_dev $DEV
+	_remove_image "nbd" $file
+	exit 1
+fi
+
+# Data integrity: write crc32c-tagged data through the registered-buffer
+# write (send) path, then read it back through the registered-buffer recv
+# path and verify. Proves zero copy carries correct data both directions.
+EXTRA_FIO_OPTS="--size=256M --verify=crc32c --do_verify=1 --verify_fatal=1"
+__run_fio_libaio $DEV 64k write 1 0
+verify_res=$?
+unset EXTRA_FIO_OPTS
+
+if [ $verify_res -ne 0 ]; then
+	echo "FAIL: data verify failed on zero copy $DEV (fio $verify_res)"
+	__remove_ublk_dev $DEV
+	_remove_image "nbd" $file
+	exit 1
+fi
+echo -e "\tdata verify(crc32c): PASS"
+
+echo -e "\tublk add ${T_TYPE_PARAMS}, fio: ($DEV libaio dio io jobs(1))..."
+__run_dev_perf_no_create "ublk" 1 $DEV
+
+__remove_ublk_dev $DEV
+_remove_image "nbd" $file
