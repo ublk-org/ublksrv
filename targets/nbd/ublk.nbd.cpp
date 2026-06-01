@@ -762,13 +762,14 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type,
 	int i;
 	struct nbd_tgt_data *data = (struct nbd_tgt_data *)dev->tgt.tgt_data;
 
-	const char *port = NBD_DEFAULT_PORT;
+	const char *port;
 	uint16_t needed_flags = 0;
 	uint32_t cflags = NBD_FLAG_C_FIXED_NEWSTYLE;
 
 	char host_name[NBD_MAX_NAME] = {0};
 	char exp_name[NBD_MAX_NAME] = {0};
 	char unix_path[NBD_MAX_NAME] = {0};
+	char port_buf[NBD_MAX_NAME] = {0};
 	u64 size64 = 0;
 	bool can_opt_go = true;
 
@@ -788,10 +789,13 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type,
 	ublk_json_read_target_str_info(cdev, "host", host_name);
 	ublk_json_read_target_str_info(cdev, "unix", unix_path);
 	ublk_json_read_target_str_info(cdev, "export_name", exp_name);
+	ublk_json_read_target_str_info(cdev, "port", port_buf);
 	ublk_json_read_target_ulong_info(cdev, "send_zc", &send_zc);
 
-	NBD_HS_DBG("%s: host %s unix %s exp_name %s send_zc: %lu\n", __func__,
-			host_name, unix_path, exp_name, send_zc);
+	port = strlen(port_buf) > 0 ? port_buf : NBD_DEFAULT_PORT;
+
+	NBD_HS_DBG("%s: host %s port %s unix %s exp_name %s send_zc: %lu\n",
+			__func__, host_name, port, unix_path, exp_name, send_zc);
 	for (i = 0; i < info->nr_hw_queues; i++) {
 		int sock;
 		unsigned int opts = 0;
@@ -884,6 +888,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		{ "host",	required_argument, 0, 0},
 		{ "unix",	required_argument, 0, 0},
 		{ "export_name",	required_argument, 0, 0},
+		{ "port",	required_argument, 0, 0},
 		{ "send_zc",  0,  &send_zc, 1},
 		{ "read_only",  0,  &read_only, 1},
 		{ NULL }
@@ -899,6 +904,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	const char *host_name = NULL;
 	const char *unix_path = NULL;
 	const char *exp_name = NULL;
+	const char *port = NULL;
 	uint16_t flags = 0;
 	int ret;
 	unsigned int attrs = UBLK_ATTR_VOLATILE_CACHE;
@@ -924,6 +930,8 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 		      unix_path = optarg;
 		if (!strcmp(nbd_longopts[option_index].name, "export_name"))
 			exp_name = optarg;
+		if (!strcmp(nbd_longopts[option_index].name, "port"))
+			port = optarg;
 	}
 
 #ifndef HAVE_LIBURING_SEND_ZC
@@ -935,6 +943,7 @@ static int nbd_init_tgt(struct ublksrv_dev *dev, int type, int argc,
 	ublk_json_write_tgt_str(cdev, "host", host_name);
 	ublk_json_write_tgt_str(cdev, "unix", unix_path);
 	ublk_json_write_tgt_str(cdev, "export_name", exp_name);
+	ublk_json_write_tgt_str(cdev, "port", port);
 	ublk_json_write_tgt_long(cdev, "send_zc", send_zc);
 
 	tgt->tgt_data = calloc(sizeof(struct nbd_tgt_data), 1);
