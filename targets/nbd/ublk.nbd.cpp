@@ -277,14 +277,13 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 	u64 handle;
 	int tag, hwq;
 	unsigned ublk_op;
-	int ret = -EINVAL;
 
 	if (cqe->res < 0) {
 		nbd_err("%s %d: reply cqe %d\n", __func__,
 				__LINE__, cqe->res);
-		ret = cqe->res;
-		goto fail;
-	} else if (cqe->res == 0 && !nbd_data->done) {
+		return cqe->res;
+	}
+	if (cqe->res == 0 && !nbd_data->done) {
 		nbd_err("%s %d: zero reply cqe %d %llx\n", __func__,
 				__LINE__, cqe->res, cqe->user_data);
 	}
@@ -293,8 +292,7 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 		nbd_err("%s %d: reply bad magic %x res %d\n",
 				__func__, __LINE__,
 				ntohl(q_data->reply.magic), cqe->res);
-		ret = -EPROTO;
-		goto fail;
+		return -EPROTO;
 	}
 
 	if (cqe->res + nbd_data->done != sizeof(struct nbd_reply)) {
@@ -313,13 +311,13 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 	if (tag >= q->q_depth) {
 		nbd_err("%s %d: tag is too big %d\n", __func__,
 				__LINE__, tag);
-		goto fail;
+		return -EINVAL;
 	}
 
 	if (hwq != q->q_id) {
 		nbd_err("%s %d: hwq is too big %d\n", __func__,
 				__LINE__, hwq);
-		goto fail;
+		return -EINVAL;
 	}
 
 	data = ublksrv_queue_get_io_data(q, tag);
@@ -329,35 +327,33 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 		nbd_err("%s %d: cookie not match tag %d: %x %lx\n",
 				__func__, __LINE__, data->tag,
 				nbd_data->cmd_cookie, handle);
-		goto fail;
+		return -EINVAL;
 	}
 
 	ublk_op = ublksrv_get_op(data->iod);
 	if (ublk_op == UBLK_IO_OP_READ) {
 		*io_data = data;
 		return 1;
-	} else {
+	}
+
+	{
 		int err = ntohl(q_data->reply.error);
 		struct io_uring_cqe fake_cqe;
 
 		NBD_IO_DBG("%s: got write reply, tag %d res %d\n",
 					__func__, data->tag, err);
 
-		if (err) {
+		if (err)
 			fake_cqe.res = -EIO;
-		} else {
-			if (ublk_op == UBLK_IO_OP_WRITE)
-				fake_cqe.res = data->iod->nr_sectors << 9;
-			else
-				fake_cqe.res = 0;
-		}
+		else if (ublk_op == UBLK_IO_OP_WRITE)
+			fake_cqe.res = data->iod->nr_sectors << 9;
+		else
+			fake_cqe.res = 0;
 
 		io->tgt_io_cqe = &fake_cqe;
 		io->co.resume();
 		return 0;
 	}
-fail:
-	return ret;
 }
 
 static void __nbd_resume_read_req(const struct ublk_io_data *data,
