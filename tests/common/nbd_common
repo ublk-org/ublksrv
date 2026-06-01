@@ -51,3 +51,35 @@ _remove_nbd_image() {
 
 	[ -f "$file" ] && rm -f $file
 }
+
+# Start an extra in-memory nbdkit on a caller-supplied port, using a
+# dedicated pid file so it can be torn down independently of the
+# default-port server used by other tests.
+_start_nbdkit_port() {
+	local port=$1
+	local size=$2
+	local pid_file=$3
+
+	which nbdkit > /dev/null 2>&1
+	[ $? -ne 0 ] && echo "please install nbdkit package" && exit -1
+
+	nbdkit -P ${pid_file} -p ${port} memory ${size}
+	sleep 1
+}
+
+_stop_nbdkit_port() {
+	local pid_file=$1
+
+	if [ -f ${pid_file} ]; then
+		local pid=`cat ${pid_file}`
+		kill -9 ${pid} > /dev/null 2>&1
+		local count=0
+		while [ $count -lt 32 ]; do
+			kill -0 ${pid} > /dev/null 2>&1
+			[ $? -ne 0 ] && break
+			let count++
+			sleep 1
+		done
+		rm -f ${pid_file}
+	fi
+}

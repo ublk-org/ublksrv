@@ -1,0 +1,17 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0
+
+. common/fio_common
+. common/nbd_common
+
+NBD_PORT=10810
+NBD_PORT_PID=${UBLK_TMP_DIR}/nbds_pid_port
+
+echo "run perf test via ublk-nbd(--port $NBD_PORT, nbd server: $NBDSRV:nbdkit memory $NBD_SIZE)"
+
+_start_nbdkit_port $NBD_PORT $NBD_SIZE $NBD_PORT_PID
+
+export T_TYPE_PARAMS="-t nbd -q 1 -d 127 --host $NBDSRV --port $NBD_PORT"
+__run_dev_perf 1
+
+_stop_nbdkit_port $NBD_PORT_PID
