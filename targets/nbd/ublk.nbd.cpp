@@ -273,7 +273,6 @@ static int nbd_handle_recv_reply(const struct ublksrv_queue *q,
 		ret = cqe->res;
 		goto fail;
 	} else if (cqe->res == 0 && !nbd_data->done) {
-		//return 0;
 		nbd_err("%s %d: zero reply cqe %d %llx\n", __func__,
 				__LINE__, cqe->res, cqe->user_data);
 	}
