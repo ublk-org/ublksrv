@@ -157,6 +157,58 @@ static inline void __nbd_build_req(const struct ublksrv_queue *q,
 	memcpy(req->handle, &handle, sizeof(handle));
 }
 
+/*
+ * Send-chain helpers
+ * ------------------
+ * All sendmsg sqes on the socket are hard-linked (IOSQE_IO_LINK) so their
+ * bytes never interleave on the wire. These helpers are the only places that
+ * mutate the chain bookkeeping (chained_send_ios, chain_submitted,
+ * last_send_sqe); keeping them together makes the state machine in
+ * nbd_handle_io_bg() easier to follow. See the big comment above
+ * nbd_handle_send_bg() for the full flow.
+ */
+
+/* The current chain is busy iff it has been submitted to the kernel */
+static inline bool nbd_send_chain_busy(const struct nbd_queue_data *q_data)
+{
+	return q_data->chained_send_ios > 0 && q_data->chain_submitted;
+}
+
+/* Record a freshly queued sendmsg sqe as the new tail of the in-build chain */
+static inline void nbd_chain_append_send(struct nbd_queue_data *q_data,
+		struct io_uring_sqe *sqe)
+{
+	q_data->last_send_sqe = sqe;
+	q_data->chained_send_ios += 1;
+}
+
+/* A send CQE arrived; the chain has fully drained once the last one is in */
+static inline void nbd_chain_on_send_done(struct nbd_queue_data *q_data)
+{
+	ublk_assert(q_data->chained_send_ios);
+	if (--q_data->chained_send_ios == 0)
+		q_data->chain_submitted = false;
+}
+
+/* Close the in-build chain by unlinking its tail before it is submitted */
+static inline void nbd_chain_finalize(struct nbd_queue_data *q_data)
+{
+	if (q_data->last_send_sqe) {
+		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
+		q_data->last_send_sqe = NULL;
+	}
+}
+
+/*
+ * handle_io_background() is the last callback before io_uring_enter(), so any
+ * sqes still chained here are about to be handed to the kernel.
+ */
+static inline void nbd_chain_mark_submitted(struct nbd_queue_data *q_data)
+{
+	if (q_data->chained_send_ios > 0)
+		q_data->chain_submitted = true;
+}
+
 static int nbd_queue_req(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data,
 		const struct msghdr *msg)
@@ -198,8 +250,7 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 			UBLK_IO_OP_WRITE ? data->iod->nr_sectors : 0, 1);
 	io_uring_sqe_set_flags(sqe[0], /*IOSQE_CQE_SKIP_SUCCESS |*/
 			IOSQE_FIXED_FILE | IOSQE_IO_LINK);
-	q_data->last_send_sqe = sqe[0];
-	q_data->chained_send_ios += 1;
+	nbd_chain_append_send(q_data, sqe[0]);
 
 	NBD_IO_DBG("%s: queue io op %d(%llu %x %llx) ios(%u %u)"
 			" (qid %d tag %u, cmd_op %u target: %d, user_data %llx)\n",
@@ -507,12 +558,6 @@ handle_read_io:
 	co_return;
 }
 
-/* The current chain is busy iff it has been submitted to kernel */
-static inline bool nbd_send_chain_busy(const struct nbd_queue_data *q_data)
-{
-	return q_data->chained_send_ios > 0 && q_data->chain_submitted;
-}
-
 static int nbd_handle_io_async(const struct ublksrv_queue *q,
 		const struct ublk_io_data *data)
 {
@@ -550,9 +595,7 @@ static void nbd_send_req_done(const struct ublksrv_queue *q,
 	if (cqe->flags & IORING_CQE_F_NOTIF)
 		return;
 
-	ublk_assert(q_data->chained_send_ios);
-	if (--q_data->chained_send_ios == 0)
-		q_data->chain_submitted = false;
+	nbd_chain_on_send_done(q_data);
 
 	/*
 	 * In case of failure, how to tell recv work to handle the
@@ -631,21 +674,25 @@ static void nbd_tgt_io_done(const struct ublksrv_queue *q,
  *         | no
  *         v
  *   __nbd_handle_io_async coroutine builds & queues a sendmsg sqe
- *   with IOSQE_IO_LINK; chained_send_ios++
+ *   with IOSQE_IO_LINK; nbd_chain_append_send() records it as the chain
+ *   tail and bumps chained_send_ios
  *         |
  *   nbd_handle_io_bg() runs last, just before io_uring_enter:
- *       - submits the linked send chain  -> chain_submitted = true
+ *       - nbd_chain_mark_submitted() sets chain_submitted
  *       - then queues the recv sqe       (recv stays out of the chain)
  *         |
- *   send CQE -> nbd_send_req_done -> chained_send_ios--; if 0,
- *               chain_submitted = false (chain has fully drained)
+ *   send CQE -> nbd_send_req_done -> nbd_chain_on_send_done():
+ *               chained_send_ios--; clears chain_submitted at 0
+ *               (chain has fully drained)
  *         |
- *   nbd_handle_send_bg() flushes anything that was staged into
+ *   nbd_handle_send_bg() calls nbd_chain_finalize() to strip the
+ *   trailing IOSQE_IO_LINK, then flushes anything staged into
  *   next_chain while the previous chain was busy.
  *
  * The five fields in struct nbd_queue_data plus next_chain encode this
- * machine; nbd_send_chain_busy() is the single predicate that decides
- * whether a new io runs inline or is staged.
+ * machine; all of them are mutated only through the nbd_chain_* helpers
+ * defined above, and nbd_send_chain_busy() is the single predicate that
+ * decides whether a new io runs inline or is staged.
  */
 static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 		struct nbd_queue_data *q_data)
@@ -664,10 +711,7 @@ static void nbd_handle_send_bg(const struct ublksrv_queue *q,
 
 		ios.clear();
 	}
-	if (q_data->last_send_sqe) {
-		q_data->last_send_sqe->flags &= ~IOSQE_IO_LINK;
-		q_data->last_send_sqe = NULL;
-	}
+	nbd_chain_finalize(q_data);
 }
 
 static void nbd_handle_recv_bg(const struct ublksrv_queue *q,
@@ -752,8 +796,7 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 	 * ->handle_io_background() is the last thing before calling
 	 * io_uring_enter()
 	 */
-	if (q_data->chained_send_ios > 0)
-		q_data->chain_submitted = true;
+	nbd_chain_mark_submitted(q_data);
 }
 
 static int nbd_init_queue(const struct ublksrv_queue *q,
