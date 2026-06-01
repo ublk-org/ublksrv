@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <config.h>
+#include <new>
 #include <vector>
 #include "ublksrv_tgt.h"
 #include "ublksrv_tgt_endian.h"
@@ -758,8 +759,13 @@ static void nbd_handle_io_bg(const struct ublksrv_queue *q, int nr_queued_io)
 static int nbd_init_queue(const struct ublksrv_queue *q,
 		void **queue_data_ptr)
 {
-	struct nbd_queue_data *data =
-		(struct nbd_queue_data *)calloc(sizeof(*data), 1);
+	/*
+	 * nbd_queue_data holds a std::vector (next_chain). Allocate via
+	 * new so the vector's ctor runs; calloc would skip it and rely on
+	 * the empty-vector layout happening to be all-zero-compatible.
+	 * Value-init ({}) zeroes the POD bit-fields like calloc did.
+	 */
+	struct nbd_queue_data *data = new (std::nothrow) nbd_queue_data{};
 	struct nbd_tgt_data *ddata = (struct nbd_tgt_data*)q->dev->tgt.tgt_data;
 
 	if (!data)
@@ -776,7 +782,7 @@ static void nbd_deinit_queue(const struct ublksrv_queue *q)
 {
 	struct nbd_queue_data *data = nbd_get_queue_data(q);
 
-	free(data);
+	delete data;
 }
 
 static void nbd_deinit_tgt(const struct ublksrv_dev *dev)
