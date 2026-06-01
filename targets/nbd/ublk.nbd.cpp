@@ -499,7 +499,7 @@ handle_read_io:
 }
 
 /* The current chain is busy iff it has been submitted to kernel */
-static inline int nbd_send_chain_busy(const struct nbd_queue_data *q_data)
+static inline bool nbd_send_chain_busy(const struct nbd_queue_data *q_data)
 {
 	return q_data->chained_send_ios > 0 && q_data->chain_active;
 }
