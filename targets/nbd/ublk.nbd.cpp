@@ -45,6 +45,16 @@ struct nbd_tgt_data {
 #ifndef HAVE_LIBURING_SEND_ZC
 #define io_uring_prep_sendmsg_zc io_uring_prep_sendmsg
 #define IORING_CQE_F_NOTIF (1U << 3)
+/*
+ * Fallback so the send_zc data path still compiles; it is never reached
+ * because the send_zc option is rejected at init time without liburing
+ * send_zc support.
+ */
+static inline void io_uring_prep_send_zc(struct io_uring_sqe *sqe, int sockfd,
+		const void *buf, size_t len, int flags, unsigned zc_flags)
+{
+	io_uring_prep_send(sqe, sockfd, buf, len, flags);
+}
 #endif
 
 struct nbd_queue_data {
@@ -252,7 +262,13 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 		return -ENOMEM;
 	}
 
-	if (q_data->use_send_zc)
+	/*
+	 * Under auto_zc the header is a 28-byte sendmsg of its own; keep it a
+	 * plain sendmsg and reserve zero-copy for the registered-buffer data
+	 * send below. Only the combined header+data sendmsg of the non-auto_zc
+	 * path benefits from sendmsg_zc.
+	 */
+	if (q_data->use_send_zc && !ublksrv_tgt_queue_auto_zc(q))
 		io_uring_prep_sendmsg_zc(sqe[0], q->q_id + 1, msg, msg_flags);
 	else
 		io_uring_prep_sendmsg(sqe[0], q->q_id + 1, msg, msg_flags);
@@ -276,8 +292,18 @@ static int nbd_queue_req(const struct ublksrv_queue *q,
 	 * the data-only expected length.
 	 */
 	if (zc_write) {
-		io_uring_prep_send(sqe[1], q->q_id + 1, NULL,
-				iod->nr_sectors << 9, msg_flags);
+		/*
+		 * With send_zc the data is sent straight from the registered
+		 * buffer without a copy; it yields an extra IORING_CQE_F_NOTIF
+		 * completion (ignored in nbd_send_req_done). Otherwise a plain
+		 * fixed-buffer send copies the data into the skb.
+		 */
+		if (q_data->use_send_zc)
+			io_uring_prep_send_zc(sqe[1], q->q_id + 1, NULL,
+					iod->nr_sectors << 9, msg_flags, 0);
+		else
+			io_uring_prep_send(sqe[1], q->q_id + 1, NULL,
+					iod->nr_sectors << 9, msg_flags);
 		sqe[1]->ioprio |= IORING_RECVSEND_FIXED_BUF;
 		sqe[1]->buf_index = data->tag;
 		sqe[1]->user_data = build_user_data(data->tag, NBD_OP_WRITE_DATA,
@@ -1046,15 +1072,11 @@ static int nbd_setup_tgt(struct ublksrv_dev *dev, int type,
 	 */
 	if (info->flags & UBLK_F_AUTO_BUF_REG) {
 		/*
-		 * An auto_zc WRITE is sent as two sqes (header + registered-
-		 * buffer data). Combining that with sendmsg_zc's NOTIF
-		 * completions isn't supported, so reject the combination.
+		 * An auto_zc WRITE is sent as two sqes (a plain header sendmsg
+		 * plus the registered-buffer data send). With send_zc the data
+		 * send becomes IORING_OP_SEND_ZC, whose extra NOTIF completion
+		 * is handled in nbd_send_req_done().
 		 */
-		if (data->use_send_zc) {
-			nbd_err("%s: send_zc not supported with auto buf register\n",
-					__func__);
-			return -EINVAL;
-		}
 		data->auto_zc = true;
 	} else if (info->flags & UBLK_F_SUPPORT_ZERO_COPY)
 		return -EINVAL;
