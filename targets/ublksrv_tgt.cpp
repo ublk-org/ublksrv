@@ -774,6 +774,78 @@ static void ublksrv_print_std_opts(void)
 	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
 }
 
+/*
+ * Probe whether the running kernel honors IORING_RECVSEND_FIXED_BUF on a
+ * plain io_uring recv (the always-needed half of net AUTO_BUF_REG zero
+ * copy; plain-send fixed-buf support lands in the same 7.2 series). A
+ * pre-7.2 kernel rejects the flag at issue time with -EINVAL/-EOPNOTSUPP,
+ * so submit a real recv against a preloaded socketpair and a registered
+ * buffer, and treat a non-positive cqe result as "unsupported".
+ *
+ * Returns true iff supported. Any setup failure is reported as unsupported
+ * so the caller conservatively falls back to the copy path.
+ */
+static bool ublksrv_probe_net_fixed_buf(void)
+{
+	struct io_uring ring;
+	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
+	struct iovec iov;
+	char rbuf[8] = {0};
+	const char sbuf[8] = "zcprobe";
+	int sv[2], res;
+	bool supported = false;
+
+	if (io_uring_queue_init(2, &ring, 0) < 0)
+		return false;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0)
+		goto exit_ring;
+
+	iov.iov_base = rbuf;
+	iov.iov_len = sizeof(rbuf);
+	if (io_uring_register_buffers(&ring, &iov, 1) < 0)
+		goto close_sock;
+
+	/* preload data so a supported recv completes instead of blocking */
+	if (write(sv[1], sbuf, sizeof(sbuf)) != (ssize_t)sizeof(sbuf))
+		goto unreg;
+
+	sqe = io_uring_get_sqe(&ring);
+	/*
+	 * For a fixed-buffer send/recv against a userspace-registered buffer,
+	 * sqe->addr is an absolute address inside the registered buffer (the
+	 * kernel derives the in-buffer offset as addr - buf_base), exactly
+	 * like IORING_OP_READ_FIXED. So pass the buffer's own base (offset 0),
+	 * not NULL - NULL is outside the buffer and faults with -EFAULT even on
+	 * a supporting kernel. An unsupported kernel rejects the flag earlier
+	 * with -EINVAL regardless of the address.
+	 */
+	io_uring_prep_recv(sqe, sv[0], rbuf, sizeof(rbuf), MSG_DONTWAIT);
+	sqe->ioprio |= IORING_RECVSEND_FIXED_BUF;
+	sqe->buf_index = 0;
+
+	if (io_uring_submit(&ring) < 0)
+		goto unreg;
+	if (io_uring_wait_cqe(&ring, &cqe) < 0)
+		goto unreg;
+
+	res = cqe->res;
+	io_uring_cqe_seen(&ring, cqe);
+	/* supported: bytes copied into the registered buffer (res > 0) */
+	supported = res > 0;
+
+ unreg:
+	io_uring_unregister_buffers(&ring);
+ close_sock:
+	close(sv[0]);
+	close(sv[1]);
+ exit_ring:
+	io_uring_queue_exit(&ring);
+
+	return supported;
+}
+
 static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc, char *argv[])
 {
 	struct ublksrv_dev_data data = {0};
@@ -842,6 +914,32 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 			ublksrv_ctrl_deinit(dev);
 			dev = ublksrv_ctrl_init(&data);
 		}
+
+		/*
+		 * A net target (e.g. nbd) references the request's registered
+		 * buffer from a plain send/recv via IORING_RECVSEND_FIXED_BUF.
+		 * That only works from the 7.2 kernel on, independently of the
+		 * ublk-side UBLK_F_AUTO_BUF_REG feature checked above. If the
+		 * running kernel lacks it, fall back to the copy path by
+		 * dropping both zero-copy flags before the device is created.
+		 */
+		if ((data.flags & UBLK_F_AUTO_BUF_REG) &&
+		    (data.ublksrv_flags & UBLKSRV_F_ZC_NEEDS_NET_FIXED_BUF) &&
+		    !ublksrv_probe_net_fixed_buf()) {
+			fprintf(stderr, "ublk: kernel lacks io_uring net "
+				"registered-buffer send/recv; "
+				"falling back to copy (no zero copy)\n");
+			data.flags &= ~(UBLK_F_AUTO_BUF_REG |
+					UBLK_F_SUPPORT_ZERO_COPY);
+			ublksrv_ctrl_deinit(dev);
+			dev = ublksrv_ctrl_init(&data);
+		}
+	}
+
+	if (!dev) {
+		fprintf(stderr, "can't re-init dev %d\n", data.dev_id);
+		ret = -EOPNOTSUPP;
+		goto fail_send_event;
 	}
 
 	ret = ublksrv_ctrl_add_dev(dev);

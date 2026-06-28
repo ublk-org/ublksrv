@@ -1220,6 +1220,13 @@ static const struct ublksrv_tgt_type  nbd_tgt_type = {
 	.usage_for_add = nbd_cmd_usage,
 	.init_tgt = nbd_init_tgt,
 	.deinit_tgt = nbd_deinit_tgt,
+	/*
+	 * nbd zero copy (UBLK_F_AUTO_BUF_REG) sends/recvs request data
+	 * straight from/into the registered buffer with a plain send/recv
+	 * carrying IORING_RECVSEND_FIXED_BUF, which needs a >= 7.2 kernel.
+	 * Make ublksrv probe for it and fall back to the copy path otherwise.
+	 */
+	.ublksrv_flags = UBLKSRV_F_ZC_NEEDS_NET_FIXED_BUF,
 	.name	=  "nbd",
 	.init_queue = nbd_init_queue,
 	.deinit_queue = nbd_deinit_queue,

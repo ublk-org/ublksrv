@@ -46,6 +46,19 @@ extern "C" {
  */
 #define UBLKSRV_F_NEED_POLL		(1UL << 2)
 
+/*
+ * Target drives UBLK_F_AUTO_BUF_REG zero copy through io_uring net
+ * send/recv, i.e. it sets IORING_RECVSEND_FIXED_BUF on a plain send/recv
+ * to reference the request's kernel-registered buffer (e.g. nbd).
+ *
+ * That flag is only honored on a plain send/recv from the 7.2 kernel on;
+ * UBLK_F_AUTO_BUF_REG (a ublk-driver feature) can be present on an older
+ * kernel whose io_uring/net half lacks it. When set, ublksrv probes the
+ * running kernel before enabling AUTO_BUF_REG and silently falls back to
+ * the copy path if the support is missing.
+ */
+#define UBLKSRV_F_ZC_NEEDS_NET_FIXED_BUF	(1UL << 3)
+
 struct io_uring;
 struct io_uring_cqe;
 struct ublksrv_aio_ctx;
