@@ -1,0 +1,35 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+echo -e "\tcheck queue pthread is put into IO_FLUSHER state"
+
+QUEUES=2
+
+# PR_SET_IO_FLUSHER sets PF_MEMALLOC_NOIO(0x00080000) and
+# PF_LOCAL_THROTTLE(0x00100000) in the task flags
+IO_FLUSHER_FLAGS=$((0x00080000 | 0x00100000))
+
+__task_flags()
+{
+	local pid=$1
+	local tid=$2
+
+	# flags is the 7th field after the comm's closing paren
+	sed 's/.*) //' /proc/${pid}/task/${tid}/stat | awk '{print $7}'
+}
+
+export T_TYPE_PARAMS="-t null -q $QUEUES"
+DEV=`__create_ublk_dev`
+PID=`__ublk_get_pid $DEV`
+
+for Q in `seq 0 $((QUEUES - 1))`; do
+	TID=`__ublk_get_queue_tid $DEV $Q`
+	FLAGS=`__task_flags $PID $TID`
+	if [ $((FLAGS & IO_FLUSHER_FLAGS)) -ne $IO_FLUSHER_FLAGS ]; then
+		echo -e "\tqueue $Q tid $TID not in IO_FLUSHER state(flags $FLAGS)"
+	fi
+done
+
+__remove_ublk_dev $DEV
