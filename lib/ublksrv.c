@@ -5,6 +5,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/prctl.h>
+#include <linux/prctl.h>
 
 #include "ublksrv_priv.h"
 #include "ublksrv_aio.h"
