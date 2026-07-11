@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/prctl.h>
 
 #include "ublksrv_priv.h"
 #include "ublksrv_aio.h"
@@ -854,7 +855,7 @@ skip_alloc_buf:
 	* N.B. PR_SET_IO_FLUSHER was added with Linux 5.6+.
 	*/
 #if defined(PR_SET_IO_FLUSHER)
-	if (prctl(PR_SET_IO_FLUSHER, 0, 0, 0, 0) != 0)
+	if (prctl(PR_SET_IO_FLUSHER, 1, 0, 0, 0) != 0)
 		ublk_err("ublk dev %d queue %d set_io_flusher failed",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 #endif
