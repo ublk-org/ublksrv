@@ -9,6 +9,12 @@ Tech
 2026
 ----
 
+`CHEOPS ’26 Optimizing Longhorn for High Performance Cloud-native Storage <https://dl.acm.org/doi/pdf/10.1145/3805687.3806255>`
+
+`Elide - userspace block devices (lsvd + ublk + Tigris) <https://community.fly.io/t/elide-userspace-block-devices-lsvd-ublk-tigris/28256>`
+
+`ublk-go <https://pkg.go.dev/github.com/e2b-dev/ublk-go/ublk>`
+
 `ublkpp — a C++23 RAID library built on ublksrv, used in production <https://github.com/szmyd/ublkpp>`
 
 `SIMD-accelerated LZ4/ZSTD compression with ublk block device for transparent
