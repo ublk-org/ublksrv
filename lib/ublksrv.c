@@ -1128,6 +1128,14 @@ static void ublksrv_queue_discard_io_pages(struct _ublksrv_queue *q)
 	unsigned int io_buf_size = cdev->dev_info.max_io_buf_bytes;
 	int i = 0;
 
+	/*
+	 * Skip if any buffer is owned by the target (cmd_inflight < q_depth).
+	 * A stalled backend goes CQE-silent with all buffers in flight, which
+	 * looks idle; discarding those pages corrupts the in-flight DMA.
+	 */
+	if (q->cmd_inflight < q->q_depth)
+		return;
+
 	for (i = 0; i < q->q_depth; i++)
 		madvise(q->ios[i].buf_addr, io_buf_size, MADV_DONTNEED);
 }
