@@ -51,9 +51,8 @@ static inline struct ublksrv_io_desc *ublksrv_get_iod(
  */
 
 /*
- * If ublksrv queue is idle in the past 20 seconds, start to discard
- * pages mapped to io buffer via madivise(MADV_DONTNEED), so these
- * pages can be available for others without needing swap out
+ * If ublksrv queue is idle for UBLKSRV_IO_IDLE_SECS seconds, the idle_fn
+ * callback is invoked so targets can perform housekeeping.
  */
 #define UBLKSRV_IO_IDLE_SECS    20
 
@@ -1122,24 +1121,6 @@ int ublksrv_queue_reap_events(const struct ublksrv_queue *tq)
 	return ublksrv_reap_events_uring(&tq_to_local(tq)->ring);
 }
 
-static void ublksrv_queue_discard_io_pages(struct _ublksrv_queue *q)
-{
-	const struct ublksrv_ctrl_dev *cdev = q->dev->ctrl_dev;
-	unsigned int io_buf_size = cdev->dev_info.max_io_buf_bytes;
-	int i = 0;
-
-	/*
-	 * Skip if any buffer is owned by the target (cmd_inflight < q_depth).
-	 * A stalled backend goes CQE-silent with all buffers in flight, which
-	 * looks idle; discarding those pages corrupts the in-flight DMA.
-	 */
-	if (q->cmd_inflight < q->q_depth)
-		return;
-
-	for (i = 0; i < q->q_depth; i++)
-		madvise(q->ios[i].buf_addr, io_buf_size, MADV_DONTNEED);
-}
-
 static void ublksrv_queue_idle_enter(struct _ublksrv_queue *q)
 {
 	if (q->state & UBLKSRV_QUEUE_IDLE)
@@ -1147,7 +1128,6 @@ static void ublksrv_queue_idle_enter(struct _ublksrv_queue *q)
 
 	ublk_dbg(UBLK_DBG_QUEUE, "dev%d-q%d: enter idle %x\n",
 			q->dev->ctrl_dev->dev_info.dev_id, q->q_id, q->state);
-	ublksrv_queue_discard_io_pages(q);
 	q->state |= UBLKSRV_QUEUE_IDLE;
 
 	if (q->tgt_ops->idle_fn)
