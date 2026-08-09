@@ -21,4 +21,15 @@ libublksrv_la_LIBADD = \
 libublksrv_la_LDFLAGS = \
 	-version-info 0:0:0
 
+install-exec-hook:
+	$(AM_V_at)if test -z "$(DESTDIR)"; then \
+		$(LDCONFIG) "$(libdir)" || \
+			echo "warning: $(LDCONFIG) failed; run it as root to refresh the linker cache"; \
+	fi
+
+uninstall-hook:
+	$(AM_V_at)if test -z "$(DESTDIR)"; then \
+		$(LDCONFIG) "$(libdir)" || :; \
+	fi
+
 CLEANFILES = *~ *.d

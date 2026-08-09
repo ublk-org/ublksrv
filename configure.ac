@@ -22,6 +22,10 @@ LT_INIT
 AC_CANONICAL_HOST
 
 AC_PROG_SED
+AC_PATH_PROG([LDCONFIG], [ldconfig], [:],
+             [$PATH$PATH_SEPARATOR/sbin$PATH_SEPARATOR/usr/sbin])
+AS_IF([test "x$LDCONFIG" = "x:"],
+      [AC_MSG_WARN([ldconfig not found - linker cache will not be refreshed on install])])
 
 dnl Check for basic C environment.
 AC_PROG_CC
