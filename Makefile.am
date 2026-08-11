@@ -15,7 +15,23 @@ EXTRA_DIST = \
 	targets/nvme/nvme.h \
 	targets/nvme/vfio_iommufd.h \
 	targets/sheepdog/sheep.h \
-	targets/sheepdog/sheepdog_proto.h
+	targets/sheepdog/sheepdog_proto.h \
+	VERSION \
+	README.rst \
+	build_with_liburing_src \
+	targets/nbd/README.rst \
+	utils/dump_ublk.py \
+	utils/genver.sh \
+	utils/htlb.sh \
+	utils/ublk_dev.rules \
+	.github/workflows/build.yml \
+	.github/workflows/ci.yml \
+	ci/.gitignore \
+	ci/mkosi.build \
+	ci/mkosi.conf \
+	ci/mkosi.default.d/10-ubdsrv.conf \
+	ci/mkosi.default.d/fedora/10-fedora.conf \
+	ci/mkosi.extra/etc/modules-load.d/ublk-drv.conf
 
 SUBDIRS = doc include lib tests
 
