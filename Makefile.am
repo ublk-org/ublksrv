@@ -5,7 +5,17 @@ ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST = \
 	COPYING.LGPL \
 	.gitignore \
-	LICENSE
+	LICENSE \
+	targets/include/dma_buf.h \
+	targets/include/ublksrv_tgt.h \
+	targets/include/ublksrv_tgt_endian.h \
+	targets/nbd/cliserv.h \
+	targets/nbd/nbd-debug.h \
+	targets/nbd/nbd.h \
+	targets/nvme/nvme.h \
+	targets/nvme/vfio_iommufd.h \
+	targets/sheepdog/sheep.h \
+	targets/sheepdog/sheepdog_proto.h
 
 SUBDIRS = doc include lib tests
 
