@@ -8,5 +8,13 @@ XSLTPROC = /usr/bin/xsltproc
 # "No rule to make target 'ublk.1'".
 dist_man1_MANS = ublk.1
 
+EXTRA_DIST = \
+	ublk.1.xml \
+	Doxyfile \
+	mainpage.dox \
+	external_links.rst \
+	ublk_intro.pdf \
+	ublk_use_cases_and_progress_clsf2026.pdf
+
 %.1 : %.1.xml
 	-test -z "$(XSLTPROC)" || $(XSLTPROC) -o $@ http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl $<
