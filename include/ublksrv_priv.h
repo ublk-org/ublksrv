@@ -177,6 +177,7 @@ struct _ublksrv_queue {
 
 	unsigned cmd_inflight, tgt_io_inflight;	//obsolete
 	unsigned state;
+	bool cqe_dispatching;
 
 	int epollfd;
 	struct epoll_cb_data *epoll_callbacks;

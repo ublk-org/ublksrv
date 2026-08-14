@@ -1218,6 +1218,19 @@ extern void ublksrv_queue_dec_tgt_io_inflight(const struct ublksrv_queue *q);
  */
 extern int ublksrv_queue_reap_events(const struct ublksrv_queue *tq);
 
+/**
+ * Dispatch one CQE already reaped from this queue's externally shared ring.
+ *
+ * The external owner remains responsible for advancing the CQ ring. This is
+ * intended for setup and teardown phases in which another reactor temporarily
+ * owns reap but must return ublk command CQEs to libublksrv.
+ *
+ * @param tq the ublksrv queue instance
+ * @param cqe the CQE to dispatch
+ */
+extern int ublksrv_queue_handle_cqe(const struct ublksrv_queue *tq,
+				    const struct io_uring_cqe *cqe);
+
 /** @} */ // end of ublksrv_queue group
 
 typedef  void (*epoll_cb)(struct ublksrv_queue *q, int revents);

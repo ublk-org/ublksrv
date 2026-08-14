@@ -757,6 +757,7 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 	q->io_cmd_buf = NULL;
 	q->cmd_inflight = 0;
 	q->tgt_io_inflight = 0;
+	q->cqe_dispatching = false;
 	q->tid = ublksrv_gettid();
 
 	cmd_buf_size = ublksrv_queue_cmd_buf_sz(q);
@@ -1103,12 +1104,18 @@ static void ublksrv_handle_cqe(struct io_uring *r,
 
 static int ublksrv_reap_events_uring(struct io_uring *r)
 {
+	struct _ublksrv_queue *q = container_of(r, struct _ublksrv_queue, ring);
 	struct io_uring_cqe *cqe;
 	unsigned head;
 	int count = 0;
 
+	if (q->cqe_dispatching)
+		return -EBUSY;
+
 	io_uring_for_each_cqe(r, head, cqe) {
+		q->cqe_dispatching = true;
 		ublksrv_handle_cqe(r, cqe, NULL);
+		q->cqe_dispatching = false;
 		count += 1;
 	}
 	io_uring_cq_advance(r, count);
@@ -1119,6 +1126,24 @@ static int ublksrv_reap_events_uring(struct io_uring *r)
 int ublksrv_queue_reap_events(const struct ublksrv_queue *tq)
 {
 	return ublksrv_reap_events_uring(&tq_to_local(tq)->ring);
+}
+
+int ublksrv_queue_handle_cqe(const struct ublksrv_queue *tq,
+			     const struct io_uring_cqe *cqe)
+{
+	struct _ublksrv_queue *q;
+
+	if (!tq || !cqe)
+		return -EINVAL;
+
+	q = tq_to_local(tq);
+	if (q->cqe_dispatching)
+		return -EBUSY;
+
+	q->cqe_dispatching = true;
+	ublksrv_handle_cqe(&q->ring, (struct io_uring_cqe *)cqe, NULL);
+	q->cqe_dispatching = false;
+	return 0;
 }
 
 static void ublksrv_queue_idle_enter(struct _ublksrv_queue *q)
