@@ -227,6 +227,96 @@ __remove_ublk_dev() {
 	__remove_ublk_dev_return $@ > /dev/null 2>&1
 }
 
+# A teardown race shows up either as a del that never returns or as a splat
+# from a freed request. Both have to be caught: a del bounded by timeout(1)
+# tells a hang from a slow machine, and the kernel log covers the races that
+# complete.
+DMESG_BAD='BUG:|WARNING:|blocked for more than|circular locking|refcount_t:|KCSAN:'
+DEL_TIMEOUT=30
+
+# 'ublk features' names one flag per line; the teardown arms that need a
+# flag the running kernel lacks are skipped rather than failed
+__ublk_has_feature()
+{
+	eval $UBLK features 2>/dev/null | grep -q "$1"
+}
+
+__ublk_del_timeout()
+{
+	local dev=$1
+	local dev_id=`__ublk_dev_id $dev`
+	local res
+
+	timeout $DEL_TIMEOUT $UBLK del -n $dev_id > /dev/null 2>&1
+	res=$?
+	udevadm settle
+
+	if [ $res -eq 124 ]; then
+		echo -e "\tdelete $dev wedged after ${DEL_TIMEOUT}s"
+		ps -eLf | grep ublk
+		return 1
+	fi
+	if [ $res -ne 0 ]; then
+		echo -e "\tdelete $dev failed($res)"
+		return 1
+	fi
+	return 0
+}
+
+# Everything the kernel logged since the caller wrote its marker. No marker
+# means the ring buffer wrapped; scan all of it rather than nothing.
+__check_dmesg()
+{
+	local mark=$1
+	local from=`dmesg | grep -n "$mark" | tail -1 | cut -d: -f1`
+	local out
+
+	[ -z "$from" ] && from=0
+	out=`dmesg | tail -n +$((from + 1)) | grep -E "$DMESG_BAD"`
+	[ -z "$out" ] && return 0
+	echo "$out" | sed 's/^/\t\t/'
+	return 1
+}
+
+# One teardown iteration on a device built from $T_TYPE_PARAMS: drive IO,
+# land a del in the middle of it, take the verdict from the del itself plus
+# everything the kernel logged since the marker.
+__ublk_run_del_mid_io()
+{
+	local tag=$1
+	local cnt=$2
+	local bs=$3
+	local rw=$4
+	local jobs=$5
+	local runtime=$6
+	local mark="ublk $tag $cnt $T_TYPE_PARAMS"
+	local res=0
+
+	echo "$mark" > /dev/kmsg
+
+	local dev=`__create_ublk_dev`
+	if [ "$dev" == "/dev/ublkb-unknown" ]; then
+		echo -e "\tadd failed($T_TYPE_PARAMS)"
+		return 1
+	fi
+
+	echo -e "\trun fio on $dev(ublk add $T_TYPE_PARAMS) with deleting dev $cnt"
+	__run_fio_libaio $dev $bs $rw $jobs $runtime > /dev/null 2>&1 &
+	local fio_pid=$!
+
+	# del has to land while fio is still driving the queue, at a different
+	# point each iteration: once IO has quiesced the window is closed.
+	sleep 0.$((RANDOM % 9 + 1))
+
+	__ublk_del_timeout $dev || res=1
+
+	# fio sees EIO once the device is gone, which is the expected outcome
+	wait $fio_pid > /dev/null 2>&1
+
+	__check_dmesg "$mark" || res=1
+	return $res
+}
+
 __find_free_ublk_id()
 {
 	for id in `seq 0 64`; do

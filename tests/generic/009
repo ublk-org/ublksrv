@@ -1,0 +1,33 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+echo -e "\trun fio with delete ublk-null test, del landing mid-IO"
+
+BS=4k
+RW=randrw
+JOBS=4
+RT=$TRUNTIME
+LOOPS=2
+RES=0
+
+BATCH_MODES=""
+if __ublk_has_feature BATCH_IO; then
+	BATCH_MODES=" -b"
+else
+	echo -e "\tkernel has no BATCH_IO, skipping the batch arms"
+fi
+
+for BATCH in "" $BATCH_MODES; do
+	for RECOVERY in 0 1; do
+		for QUEUES in 1 4; do
+			export T_TYPE_PARAMS="-t null -q $QUEUES -d 128 -r $RECOVERY $BATCH"
+			for CNT in `seq $LOOPS`; do
+				__ublk_run_del_mid_io teardown $CNT $BS $RW $JOBS $RT || RES=1
+			done
+		done
+	done
+done
+
+exit $RES
