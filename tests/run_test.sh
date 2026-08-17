@@ -35,17 +35,12 @@ run_test() {
 	GRP=`basename $TMP`
 
 	echo "running $GRP/$NAME" | tee /dev/kmsg
-	sh -c $TS &
-	local TPID=$!
-	local timeout=600
-	local count=0
-	while [ $count -lt $timeout ]; do
-		sleep 1
-		kill -0 $TPID > /dev/null 2>&1
-		[ $? -ne 0 ] && break
-		let count++
-	done
-	[ $count -ge $timeout ] && echo "test $GRP/$NAME timeout"
+	timeout 600 bash $TS
+	local res=$?
+	if [ $res -ne 0 ]; then
+		[ $res -eq 124 ] && echo "test $GRP/$NAME timeout"
+		FAILED="$FAILED $GRP/$NAME"
+	fi
 }
 
 run_test_grp() {
@@ -111,3 +106,9 @@ for _ITEM in "${_ITEMS[@]}"; do
 done
 
 rm -f ${UBLK_TMP}
+
+if [ -n "$FAILED" ]; then
+	echo "failed:$FAILED"
+	exit 1
+fi
+exit 0
