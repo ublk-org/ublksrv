@@ -1,0 +1,36 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+. common/loop_common
+
+echo -e "\trun fio with delete ublk-loop --usercopy, del landing mid-copy"
+
+# large blocks keep the server inside a copy on /dev/ublkcN, which is the
+# window the del has to land in; null never touches the char device
+BS=256k
+RW=randrw
+JOBS=4
+RT=$TRUNTIME
+LOOPS=2
+RES=0
+
+BATCH_MODES=""
+if __ublk_has_feature BATCH_IO; then
+	BATCH_MODES=" -b"
+else
+	echo -e "\tkernel has no BATCH_IO, skipping the batch arms"
+fi
+
+FILE=`_create_loop_image "data" $LO_IMG_SZ`
+for BATCH in "" $BATCH_MODES; do
+	for RECOVERY in 0 1; do
+		export T_TYPE_PARAMS="-t loop -q 4 -d 64 -r $RECOVERY $BATCH --usercopy -f $FILE"
+		for CNT in `seq $LOOPS`; do
+			__ublk_run_del_mid_io usercopy $CNT $BS $RW $JOBS $RT || RES=1
+		done
+	done
+done
+_remove_loop_image $FILE
+
+exit $RES
