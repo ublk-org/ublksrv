@@ -1,0 +1,29 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+echo -e "\trun fio with delete ublk-null -b, del draining a deep event fifo"
+
+BS=4k
+RW=randrw
+JOBS=8
+RT=$TRUNTIME
+LOOPS=2
+RES=0
+
+if ! __ublk_has_feature BATCH_IO; then
+	echo -e "\tkernel has no BATCH_IO, skipping"
+	exit 0
+fi
+
+# depth 256 spread over several queues is what leaves tags queued behind the
+# drain; generic/009 runs batch mode too shallow to race it
+for QUEUES in 2 8; do
+	export T_TYPE_PARAMS="-t null -q $QUEUES -d 256 -r 1 -b"
+	for CNT in `seq $LOOPS`; do
+		__ublk_run_del_mid_io batch-fifo $CNT $BS $RW $JOBS $RT || RES=1
+	done
+done
+
+exit $RES
