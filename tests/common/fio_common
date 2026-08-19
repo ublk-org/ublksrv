@@ -180,6 +180,9 @@ __ublk_get_pid() {
 
 	eval $UBLK list -n $dev_id > ${UBLK_TMP}
 	pid=`cat ${UBLK_TMP} | grep "pid" | awk '{print $7}'`
+	# a device that was never started reports -1 here, and the suite runs
+	# as root, where 'kill -9 -1' takes down the whole machine
+	[ "$pid" -gt 0 ] 2>/dev/null || return 1
 	echo $pid
 }
 
@@ -265,6 +268,11 @@ __ublk_kill_daemon()
 	local secs=0
 	local daemon_pid=`__ublk_get_pid $dev`
 	local state=`__ublk_get_dev_state $dev 0`
+
+	if [ -z "$daemon_pid" ]; then
+		echo "no-daemon"
+		return
+	fi
 
 	while [ $secs -lt 30 ] && [ "$state" != "$exp_state" ]; do
 		kill -9 $daemon_pid > /dev/null 2>&1
