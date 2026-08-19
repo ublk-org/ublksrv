@@ -1,0 +1,28 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+. common/loop_common
+
+echo -e "\tsignal the server into the clean teardown ordering, IO in flight"
+
+# 1M writes over a backing file so the queues still hold requests when the
+# server stops its own device
+BS=1M
+RW=write
+JOBS=4
+RT=$TRUNTIME
+LOOPS=2
+RES=0
+
+FILE=`_create_loop_image "data" $LO_IMG_SZ`
+export T_TYPE_PARAMS="-t loop -q 2 -d 64 -r 0 --clean-teardown -f $FILE"
+for SIG in INT TERM; do
+	for CNT in `seq $LOOPS`; do
+		__ublk_run_signal_teardown clean-teardown $CNT $SIG \
+			$BS $RW $JOBS $RT || RES=1
+	done
+done
+_remove_loop_image $FILE
+
+exit $RES

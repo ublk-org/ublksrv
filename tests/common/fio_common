@@ -464,6 +464,64 @@ __ublk_check_teardown_clean()
 	return $res
 }
 
+STOP_TIMEOUT=30
+
+# One server-initiated teardown: the daemon is signalled and must take the
+# device down by itself, with an add from an unrelated process racing it.
+# $T_TYPE_PARAMS picks which ordering the server uses.
+__ublk_run_signal_teardown()
+{
+	local tag=$1
+	local cnt=$2
+	local sig=$3
+	local bs=$4
+	local rw=$5
+	local jobs=$6
+	local runtime=$7
+	local mark="ublk $tag $cnt SIG$sig $T_TYPE_PARAMS"
+	local base_refs=`__ublk_module_refs`
+	local res=0
+
+	echo "$mark" > /dev/kmsg
+
+	local dev=`__create_ublk_dev`
+	if [ "$dev" == "/dev/ublkb-unknown" ]; then
+		echo -e "\tadd failed($T_TYPE_PARAMS)"
+		return 1
+	fi
+	local dev_id=`__ublk_dev_id $dev`
+	local daemon_pid=`__ublk_get_pid $dev`
+	if [ -z "$daemon_pid" ]; then
+		echo -e "\tno daemon pid for $dev"
+		__ublk_del_timeout $dev
+		return 1
+	fi
+	# reserved before the teardown starts, so the probe cannot race the
+	# free-id scan against the device that is going away
+	local probe_id=`__find_free_ublk_id`
+
+	echo -e "\trun fio on $dev(ublk add $T_TYPE_PARAMS), SIG$sig $cnt"
+	__run_fio_libaio $dev $bs $rw $jobs $runtime > /dev/null 2>&1 &
+	local fio_pid=$!
+
+	sleep 0.$((RANDOM % 9 + 1))
+
+	kill -$sig $daemon_pid > /dev/null 2>&1
+
+	__ublk_probe_add_blocked $probe_id $dev_id || res=1
+
+	# a server-initiated teardown means the server leaves without help
+	__ublk_wait_pid_gone $daemon_pid $STOP_TIMEOUT || res=1
+	__ublk_wait_fio $fio_pid $((runtime + 60)) || res=1
+
+	# the server deletes the device itself, so this is only a fallback
+	[ -c /dev/ublkc${dev_id} ] && __ublk_del_timeout $dev
+
+	__ublk_check_teardown_clean $dev_id "$daemon_pid" $base_refs || res=1
+	__check_dmesg "$mark" || res=1
+	return $res
+}
+
 __find_free_ublk_id()
 {
 	for id in `seq 0 64`; do
