@@ -204,6 +204,62 @@ static int cmd_dev_del(int argc, char *argv[])
 	return ret;
 }
 
+static int cmd_dev_quiesce(int argc, char *argv[])
+{
+	static const struct option longopts[] = {
+		{ "number",		1,	NULL, 'n' },
+		{ "timeout_ms",		1,	NULL,  0  },
+		{ NULL }
+	};
+	struct ublksrv_dev_data data = {
+		.dev_id = -1,
+		.run_dir = ublksrv_get_pid_dir(),
+	};
+	struct ublksrv_ctrl_dev *dev;
+	unsigned int timeout_ms = 0;
+	int opt, ret, option_index = 0;
+
+	while ((opt = getopt_long(argc, argv, "n:",
+				  longopts, &option_index)) != -1) {
+		switch (opt) {
+		case 'n':
+			data.dev_id = strtol(optarg, NULL, 10);
+			break;
+		case 0:
+			if (!strcmp(longopts[option_index].name, "timeout_ms"))
+				timeout_ms = strtoul(optarg, NULL, 10);
+			break;
+		}
+	}
+
+	if (data.dev_id < 0) {
+		fprintf(stderr, "wrong dev_id provided for quiesce\n");
+		return -EINVAL;
+	}
+
+	dev = ublksrv_ctrl_init(&data);
+	if (!dev) {
+		fprintf(stderr, "initialize ctrl dev %d failed\n", data.dev_id);
+		return -EOPNOTSUPP;
+	}
+
+	/* the unprivileged path in the lib needs the device flags */
+	ret = ublksrv_ctrl_get_info(dev);
+	if (ret < 0) {
+		fprintf(stderr, "can't get dev info from %d: %d\n",
+				data.dev_id, ret);
+		goto fail;
+	}
+
+	ret = ublksrv_ctrl_quiesce_dev(dev, timeout_ms);
+	if (ret < 0)
+		fprintf(stderr, "quiesce dev %d failed %d\n", data.dev_id, ret);
+
+fail:
+	ublksrv_ctrl_deinit(dev);
+	return ret;
+}
+
 static int cmd_dev_set_affinity(int argc, char *argv[])
 {
 	static const struct option longopts[] = {
@@ -506,6 +562,8 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_add(argc, argv);
 	else if (!strcmp(cmd, "del"))
 		ret = cmd_dev_del(argc, argv);
+	else if (!strcmp(cmd, "quiesce"))
+		ret = cmd_dev_quiesce(argc, argv);
 	else if (!strcmp(cmd, "set_affinity"))
 		ret = cmd_dev_set_affinity(argc, argv);
 	else if (!strcmp(cmd, "list"))

@@ -663,6 +663,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "debug_mask",	1,	NULL, 0},
 		{ "unprivileged",	0,	NULL, 0},
 		{ "usercopy",	0,	NULL, 0},
+		{ "quiesce",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
 		{ "max_io_buf_bytes",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
@@ -724,6 +725,10 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 				unprivileged = 1;
 			if (!strcmp(longopts[option_index].name, "usercopy"))
 				data->flags |= UBLK_F_USER_COPY;
+			/* the kernel refuses QUIESCE without USER_RECOVERY */
+			if (!strcmp(longopts[option_index].name, "quiesce"))
+				data->flags |= UBLK_F_QUIESCE |
+					UBLK_F_USER_RECOVERY;
 			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
 				*efd = strtol(optarg, NULL, 10);
 			if (!strcmp(longopts[option_index].name, "max_io_buf_bytes"))
@@ -1115,6 +1120,7 @@ static void cmd_usage(const struct ublksrv_tgt_type *tgt_type)
 	printf("ublk[.%s] recover -n DEV_ID\n", type);
 	printf("ublk[.%s] help -t %s\n", type, type);
 	printf("ublk del -n DEV_ID [ -a | --all]\n");
+	printf("ublk quiesce -n DEV_ID [--timeout_ms MS]\n");
 	printf("ublk list -n DEV_ID -v\n");
 	printf("ublk set_affinity -n DEV_ID -q QID --cpuset SET\n");
 	printf("ublk features\n");

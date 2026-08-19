@@ -491,6 +491,19 @@ extern int ublksrv_ctrl_get_info(struct ublksrv_ctrl_dev *dev);
 extern int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev);
 
 /**
+ * Quiesce the specified ublk device by sending command to ublk control device
+ *
+ * Only available on a device created with UBLK_F_QUIESCE, which the kernel
+ * accepts solely together with UBLK_F_USER_RECOVERY.
+ *
+ * @param dev the ublksrv control device instance
+ * @param timeout_ms how long the driver waits for in-flight IO to drain,
+ * 	zero waits forever
+ */
+extern int ublksrv_ctrl_quiesce_dev(struct ublksrv_ctrl_dev *dev,
+		unsigned int timeout_ms);
+
+/**
  * Dump this ublk device
  *
  * DEPRECATED. Use ublk_ctrl_dump instead.

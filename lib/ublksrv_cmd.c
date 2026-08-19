@@ -472,6 +472,21 @@ int ublksrv_ctrl_stop_dev(struct ublksrv_ctrl_dev *dev)
 	return ret;
 }
 
+int ublksrv_ctrl_quiesce_dev(struct ublksrv_ctrl_dev *dev,
+		unsigned int timeout_ms)
+{
+	struct ublksrv_ctrl_cmd_data data = {
+		/* no legacy opcode exists for this command */
+		.cmd_op	= UBLK_U_CMD_QUIESCE_DEV,
+		.flags	= CTRL_CMD_HAS_DATA | CTRL_CMD_NO_TRANS,
+		.data	= { timeout_ms },
+	};
+
+	ublk_un_privileged_prep_data(dev, data);
+
+	return __ublksrv_ctrl_cmd(dev, &data);
+}
+
 static const char *ublksrv_dev_state_desc(struct ublksrv_ctrl_dev *dev)
 {
 	switch (dev->dev_info.state) {
