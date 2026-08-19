@@ -1,0 +1,26 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+echo -e "\trun fio with delete ublk-null test over all four commit paths"
+
+BS=4k
+RW=randrw
+JOBS=4
+RT=$TRUNTIME
+LOOPS=2
+RES=0
+
+# -u and -g move when the server's COMMIT_AND_FETCH_REQ lands relative to
+# the abort walk; generic/009 leaves both at their default
+for URING_COMP in 0 1; do
+	for NEED_GET_DATA in 0 1; do
+		export T_TYPE_PARAMS="-t null -q 4 -d 128 -u $URING_COMP -g $NEED_GET_DATA -r 0"
+		for CNT in `seq $LOOPS`; do
+			__ublk_run_del_mid_io cmd-path $CNT $BS $RW $JOBS $RT || RES=1
+		done
+	done
+done
+
+exit $RES
