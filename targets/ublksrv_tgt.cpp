@@ -7,6 +7,7 @@
 #include <poll.h>
 #include <sys/mman.h>
 #include <sys/eventfd.h>
+#include <atomic>
 #include "ublksrv_tgt.h"
 
 #define ERROR_EVTFD_DEVID   0xfffffffffffffffe
@@ -26,6 +27,32 @@ static int shmem_count;
 /* Saved across parse/add phases for shmem_zc setup */
 static char *shmem_htlb_path;
 static bool shmem_rdonly;
+
+/*
+ * Server-initiated teardown on SIGINT/SIGTERM, in the two orderings a ublk
+ * server can pick:
+ *
+ *   CLEAN   send STOP_DEV, let the driver cancel the parked fetch commands,
+ *           and only deinit the rings once the queues have drained
+ *   ABANDON leave the io_uring rings straight away, so they are torn down
+ *           while the device is still live and no STOP_DEV was ever sent
+ */
+enum sig_teardown_mode {
+	SIG_TEARDOWN_NONE = 0,
+	SIG_TEARDOWN_CLEAN,
+	SIG_TEARDOWN_ABANDON,
+};
+
+static struct {
+	enum sig_teardown_mode mode;
+	std::atomic<bool> signalled;
+	struct ublksrv_ctrl_dev *ctrl_dev;
+} sig_teardown;
+
+static bool sig_teardown_abandon_ring(void)
+{
+	return sig_teardown.mode == SIG_TEARDOWN_ABANDON && sig_teardown.signalled;
+}
 
 static void ublk_shmem_sock_path(int dev_id, char *buf, size_t len)
 {
@@ -334,7 +361,7 @@ static void *ublksrv_queue_handler(void *data)
 	do {
 		if (ublksrv_process_io(q) < 0)
 			break;
-	} while (1);
+	} while (!sig_teardown_abandon_ring());
 
 	ublk_log("ublk dev %d queue %d exited", dev_id, q->q_id);
 	ublksrv_queue_deinit(q);
@@ -347,9 +374,51 @@ static void sig_handler(int sig)
 		ublk_log("got TERM signal");
 }
 
+/*
+ * sigwait() rather than a handler: the clean ordering has to call
+ * ublksrv_ctrl_stop_dev(), which submits on the control ring and is not
+ * async-signal-safe. Running both modes off one thread keeps them comparable.
+ */
+static void *sig_teardown_thread(void *data)
+{
+	sigset_t signal_mask;
+	int sig;
+
+	sigemptyset(&signal_mask);
+	sigaddset(&signal_mask, SIGINT);
+	sigaddset(&signal_mask, SIGTERM);
+
+	if (sigwait(&signal_mask, &sig))
+		return NULL;
+
+	/* a second signal must not reach a device that is already going away */
+	if (sig_teardown.signalled.exchange(true))
+		return NULL;
+
+	ublk_log("got signal %d, tearing own device down", sig);
+
+	/*
+	 * ABANDON needs nothing here: the queue threads see the flag and
+	 * leave their rings on their own.
+	 */
+	if (sig_teardown.mode == SIG_TEARDOWN_CLEAN)
+		ublksrv_ctrl_stop_dev(sig_teardown.ctrl_dev);
+
+	return NULL;
+}
+
 static void setup_pthread_sigmask(bool fg)
 {
 	sigset_t   signal_mask;
+
+	/* sigwait() needs them blocked everywhere, foreground included */
+	if (sig_teardown.mode != SIG_TEARDOWN_NONE) {
+		sigemptyset(&signal_mask);
+		sigaddset(&signal_mask, SIGINT);
+		sigaddset(&signal_mask, SIGTERM);
+		pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
+		return;
+	}
 
 	/* don't setup sigmask in case of foreground task */
 	if (fg)
@@ -515,6 +584,15 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 		goto free;
 	}
 
+	if (sig_teardown.mode != SIG_TEARDOWN_NONE) {
+		pthread_t stopper;
+
+		sig_teardown.ctrl_dev = ctrl_dev;
+		if (!pthread_create(&stopper, NULL, sig_teardown_thread, NULL))
+			pthread_detach(stopper);
+	}
+
+
 	/* Register hugetlbfs buffer after device is started */
 	if (has_shmem_zc && shmem_htlb_path) {
 		ret = ublk_shmem_htlb_setup(shmem_htlb_path, shmem_rdonly,
@@ -555,7 +633,7 @@ free:
 	ublksrv_dev_deinit(dev);
 out:
 	/* deleting dev can only move on when the ublkc is closed */
-	if (ret)
+	if (ret || sig_teardown.signalled)
 		ublksrv_ctrl_del_dev(ctrl_dev);
 	ublk_log("end ublksrv io daemon");
 	closelog();
@@ -664,6 +742,8 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "unprivileged",	0,	NULL, 0},
 		{ "usercopy",	0,	NULL, 0},
 		{ "quiesce",	0,	NULL, 0},
+		{ "clean-teardown",	0,	NULL, 0},
+		{ "abandon-ring",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
 		{ "max_io_buf_bytes",	1,	NULL, 0},
 		{ "zerocopy",	0,	NULL, 'z'},
@@ -729,6 +809,10 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 			if (!strcmp(longopts[option_index].name, "quiesce"))
 				data->flags |= UBLK_F_QUIESCE |
 					UBLK_F_USER_RECOVERY;
+			if (!strcmp(longopts[option_index].name, "clean-teardown"))
+				sig_teardown.mode = SIG_TEARDOWN_CLEAN;
+			if (!strcmp(longopts[option_index].name, "abandon-ring"))
+				sig_teardown.mode = SIG_TEARDOWN_ABANDON;
 			if (!strcmp(longopts[option_index].name, "eventfd") && efd)
 				*efd = strtol(optarg, NULL, 10);
 			if (!strcmp(longopts[option_index].name, "max_io_buf_bytes"))
@@ -777,6 +861,7 @@ static void ublksrv_print_std_opts(void)
 	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
 	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
 	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
+	printf("\t--clean-teardown | --abandon-ring\n");
 }
 
 /*
