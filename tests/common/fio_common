@@ -317,6 +317,56 @@ __ublk_run_del_mid_io()
 	return $res
 }
 
+__ublk_wait_dev_state()
+{
+	local dev=$1
+	local exp_state=$2
+	local secs=0
+	local state=`__ublk_get_dev_state $dev`
+
+	while [ $secs -lt 30 ] && [ "$state" != "$exp_state" ]; do
+		sleep 1
+		state=`__ublk_get_dev_state $dev`
+		let secs++
+	done
+	echo $state
+}
+
+# Quiesce the device and bring it back. A quiesce that never returns is one
+# of the failures this covers, so it is bounded the way the del is.
+__ublk_quiesce_and_recover()
+{
+	local dev=$1
+	local dev_id=`__ublk_dev_id $dev`
+	local state
+	local res
+
+	timeout $DEL_TIMEOUT $UBLK quiesce -n $dev_id > /dev/null 2>&1
+	res=$?
+	if [ $res -eq 124 ]; then
+		echo -e "\tquiesce $dev wedged after ${DEL_TIMEOUT}s"
+		ps -eLf | grep ublk
+		return 1
+	fi
+	if [ $res -ne 0 ]; then
+		echo -e "\tquiesce $dev failed($res)"
+		return 1
+	fi
+
+	state=`__ublk_wait_dev_state $dev "QUIESCED"`
+	if [ "$state" != "QUIESCED" ]; then
+		echo -e "\t$dev didn't reach QUIESCED($state)"
+		return 1
+	fi
+
+	state=`recover_ublk_dev_and_wait $dev`
+	if [ "$state" != "LIVE" ]; then
+		echo -e "\t$dev isn't recovered($state)"
+		return 1
+	fi
+	return 0
+}
+
 __find_free_ublk_id()
 {
 	for id in `seq 0 64`; do
