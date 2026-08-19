@@ -1,0 +1,61 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+echo -e "\trun quiesce with no ramp-up over a single depth-1 queue"
+
+BS=4k
+RW=randwrite
+JOBS=1
+RT=$((TRUNTIME * 4))
+CYCLES=6
+RES=0
+
+if ! __ublk_has_feature QUIESCE; then
+	echo -e "\tkernel has no QUIESCE, skipping"
+	exit 0
+fi
+
+# depth 1 on a single queue: every request is the one sitting between being
+# started and being published, which is the interval under test
+export T_TYPE_PARAMS="-t null -q 1 -d 1 --quiesce -r 1"
+MARK="ublk quiesce-dispatch $T_TYPE_PARAMS"
+
+echo "$MARK" > /dev/kmsg
+
+DEV=`__create_ublk_dev`
+if [ "$DEV" == "/dev/ublkb-unknown" ]; then
+	echo -e "\tadd failed($T_TYPE_PARAMS)"
+	exit 1
+fi
+
+echo -e "\trun fio on $DEV(ublk add $T_TYPE_PARAMS) with $CYCLES quiesce cycles"
+__run_fio_libaio $DEV $BS $RW $JOBS $RT > /dev/null 2>&1 &
+FIO_PID=$!
+
+# no ramp-up sleep: the quiesce is sent while the submitter is still filling
+# the queue, which is what separates this from generic/014
+for CYCLE in `seq $CYCLES`; do
+	__ublk_quiesce_and_recover $DEV || { RES=1; break; }
+done
+
+# a request lost in the dispatch window shows up as IO that never completes,
+# so bound the wait rather than letting the run hang on it
+IO_DEADLINE=$((RT + 60))
+SECS=0
+while [ $SECS -lt $IO_DEADLINE ] && kill -0 $FIO_PID 2>/dev/null; do
+	sleep 1
+	let SECS++
+done
+if kill -0 $FIO_PID 2>/dev/null; then
+	echo -e "\tfio still has IO in flight after ${IO_DEADLINE}s"
+	kill -9 $FIO_PID > /dev/null 2>&1
+	RES=1
+fi
+wait $FIO_PID > /dev/null 2>&1
+
+__ublk_del_timeout $DEV || RES=1
+__check_dmesg "$MARK" || RES=1
+
+exit $RES

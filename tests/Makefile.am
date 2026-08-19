@@ -31,6 +31,7 @@ EXTRA_DIST = \
 	generic/012 \
 	generic/013 \
 	generic/014 \
+	generic/015 \
 	loop/001 \
 	loop/002 \
 	loop/003 \
