@@ -1,0 +1,28 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+. common/loop_common
+
+echo -e "\tsignal the server into leaving its rings live, IO in flight"
+
+# 1M writes over a backing file so commands are still parked in the rings
+# when the server walks away from them
+BS=1M
+RW=write
+JOBS=4
+RT=$TRUNTIME
+LOOPS=2
+RES=0
+
+FILE=`_create_loop_image "data" $LO_IMG_SZ`
+export T_TYPE_PARAMS="-t loop -q 2 -d 64 -r 0 --abandon-ring -f $FILE"
+for SIG in INT TERM; do
+	for CNT in `seq $LOOPS`; do
+		__ublk_run_signal_teardown abandon-ring $CNT $SIG \
+			$BS $RW $JOBS $RT || RES=1
+	done
+done
+_remove_loop_image $FILE
+
+exit $RES
