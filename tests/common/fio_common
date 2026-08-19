@@ -367,6 +367,103 @@ __ublk_quiesce_and_recover()
 	return 0
 }
 
+ADD_TIMEOUT=20
+
+# Compared against a baseline taken before the device is created rather than
+# against zero, so an unrelated user of the driver doesn't fail the test.
+__ublk_module_refs()
+{
+	cat /sys/module/ublk_drv/refcnt 2>/dev/null || echo 0
+}
+
+# An add issued by a process that has nothing to do with the device being torn
+# down. If teardown leaked a reference this never returns, which is the
+# symptom being chased.
+__ublk_probe_add_blocked()
+{
+	local id=$1
+	local other_id=$2
+	local res
+
+	timeout $ADD_TIMEOUT $UBLK add -t null -n $id > /dev/null 2>&1
+	res=$?
+	udevadm settle
+
+	if [ $res -eq 124 ]; then
+		echo -e "\tublk add -n $id blocked while dev $other_id was torn down"
+		ps -eLf | grep ublk
+		return 1
+	fi
+	if [ $res -ne 0 ]; then
+		echo -e "\tublk add -n $id failed($res)"
+		return 1
+	fi
+	__ublk_del_timeout /dev/ublkb${id}
+}
+
+# An unbounded wait turns a stuck request into a harness timeout instead of a
+# test failure, and costs the remaining arms.
+__ublk_wait_fio()
+{
+	local fio_pid=$1
+	local deadline=$2
+	local secs=0
+
+	while [ $secs -lt $deadline ] && kill -0 $fio_pid 2>/dev/null; do
+		sleep 1
+		let secs++
+	done
+	if kill -0 $fio_pid 2>/dev/null; then
+		echo -e "\tfio still has IO in flight after ${deadline}s"
+		kill -9 $fio_pid > /dev/null 2>&1
+		wait $fio_pid > /dev/null 2>&1
+		return 1
+	fi
+	wait $fio_pid > /dev/null 2>&1
+	return 0
+}
+
+__ublk_wait_pid_gone()
+{
+	local pid=$1
+	local deadline=$2
+	local secs=0
+
+	while [ $secs -lt $deadline ] && kill -0 $pid 2>/dev/null; do
+		sleep 1
+		let secs++
+	done
+	kill -0 $pid 2>/dev/null || return 0
+	echo -e "\tublk daemon $pid still alive after ${deadline}s"
+	return 1
+}
+
+# What must be true once a device is gone: nothing of it is left behind, and
+# the driver holds no more references than it did before the device existed.
+__ublk_check_teardown_clean()
+{
+	local dev_id=$1
+	local daemon_pid=$2
+	local base_refs=$3
+	local res=0
+	local refs
+
+	if [ -n "$daemon_pid" ] && kill -0 $daemon_pid 2>/dev/null; then
+		echo -e "\tdaemon $daemon_pid outlived dev $dev_id"
+		res=1
+	fi
+	if [ -c /dev/ublkc${dev_id} ]; then
+		echo -e "\t/dev/ublkc${dev_id} still present after teardown"
+		res=1
+	fi
+	refs=`__ublk_module_refs`
+	if [ "$refs" != "$base_refs" ]; then
+		echo -e "\tublk_drv refcount $refs, was $base_refs before the device"
+		res=1
+	fi
+	return $res
+}
+
 __find_free_ublk_id()
 {
 	for id in `seq 0 64`; do

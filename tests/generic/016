@@ -1,0 +1,72 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+. common/loop_common
+
+echo -e "\trun ublk add from another process while a device is being deleted"
+
+# 1M writes over a backing file keep requests with the server, so the del has
+# the most to wait on when the add arrives
+BS=1M
+RW=write
+JOBS=4
+RT=$TRUNTIME
+LOOPS=2
+FIO_DEADLINE=$((TRUNTIME + 60))
+RES=0
+
+ublk_run_add_during_del()
+{
+	local cnt=$1
+	local kill_daemon=$2
+	local mark="ublk add-during-del $cnt kill=$kill_daemon $T_TYPE_PARAMS"
+	local base_refs=`__ublk_module_refs`
+
+	echo "$mark" > /dev/kmsg
+
+	local dev=`__create_ublk_dev`
+	if [ "$dev" == "/dev/ublkb-unknown" ]; then
+		echo -e "\tadd failed($T_TYPE_PARAMS)"
+		RES=1
+		return
+	fi
+	local dev_id=`__ublk_dev_id $dev`
+	local daemon_pid=`__ublk_get_pid $dev`
+	# reserved before the del starts: once two adds are in flight they would
+	# otherwise both pick the same free id and one fails with EEXIST
+	local probe_id=`__find_free_ublk_id`
+
+	echo -e "\trun fio on $dev(ublk add $T_TYPE_PARAMS), del + add $cnt"
+	__run_fio_libaio $dev $BS $RW $JOBS $RT > /dev/null 2>&1 &
+	local fio_pid=$!
+
+	sleep 0.$((RANDOM % 9 + 1))
+
+	# del in the background, so the probe add lands while the abort walk runs
+	__ublk_del_timeout $dev &
+	local del_pid=$!
+
+	# a signal delivered during the abort walk, which is how the daemon
+	# became unkillable when this was hit by hand
+	[ "$kill_daemon" == "1" ] && kill -9 $daemon_pid > /dev/null 2>&1
+
+	__ublk_probe_add_blocked $probe_id $dev_id || RES=1
+
+	wait $del_pid || RES=1
+	__ublk_wait_fio $fio_pid $FIO_DEADLINE || RES=1
+
+	__ublk_check_teardown_clean $dev_id "$daemon_pid" $base_refs || RES=1
+	__check_dmesg "$mark" || RES=1
+}
+
+FILE=`_create_loop_image "data" $LO_IMG_SZ`
+export T_TYPE_PARAMS="-t loop -q 2 -d 64 -r 0 -f $FILE"
+for KILL in 0 1; do
+	for CNT in `seq $LOOPS`; do
+		ublk_run_add_during_del $CNT $KILL
+	done
+done
+_remove_loop_image $FILE
+
+exit $RES
