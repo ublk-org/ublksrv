@@ -913,16 +913,21 @@ static int ublksrv_create_pid_file(struct _ublksrv_dev *dev)
 	snprintf(pid_file, 64, "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
 
 	ret = create_pid_file(pid_file, &pid_fd);
-	if (ret < 0) {
-		/* -1 means the file is locked, and we need to remove it */
-		if (ret == -1) {
-			close(pid_fd);
-			unlink(pid_file);
-		}
+	if (ret < 0)
 		return ret;
-	}
 	dev->pid_file_fd = pid_fd;
 	return 0;
+}
+
+/*
+ * A device that waits for the next server keeps the recovery data in our
+ * pid file. The kernel parks it as QUIESCED or FAIL_IO only once our
+ * /dev/ublkcN is closed, which happens after the pid file is dealt with,
+ * so the state still reads LIVE here and only the flag can answer this.
+ */
+static bool ublksrv_dev_outlives_server(const struct _ublksrv_dev *dev)
+{
+	return dev->ctrl_dev->dev_info.flags & UBLK_F_USER_RECOVERY;
 }
 
 static void ublksrv_remove_pid_file(const struct _ublksrv_dev *dev)
@@ -930,10 +935,15 @@ static void ublksrv_remove_pid_file(const struct _ublksrv_dev *dev)
 	int dev_id = dev->ctrl_dev->dev_info.dev_id;
 	char pid_file[64];
 
-	if (!dev->ctrl_dev->run_dir)
+	/* without a fd nothing was created, so nothing here is ours */
+	if (!dev->ctrl_dev->run_dir || dev->pid_file_fd < 0)
 		return;
 
 	close(dev->pid_file_fd);
+
+	if (ublksrv_dev_outlives_server(dev))
+		return;
+
 	snprintf(pid_file, 64, "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
 	unlink(pid_file);
 }
@@ -969,6 +979,7 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 	tgt = &dev->tgt;
 	dev->ctrl_dev = ctrl_dev;
 	dev->cdev_fd = -1;
+	dev->pid_file_fd = -1;
 
 	snprintf(buf, 64, "%s%d", UBLKC_DEV, dev_id);
 

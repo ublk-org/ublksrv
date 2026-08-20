@@ -10,12 +10,21 @@
 #include "ublksrv_priv.h"
 
 /*
- * We don't need to lock file since the device id is unique
+ * The lock is held for as long as the server runs, and is what tells
+ * everyone else whether the device still has one - the pid written here
+ * can be recycled once the server is gone.
  */
 int create_pid_file(const char *pid_file, int *pid_fd)
 {
 #define PID_PATH_LEN  256
 	char buf[PID_PATH_LEN];
+	/* an open file description lock, so it dies with this process */
+	struct flock lock = {
+		.l_type		= F_WRLCK,
+		.l_whence	= SEEK_SET,
+		.l_start	= 0,
+		.l_len		= 0,
+	};
 	int fd, ret;
 
 	fd = open(pid_file, O_RDWR | O_CREAT | O_CLOEXEC,
@@ -23,6 +32,15 @@ int create_pid_file(const char *pid_file, int *pid_fd)
 	if (fd < 0) {
 		ublk_err( "Fail to open file %s", pid_file);
 		return fd;
+	}
+
+	if (fcntl(fd, F_OFD_SETLK, &lock) < 0) {
+		ret = -errno;
+		ublk_err( "Fail to lock pid file %s, err %s",
+				pid_file, strerror(errno));
+		/* the owner is alive, so don't touch its file */
+		close(fd);
+		return ret;
 	}
 
 	ret = ftruncate(fd, 0);

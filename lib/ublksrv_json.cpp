@@ -3,6 +3,7 @@
 #include <config.h>
 
 #include <iostream>
+#include <fcntl.h>
 #include "nlohmann/json.hpp"
 #include "ublksrv_priv.h"
 
@@ -674,6 +675,12 @@ int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
 	int size = JSON_OFFSET;
 	int daemon_pid;
 	struct stat st;
+	struct flock lock = {
+		.l_type		= F_WRLCK,
+		.l_whence	= SEEK_SET,
+		.l_start	= 0,
+		.l_len		= 0,
+	};
 
 	if (!run_dir)
 		return -EINVAL;
@@ -700,8 +707,8 @@ int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
 	if (daemon_pid < 0)
 		goto out;
 
-	ret = kill(daemon_pid, 0);
-	if (ret)
+	/* if the lock is free the server is gone, whatever the pid says */
+	if (fcntl(pid_fd, F_OFD_GETLK, &lock) < 0 || lock.l_type == F_UNLCK)
 		goto out;
 
 	if (check_data) {
