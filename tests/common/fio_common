@@ -193,6 +193,68 @@ __ublk_get_queue_tid() {
 	echo $q_tid
 }
 
+# echo the tids of every io thread serving one queue, space separated
+__ublk_get_queue_tids() {
+	local dev=$1
+	local qid=$2
+	local dev_id=`__ublk_dev_id $dev`
+
+	eval $UBLK list -n ${dev_id} > ${UBLK_TMP}
+	cat ${UBLK_TMP} | grep "queue ${qid}:" | \
+		sed -e 's/.*tid //' -e 's/ affinity.*//'
+}
+
+# check the device is served by nr_queues x nr_threads distinct live threads
+__ublk_check_io_threads() {
+	local dev=$1
+	local nr_queues=$2
+	local nr_threads=$3
+	local pid=`__ublk_get_pid $dev`
+	local want=$((nr_queues * nr_threads))
+	local all=""
+	local qid tid tids n
+
+	for qid in `seq 0 $((nr_queues - 1))`; do
+		tids=`__ublk_get_queue_tids $dev $qid`
+		n=`echo $tids | wc -w`
+		if [ "$n" != "$nr_threads" ]; then
+			echo "queue $qid reports $n io thread(s), expected $nr_threads"
+			return 1
+		fi
+		for tid in $tids; do
+			if [ ! -d /proc/${pid}/task/${tid} ]; then
+				echo "queue $qid tid $tid is not a thread of daemon $pid"
+				return 1
+			fi
+		done
+		all="$all $tids"
+	done
+
+	n=`echo $all | tr ' ' '\n' | sort -u | wc -l`
+	if [ "$n" != "$want" ]; then
+		echo "$n distinct io threads, expected $want"
+		return 1
+	fi
+	return 0
+}
+
+# write a verified pattern through the device and read it back
+#
+# Each job gets its own region: without offset_increment they all write
+# the same one, overwrite each other's verify data and fail on any
+# device, ublk or not.
+__run_fio_verify() {
+	local dev=$1
+	local jobs=$2
+	local size=$3
+
+	fio --name=verify --filename=$dev --ioengine=libaio --direct=1 \
+		--bs=4k --iodepth=64 --numjobs=$jobs --rw=randwrite \
+		--verify=md5 --verify_fatal=1 --verify_backlog=1024 \
+		--size=$size --offset_increment=$size --group_reporting=1 \
+		--output=$FIO_OUTPUT > /dev/null 2>&1
+}
+
 __ublk_get_dev_state() {
 	local dev=$1
 	local dev_id=`__ublk_dev_id $dev`

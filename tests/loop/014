@@ -1,0 +1,67 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+. common/loop_common
+
+echo -e "\trun ublk-loop with several io threads per queue"
+
+QUEUES=2
+THREADS=4
+DEPTH=65
+
+FILE=`_create_loop_image "data" $LO_IMG_SZ`
+
+ublk_run_io_threads_test()
+{
+	local seq_tags=$1
+	local zero_copy=$2
+	local desc="interleaved tags"
+
+	export T_TYPE_PARAMS="-t loop -q $QUEUES -d $DEPTH -T $THREADS -f $FILE"
+	if [ "$seq_tags" == "1" ]; then
+		export T_TYPE_PARAMS="$T_TYPE_PARAMS -S"
+		desc="contiguous tags"
+	fi
+	# zero copy registers each io's buffer into the fetching thread's own
+	# ring, indexed by absolute tag, which is where a per-io-daemon task
+	# check would bite
+	if [ "$zero_copy" == "1" ]; then
+		export T_TYPE_PARAMS="$T_TYPE_PARAMS -z"
+		desc="$desc, zero copy"
+	fi
+
+	local dev=`__create_ublk_dev`
+	if [ "$dev" == "/dev/ublkb-unknown" ]; then
+		echo -e "\tcan't create ublk-loop with -T $THREADS($desc)"
+		return
+	fi
+
+	# declared separately: "local res=`cmd`" would report local's status
+	local res
+	res=`__ublk_check_io_threads $dev $QUEUES $THREADS`
+	if [ $? -ne 0 ]; then
+		echo -e "\t$res"
+		__remove_ublk_dev $dev
+		return
+	fi
+
+	# a tag served by the wrong thread would read back another tag's
+	# data, so verify what comes off the backing file
+	__run_fio_verify $dev 4 64M
+	if [ $? -ne 0 ]; then
+		echo -e "\tfio verify failed on $dev($desc)"
+	else
+		echo -e "\tfio verify passed on $dev($desc)"
+	fi
+
+	__remove_ublk_dev $dev
+}
+
+for ZC in `seq 0 1`; do
+	for SEQ in `seq 0 1`; do
+		ublk_run_io_threads_test $SEQ $ZC
+	done
+done
+
+_remove_loop_image $FILE
