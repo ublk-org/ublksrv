@@ -586,6 +586,15 @@ static const struct ublksrv_tgt_type  loop_tgt_type = {
 	.usage_for_add = loop_cmd_usage,
 	.init_tgt = loop_init_tgt,
 	.deinit_tgt	=  loop_deinit_tgt,
+	/*
+	 * loop_tgt_data is device wide and read only once ->init_tgt() has
+	 * run, and everything else the target touches is reached from the
+	 * io's own tag: its backing file read/write, the user copy offset
+	 * built from (q_id, tag), and the buffer register and unregister
+	 * for zero copy, which the driver accepts from any task. So the
+	 * queue's tags can be split across io threads.
+	 */
+	.max_io_threads_per_queue = MAX_IO_THREADS_PER_QUEUE,
 	.name	=  "loop",
 };
 
