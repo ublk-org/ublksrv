@@ -410,7 +410,12 @@ void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 	int i;
 	int nr_ios = q->dev->tgt.extra_ios + q->q_depth;
 
-	if (q->dev->tgt.ops->deinit_queue)
+	/*
+	 * Only undo what ran: on an init failure before or inside
+	 * ->init_queue() the target has nothing to tear down, and its
+	 * ->deinit_queue() would dereference a private_data it never set.
+	 */
+	if (q->tgt_queue_inited && q->dev->tgt.ops->deinit_queue)
 		q->dev->tgt.ops->deinit_queue(tq);
 
 	if (q->epollfd >= 0)
@@ -763,7 +768,15 @@ const struct ublksrv_queue *ublksrv_queue_init_thread(const struct ublksrv_dev *
 	if (nr_ios > depth * 3)
 		return NULL;
 
-	q = (struct _ublksrv_queue *)malloc(sizeof(struct _ublksrv_queue) +
+	/*
+	 * Zeroed, not just allocated: every "goto fail" below unwinds
+	 * through ublksrv_queue_deinit(), which walks the whole queue and
+	 * frees ->ios[].buf_addr and ->ios[].data.private_data and closes
+	 * ->ring.ring_fd.  Those are only filled in further down, so on an
+	 * early failure the teardown would otherwise act on whatever the
+	 * allocator happened to hand back.
+	 */
+	q = (struct _ublksrv_queue *)calloc(1, sizeof(struct _ublksrv_queue) +
 			sizeof(struct ublk_io) * nr_ios);
 	if (!q)
 		return NULL;
@@ -803,6 +816,8 @@ const struct ublksrv_queue *ublksrv_queue_init_thread(const struct ublksrv_dev *
 	}
 
 	q->epollfd = -1;
+	/* not merely zeroed: deinit closes ->efd whenever it is not negative */
+	q->efd = -1;
 	q->epoll_callbacks = NULL;
 	pthread_spin_init(&q->epoll_lock, PTHREAD_PROCESS_PRIVATE);
 
@@ -833,6 +848,7 @@ const struct ublksrv_queue *ublksrv_queue_init_thread(const struct ublksrv_dev *
 	q->io_cmd_buf = mmap(0, cmd_buf_size, PROT_READ,
 			MAP_SHARED | MAP_POPULATE, dev->cdev_fd, off);
 	if (q->io_cmd_buf == MAP_FAILED) {
+		q->io_cmd_buf = NULL;
 		ublk_err("ublk dev %d queue %d map io_cmd_buf failed",
 				q->dev->ctrl_dev->dev_info.dev_id, q->q_id);
 		goto fail;
@@ -957,6 +973,7 @@ skip_alloc_buf:
 					&q->private_data))
 			goto fail;
 	}
+	q->tgt_queue_inited = 1;
 
 	if (ctrl_dev->queues_cpuset)
 		ublksrv_set_sched_affinity(dev, q_id);

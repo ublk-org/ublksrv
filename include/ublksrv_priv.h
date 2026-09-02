@@ -221,7 +221,14 @@ struct _ublksrv_queue {
 	/* Batch IO support - only used when UBLK_F_BATCH_IO is set */
 	struct ublksrv_queue_batch batch;
 
-	unsigned long reserved[2];
+	/*
+	 * Set once the target's ->init_queue() has succeeded, so that
+	 * ublksrv_queue_deinit() only calls ->deinit_queue() for a queue the
+	 * target actually initialized.
+	 */
+	unsigned tgt_queue_inited;
+	unsigned pad;
+	unsigned long reserved[1];
 
 	struct ublk_io ios[0];
 };
