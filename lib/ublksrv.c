@@ -754,7 +754,9 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
-	ublksrv_queue_set_partition(q, 0, 1);
+	ublksrv_queue_set_partition(q, 0, 1,
+			ctrl_dev->dev_info.ublksrv_flags &
+				UBLKSRV_F_SEQ_TAG_PARTITION);
 	q->io_cmd_buf = NULL;
 	q->cmd_inflight = 0;
 	q->tgt_io_inflight = 0;

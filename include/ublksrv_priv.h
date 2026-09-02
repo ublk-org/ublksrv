@@ -264,17 +264,34 @@ struct _ublksrv_dev {
  * contiguous window rotating through the tag space.  A contiguous split
  * would leave all but a couple of threads idle at any instant, while an
  * interleaved one spreads every such window over all of them.
+ *
+ * With 'seq' (UBLKSRV_F_SEQ_TAG_PARTITION) thread 'idx' instead owns one
+ * contiguous block of depth / nr tags, the first depth % nr threads
+ * taking one more.
+ *
+ * 'nr' must be at least 1; ublksrv_flags_io_threads() guarantees that
+ * for the value read from the device.
  */
 static inline void ublksrv_queue_set_partition(struct _ublksrv_queue *q,
-		unsigned short idx, unsigned short nr)
+		unsigned short idx, unsigned short nr, bool seq)
 {
 	unsigned short depth = q->q_depth;
 
 	q->io_thread_idx = idx;
 	q->nr_io_threads = nr;
-	q->tag_start = idx;
-	q->tag_step = nr;
-	q->nr_tags = idx < depth ? (depth - idx + nr - 1) / nr : 0;
+
+	if (seq) {
+		unsigned short base = depth / nr;
+		unsigned short rem = depth % nr;
+
+		q->tag_start = idx * base + (idx < rem ? idx : rem);
+		q->tag_step = 1;
+		q->nr_tags = base + (idx < rem ? 1 : 0);
+	} else {
+		q->tag_start = idx;
+		q->tag_step = nr;
+		q->nr_tags = idx < depth ? (depth - idx + nr - 1) / nr : 0;
+	}
 
 	/*
 	 * One past the last owned tag.  Computed from ->nr_tags rather than

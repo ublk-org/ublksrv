@@ -59,6 +59,22 @@ extern "C" {
  */
 #define UBLKSRV_F_ZC_NEEDS_NET_FIXED_BUF	(1UL << 3)
 
+/*
+ * Give each io thread of a queue one contiguous block of the queue's
+ * tags instead of the default interleaved set.
+ *
+ * Interleaved is the better default: blk-mq allocates tags sequentially,
+ * so with the submitter's queue depth below the device's the live tags
+ * form a window rotating through the tag space, and a contiguous split
+ * leaves most threads idle.  Contiguous blocks are offered because they
+ * stop threads sharing io descriptor cache lines and give each one a
+ * contiguous range of the io buffer, which is worth measuring on a
+ * workload with several submitters per queue.
+ *
+ * A no-op unless more than one io thread per queue is asked for.
+ */
+#define UBLKSRV_F_SEQ_TAG_PARTITION	(1UL << 4)
+
 struct io_uring;
 struct io_uring_cqe;
 struct ublksrv_aio_ctx;
