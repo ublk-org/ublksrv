@@ -180,6 +180,13 @@ static const struct ublksrv_tgt_type  null_tgt_type = {
 	.handle_io_async = null_handle_io_async,
 	.tgt_io_done = null_tgt_io_done,
 	.init_tgt = null_init_tgt,
+	/*
+	 * No per queue state: every io is answered from its own tag, either
+	 * completed straight away or through a per tag coroutine, and the
+	 * buffer registration null does for zero copy is allowed from any
+	 * task. So any number of io threads may share a queue.
+	 */
+	.max_io_threads_per_queue = MAX_IO_THREADS_PER_QUEUE,
 	.name	=  "null",
 };
 
