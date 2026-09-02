@@ -341,7 +341,7 @@ static void ublksrv_submit_fetch_commands(struct _ublksrv_queue *q)
 		return;
 	}
 
-	for (i = 0; i < q->q_depth; i++)
+	ublksrv_for_each_tag(q, i)
 		ublksrv_queue_io_cmd(q, &q->ios[i], i);
 
 	__ublksrv_queue_event(q);
@@ -754,6 +754,7 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 	q->q_id = q_id;
 	/* FIXME: depth has to be PO 2 */
 	q->q_depth = depth;
+	ublksrv_queue_set_partition(q, 0, 1);
 	q->io_cmd_buf = NULL;
 	q->cmd_inflight = 0;
 	q->tgt_io_inflight = 0;
@@ -770,11 +771,23 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 	}
 
 	io_buf_size = ctrl_dev->dev_info.max_io_buf_bytes;
+	/*
+	 * ->ios[] stays indexed by absolute tag and covers the whole queue,
+	 * so every tag-indexed lookup keeps working, but only the tags this
+	 * thread serves get an io buffer and target private data.  The rest
+	 * are left NULL, which both saves the memory and makes
+	 * ublksrv_queue_deinit()'s free loop skip them.
+	 */
 	for (i = 0; i < nr_ios; i++) {
+		bool owned = i >= q->q_depth || ublksrv_queue_owns_tag(q, i);
+
 		q->ios[i].buf_addr = NULL;
 
 		/* extra ios needn't to allocate io buffer */
 		if (i >= q->q_depth)
+			goto skip_alloc_buf;
+
+		if (!owned)
 			goto skip_alloc_buf;
 
 		if (!ublksrv_queue_alloc_buf(q))
@@ -798,8 +811,15 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 			goto fail;
 		}
 skip_alloc_buf:
-		q->ios[i].flags = UBLKSRV_NEED_FETCH_RQ | UBLKSRV_IO_FREE;
-		q->ios[i].data.private_data = malloc(io_data_size);
+		/*
+		 * Tags served by another io thread are never fetched from
+		 * here, so leave them without NEED_FETCH_RQ: should one ever
+		 * be armed by mistake, ublksrv_queue_io_cmd() ignores it
+		 * instead of stealing the tag from its owner.
+		 */
+		q->ios[i].flags = owned ?
+			(UBLKSRV_NEED_FETCH_RQ | UBLKSRV_IO_FREE) : 0;
+		q->ios[i].data.private_data = owned ? malloc(io_data_size) : NULL;
 		q->ios[i].data.tag = i;
 		if (i < q->q_depth)
 			q->ios[i].data.iod = ublksrv_get_iod(q, i);
