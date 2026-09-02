@@ -232,7 +232,8 @@ struct _ublksrv_dev {
 	struct ublksrv_tgt_info tgt;
 	/************************************************/
 
-	struct _ublksrv_queue *__queues[MAX_NR_HW_QUEUES];
+	/* one entry per (queue, io thread) pair */
+	struct _ublksrv_queue *__queues[MAX_NR_HW_QUEUES][MAX_IO_THREADS_PER_QUEUE];
 	char	*io_buf_start;
 	pthread_t *thread;
 	int cdev_fd;

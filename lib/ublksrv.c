@@ -452,7 +452,9 @@ void ublksrv_queue_deinit(const struct ublksrv_queue *tq)
 		}
 		free(q->ios[i].data.private_data);
 	}
-	q->dev->__queues[q->q_id] = NULL;
+	/* pairs with the compare-and-swap that claimed the slot on init */
+	__atomic_store_n(&q->dev->__queues[q->q_id][q->io_thread_idx],
+			(struct _ublksrv_queue *)NULL, __ATOMIC_RELEASE);
 	free(q);
 
 }
@@ -703,12 +705,13 @@ static void ublksrv_calculate_depths(const struct _ublksrv_dev *dev, int
 	*cq_depth = dev->cq_depth ? dev->cq_depth : depth;
 }
 
-const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *tdev,
-		unsigned short q_id, void *queue_data, int flags)
+const struct ublksrv_queue *ublksrv_queue_init_thread(const struct ublksrv_dev *tdev,
+		unsigned short q_id, void *queue_data, int flags,
+		unsigned short io_thread_idx)
 {
 	struct io_uring_params p;
 	struct _ublksrv_dev *dev = tdev_to_local(tdev);
-	struct _ublksrv_queue *q;
+	struct _ublksrv_queue *q, *expected;
 	const struct ublksrv_ctrl_dev *ctrl_dev = dev->ctrl_dev;
 	int depth = ctrl_dev->dev_info.queue_depth;
 	int i, ret = -1;
@@ -717,6 +720,40 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 	int io_data_size = round_up(dev->tgt.io_data_size,
 			sizeof(unsigned long));
 	int ring_depth, cq_depth, nr_ios;
+	unsigned nr_io_threads =
+		ublksrv_flags_io_threads(ctrl_dev->dev_info.ublksrv_flags);
+
+	/*
+	 * Both indexes come from dev_info, which is wider than the queue
+	 * table on either axis: the driver allows more queues than
+	 * MAX_NR_HW_QUEUES and the io thread field more than
+	 * MAX_IO_THREADS_PER_QUEUE.  Bound them here as well, since a
+	 * recovered device or a caller building the flags itself bypasses
+	 * the tool's checks.
+	 */
+	if (q_id >= ctrl_dev->dev_info.nr_hw_queues ||
+			q_id >= MAX_NR_HW_QUEUES ||
+			nr_io_threads > MAX_IO_THREADS_PER_QUEUE ||
+			io_thread_idx >= nr_io_threads) {
+		ublk_err("ublk dev %d queue %d io thread %u of %u out of range",
+				ctrl_dev->dev_info.dev_id, q_id, io_thread_idx,
+				nr_io_threads);
+		return NULL;
+	}
+
+	/*
+	 * Batch io arms every tag of a queue from one thread, and the
+	 * driver withholds UBLK_F_PER_IO_DAEMON for it, so such a queue
+	 * cannot be shared.  The tool refuses the combination; a caller
+	 * building the flags itself reaches here without that check, and
+	 * would otherwise hang START_DEV like the other cases above.
+	 */
+	if (nr_io_threads > 1 &&
+			(ctrl_dev->dev_info.flags & UBLK_F_BATCH_IO)) {
+		ublk_err("ublk dev %d: %u io threads per queue not supported with BATCH_IO",
+				ctrl_dev->dev_info.dev_id, nr_io_threads);
+		return NULL;
+	}
 
 	ublksrv_calculate_depths(dev, &ring_depth, &cq_depth, &nr_ios);
 
@@ -728,7 +765,42 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 
 	q = (struct _ublksrv_queue *)malloc(sizeof(struct _ublksrv_queue) +
 			sizeof(struct ublk_io) * nr_ios);
-	dev->__queues[q_id] = q;
+	if (!q)
+		return NULL;
+
+	q->q_id = q_id;
+	/* FIXME: depth has to be PO 2 */
+	q->q_depth = depth;
+	ublksrv_queue_set_partition(q, io_thread_idx, nr_io_threads,
+			ctrl_dev->dev_info.ublksrv_flags &
+				UBLKSRV_F_SEQ_TAG_PARTITION);
+	/*
+	 * More io threads than tags leaves this one with nothing to fetch,
+	 * which would keep the device from ever becoming ready.
+	 */
+	if (!q->nr_tags) {
+		ublk_err("ublk dev %d queue %d io thread %u has no tags",
+				ctrl_dev->dev_info.dev_id, q_id, io_thread_idx);
+		free(q);
+		return NULL;
+	}
+
+	/*
+	 * Each partition may only be served once.  The driver would reject
+	 * a second fetch of the same tag anyway, but the partition whose
+	 * thread lost the race would then go unserved and the device could
+	 * never become ready.  Claimed with a compare-and-swap so that two
+	 * threads racing on the same index cannot both get past the check.
+	 */
+	expected = NULL;
+	if (!__atomic_compare_exchange_n(&dev->__queues[q_id][io_thread_idx],
+				&expected, q, false, __ATOMIC_ACQ_REL,
+				__ATOMIC_ACQUIRE)) {
+		ublk_err("ublk dev %d queue %d io thread %u already served",
+				ctrl_dev->dev_info.dev_id, q_id, io_thread_idx);
+		free(q);
+		return NULL;
+	}
 
 	q->epollfd = -1;
 	q->epoll_callbacks = NULL;
@@ -751,12 +823,6 @@ const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *t
 		q->state |= UBLKSRV_QUEUE_POLL;
 	if (ctrl_dev->dev_info.flags & UBLK_F_BATCH_IO)
 		q->state |= UBLKSRV_QUEUE_BATCH_IO;
-	q->q_id = q_id;
-	/* FIXME: depth has to be PO 2 */
-	q->q_depth = depth;
-	ublksrv_queue_set_partition(q, 0, 1,
-			ctrl_dev->dev_info.ublksrv_flags &
-				UBLKSRV_F_SEQ_TAG_PARTITION);
 	q->io_cmd_buf = NULL;
 	q->cmd_inflight = 0;
 	q->tgt_io_inflight = 0;
@@ -914,6 +980,12 @@ skip_alloc_buf:
 	ublk_err("ublk dev %d queue %d failed",
 			ctrl_dev->dev_info.dev_id, q_id);
 	return NULL;
+}
+
+const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv_dev *tdev,
+		unsigned short q_id, void *queue_data, int flags)
+{
+	return ublksrv_queue_init_thread(tdev, q_id, queue_data, flags, 0);
 }
 
 const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
@@ -1242,10 +1314,21 @@ int ublksrv_process_io(const struct ublksrv_queue *tq)
 	return reapped;
 }
 
+const struct ublksrv_queue *ublksrv_get_queue_thread(const struct ublksrv_dev *dev,
+		int q_id, unsigned short io_thread_idx)
+{
+	if (q_id < 0 || q_id >= MAX_NR_HW_QUEUES ||
+			io_thread_idx >= MAX_IO_THREADS_PER_QUEUE)
+		return NULL;
+
+	return (const struct ublksrv_queue *)
+		tdev_to_local(dev)->__queues[q_id][io_thread_idx];
+}
+
 const struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id)
 {
-	return (const struct ublksrv_queue *)tdev_to_local(dev)->__queues[q_id];
+	return ublksrv_get_queue_thread(dev, q_id, 0);
 }
 
 /* called in ublksrv process context */

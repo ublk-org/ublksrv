@@ -24,6 +24,7 @@ extern "C" {
 #include "ublk_cmd.h"
 
 #define	MAX_NR_HW_QUEUES 32
+#define	MAX_IO_THREADS_PER_QUEUE 32
 #define	MAX_QD		UBLK_MAX_QUEUE_DEPTH
 #define	MAX_BUF_SIZE    (32U << 20)
 
@@ -74,6 +75,37 @@ extern "C" {
  * A no-op unless more than one io thread per queue is asked for.
  */
 #define UBLKSRV_F_SEQ_TAG_PARTITION	(1UL << 4)
+
+/*
+ * Number of io threads serving each queue, held in ublksrv_flags rather
+ * than in a field of its own because the driver stores ublksrv_flags
+ * verbatim and returns it from GET_DEV_INFO: a recovered device then
+ * rebuilds the same threads without the count being passed again.
+ *
+ * Six bits, which covers MAX_IO_THREADS_PER_QUEUE.  Zero means unset and
+ * reads back as the default of one thread per queue.  Keep this below
+ * bit 32: ublksrv_tgt_type.ublksrv_flags is only an unsigned.
+ */
+#define UBLKSRV_F_IO_THREADS_SHIFT	8
+#define UBLKSRV_F_IO_THREADS_BITS	6
+#define UBLKSRV_F_IO_THREADS_MASK	\
+	(((1UL << UBLKSRV_F_IO_THREADS_BITS) - 1) << UBLKSRV_F_IO_THREADS_SHIFT)
+
+static inline unsigned ublksrv_flags_io_threads(unsigned long long flags)
+{
+	unsigned n = (flags & UBLKSRV_F_IO_THREADS_MASK) >>
+		UBLKSRV_F_IO_THREADS_SHIFT;
+
+	return n ? n : 1;
+}
+
+static inline void ublksrv_flags_set_io_threads(unsigned long *flags,
+		unsigned n)
+{
+	*flags &= ~UBLKSRV_F_IO_THREADS_MASK;
+	*flags |= ((unsigned long)n << UBLKSRV_F_IO_THREADS_SHIFT) &
+		UBLKSRV_F_IO_THREADS_MASK;
+}
 
 struct io_uring;
 struct io_uring_cqe;
@@ -1154,6 +1186,29 @@ extern const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv
 		unsigned short q_id, void *queue_data, int flags);
 
 /**
+ * Initialize one io thread's share of a queue.
+ *
+ * A queue may be served by several io threads, each fetching a disjoint
+ * partition of the queue's tags; io_thread_idx picks which one, and the
+ * thread count comes from the device's ublksrv_flags.  Each partition
+ * may only be served once: a second call for a partition which is
+ * already live fails, since the driver would reject its fetch commands
+ * and the device could never become ready.
+ *
+ * ublksrv_queue_init() and ublksrv_queue_init_flags() are this with
+ * io_thread_idx 0.
+ *
+ * @param dev the ublksrv device
+ * @param q_id queue id
+ * @param queue_data queue private data
+ * @param flags io_uring setup flags
+ * @param io_thread_idx index of this io thread within the queue
+ */
+extern const struct ublksrv_queue *ublksrv_queue_init_thread(
+		const struct ublksrv_dev *dev, unsigned short q_id,
+		void *queue_data, int flags, unsigned short io_thread_idx);
+
+/**
  * Deinit & free ublksrv queue instance
  *
  * @param q the ublksrv queue instance
@@ -1182,6 +1237,20 @@ extern int ublksrv_queue_send_event(const struct ublksrv_queue *q);
  */
 extern const struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id);
+
+/**
+ * Retrieve one io thread's queue object.
+ *
+ * ublksrv_get_queue() is this with io_thread_idx 0, which is the only
+ * thread unless the device was created with more.
+ *
+ * @param dev the ublksrv device
+ * @param q_id queue id
+ * @param io_thread_idx index of the io thread within the queue
+ */
+extern const struct ublksrv_queue *ublksrv_get_queue_thread(
+		const struct ublksrv_dev *dev, int q_id,
+		unsigned short io_thread_idx);
 
 /**
  * Process target IO & IO command from this queue's io_uring
