@@ -275,6 +275,12 @@ struct ublksrv_queue_info {
 	int qid;
 	pthread_t thread;
 	sem_t *queue_sem;
+
+	/*
+	 * Set by the io thread before it posts ->queue_sem, so the value is
+	 * visible to the device handler once its sem_wait() returns.
+	 */
+	bool init_done;
 };
 
 static void ublk_set_queue_pthread_affinity(const struct ublksrv_ctrl_dev *cdev,
@@ -313,6 +319,8 @@ static void *ublksrv_queue_handler(void *data)
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
 	const struct ublksrv_queue *q;
+	unsigned to_submit;
+	int ret;
 
 	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
 
@@ -325,8 +333,35 @@ static void *ublksrv_queue_handler(void *data)
 		return NULL;
 	}
 
+	/*
+	 * ublksrv_queue_init_flags() only prepares the fetch commands and
+	 * leaves the submit to the first ublksrv_process_io().  Submit them
+	 * before reporting success: the abort path below relies on the
+	 * driver cancelling every fetch of a thread which did start, and the
+	 * driver can only cancel what it has already received.  A fetch
+	 * submitted after that cancel pass would be accepted and never
+	 * complete, leaving this thread in ublksrv_process_io() for good.
+	 * This must be done by this thread since the ring is single issuer,
+	 * and a short submit is as bad as a failed one: whatever it left in
+	 * the SQ would go in after the cancel pass all the same.
+	 */
+	to_submit = io_uring_sq_ready(q->ring_ptr);
+	ret = io_uring_submit(q->ring_ptr);
+	if (ret < 0)
+		ublk_err("ublk dev %d queue %d submit fetch commands failed: %s",
+				dev_id, q_id, strerror(-ret));
+	else if ((unsigned)ret != to_submit)
+		ublk_err("ublk dev %d queue %d submitted %d of %u fetch commands",
+				dev_id, q_id, ret, to_submit);
+	if (ret < 0 || (unsigned)ret != to_submit) {
+		ublksrv_queue_deinit(q);
+		sem_post(info->queue_sem);
+		return NULL;
+	}
+
 	/* override the queue affinity by just selecting one cpu */
 	ublk_set_queue_pthread_affinity(cdev, q_id);
+	info->init_done = true;
 	sem_post(info->queue_sem);
 
 	ublk_log("tid %d: ublk dev %d queue %d started", ublksrv_gettid(),
@@ -365,20 +400,28 @@ static void setup_pthread_sigmask(bool fg)
 	pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
 }
 
+static bool ublksrv_queues_started(const struct ublksrv_queue_info *info,
+		unsigned nr_threads)
+{
+	unsigned i;
+
+	for (i = 0; i < nr_threads; i++)
+		if (!info[i].init_done)
+			return false;
+	return true;
+}
+
 /*
  * Now STOP DEV ctrl command has been sent to /dev/ublk-control,
  * and wait until all pending fetch commands are canceled
  */
-static void ublksrv_drain_fetch_commands(const struct ublksrv_dev *dev,
-		struct ublksrv_queue_info *info)
+static void ublksrv_drain_fetch_commands(struct ublksrv_queue_info *info,
+		unsigned nr_threads)
 {
-	const struct ublksrv_ctrl_dev_info *dinfo =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
-	unsigned nr_queues = dinfo->nr_hw_queues;
 	unsigned i;
 	void *ret;
 
-	for (i = 0; i < nr_queues; i++)
+	for (i = 0; i < nr_threads; i++)
 		pthread_join(info[i].thread, &ret);
 }
 
@@ -472,6 +515,7 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	linfo.sock_fd = -1;
 	pthread_t listener;
 	int i, ret = -EINVAL;
+	unsigned nr_threads = 0;
 	sem_t queue_sem;
 	bool has_shmem_zc = dinfo->flags & UBLK_F_SHMEM_ZC;
 
@@ -501,18 +545,36 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 		info_array[i].dev = dev;
 		info_array[i].qid = i;
 		info_array[i].queue_sem = &queue_sem;
-		pthread_create(&info_array[i].thread, NULL,
-				ublksrv_queue_handler,
-				&info_array[i]);
+		if (pthread_create(&info_array[i].thread, NULL,
+					ublksrv_queue_handler,
+					&info_array[i])) {
+			ublk_err("ublk dev %d queue %d create thread failed",
+					dev_id, i);
+			break;
+		}
+		nr_threads++;
 	}
 
-	for (i = 0; i < dinfo->nr_hw_queues; i++)
+	for (i = 0; i < nr_threads; i++)
 		sem_wait(&queue_sem);
+
+	/*
+	 * The device only becomes ready once every tag of every queue has
+	 * been fetched, and START_DEV waits for that without a timeout. So
+	 * a queue thread which failed to start would hang us here forever;
+	 * fail the device instead.
+	 */
+	if (nr_threads < dinfo->nr_hw_queues ||
+			!ublksrv_queues_started(info_array, nr_threads)) {
+		fprintf(stderr, "dev-%d not all queue threads started\n", dev_id);
+		ret = -EIO;
+		goto abort;
+	}
 
 	ret = ublksrv_tgt_start_dev(ctrl_dev, dev, evtfd);
 	if (ret) {
 		fprintf(stderr, "dev-%d start dev failed, ret %d\n", dev_id, ret);
-		goto free;
+		goto abort;
 	}
 
 	/* Register hugetlbfs buffer after device is started */
@@ -522,6 +584,8 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 		if (ret < 0) {
 			fprintf(stderr, "htlb setup failed: %d\n", ret);
 			ublksrv_ctrl_stop_dev(ctrl_dev);
+			/* the io threads must exit before the device is freed */
+			ublksrv_drain_fetch_commands(info_array, nr_threads);
 			goto free;
 		}
 	}
@@ -537,7 +601,7 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	}
 
 	/* wait until we are terminated */
-	ublksrv_drain_fetch_commands(dev, info_array);
+	ublksrv_drain_fetch_commands(info_array, nr_threads);
 
 	/* Stop shmem listener thread */
 	if (has_shmem_zc && linfo.stop_efd >= 0) {
@@ -549,7 +613,30 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	}
 	if (has_shmem_zc)
 		ublk_shmem_unregister_all();
-free:
+	goto free;
+ abort:
+	/*
+	 * Delete the device so the driver cancels the fetch commands of the
+	 * threads which did start, letting them leave ublksrv_process_io();
+	 * they must be joined before ublksrv_dev_deinit() frees the device
+	 * out from under them.  Should the async delete itself fail, stop
+	 * the device instead: on one which never started that goes straight
+	 * to cancelling the commands, and it exists on every kernel.
+	 */
+	if (ublksrv_ctrl_del_dev_async(ctrl_dev) < 0) {
+		int err = ublksrv_ctrl_stop_dev(ctrl_dev);
+
+		/*
+		 * With neither, the fetch commands stay pending and the join
+		 * below never returns; say so, since that is the very hang
+		 * this path is meant to turn into an error.
+		 */
+		if (err < 0)
+			ublk_err("dev-%d: can't delete or stop the device (%d), io threads may not exit",
+					dev_id, err);
+	}
+	ublksrv_drain_fetch_commands(info_array, nr_threads);
+ free:
 	free(info_array);
 
 	ublksrv_dev_deinit(dev);
