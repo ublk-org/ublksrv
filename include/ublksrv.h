@@ -374,7 +374,24 @@ struct ublksrv_tgt_type {
 
 	/** flags required for ublksrv */
 	unsigned ublksrv_flags;
-	unsigned pad;
+
+	/**
+	 * Highest number of io threads per queue this target can serve,
+	 * 0 or 1 meaning it wants exactly one.
+	 *
+	 * Serving a queue from several threads needs the target to be free
+	 * of per queue state keyed by q_id alone: anything holding one
+	 * context, connection or eventfd per queue -- the aio helpers, or a
+	 * hardware submission queue -- would be driven concurrently by all
+	 * of them. Targets which have not been checked for that get their
+	 * request for more than one thread rejected instead.
+	 *
+	 * Occupies what used to be an explicit pad, so the struct layout is
+	 * unchanged and a target built against an older header keeps
+	 * reading as 0.
+	 */
+	unsigned short max_io_threads_per_queue;
+	unsigned short pad;
 
 	/** target name */
 	const char *name;
