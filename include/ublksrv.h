@@ -870,6 +870,21 @@ extern int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
 		unsigned int qid, int tid);
 
 /**
+ * Store one io thread's tid in the queue's json.
+ *
+ * Safe to call concurrently from every io thread of the device: the
+ * device's json buffer lock is held across the read-modify-write.
+ * ublk_json_write_queue_info() is this with io_thread_idx 0.
+ *
+ * @param dev the ublksrv control device
+ * @param qid queue id
+ * @param io_thread_idx index of the io thread within the queue
+ * @param tid the io thread's tid
+ */
+extern int ublk_json_write_queue_thread_info(const struct ublksrv_ctrl_dev *dev,
+		unsigned int qid, unsigned int io_thread_idx, int tid);
+
+/**
  * Deserialize json buffer to ublksrv queue
  *
  * @param jbuf json buffer
@@ -880,6 +895,21 @@ extern int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
  */
 extern int ublksrv_json_read_queue_info(const char *jbuf, int qid,
 		unsigned *tid, char *affinity_buf, int len);
+
+/**
+ * Read the tids of every io thread serving one queue.
+ *
+ * Falls back to the single "tid" key for a device whose json predates
+ * per thread tids.
+ *
+ * @param jbuf json buffer
+ * @param qid queue id
+ * @param tids filled with up to max_tids tids
+ * @param max_tids size of the tids array
+ * @return number of tids stored, or negative on error
+ */
+extern int ublksrv_json_read_queue_tids(const char *jbuf, int qid,
+		unsigned *tids, int max_tids);
 
 /**
  * Deserialize json buffer to target data
