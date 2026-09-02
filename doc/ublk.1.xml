@@ -47,6 +47,7 @@
     [--debug_mask=0x{DBG_MASK}] [--unprivileged]
     [--usercopy] [--max_io_buf_bytes={BYTES}]
     [{-z, --zerocopy}]
+    [{-T, --threads_per_queue} {NR_THREADS}] [{-S, --seq_tags}]
     [&lt;type specific options&gt;]
   </command>
 </para>
@@ -182,6 +183,48 @@
     </para>
     <para>
       This requires Linux kernel 6.15 or later.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-T, --threads_per_queue</option></term>
+  <listitem>
+    <para>
+      Serve each queue from this many io threads instead of one, the
+      default. The queue's tags are split between them, and all of them
+      run within the queue's cpu affinity.
+    </para>
+    <para>
+      blk-mq sends a request to the hardware queue of the cpu which
+      issued it, so a single submitter whose queue depth fits in the
+      ublk queue is served by exactly one ublk io thread and is capped
+      by that thread's per-io cpu cost. Spreading the queue over several
+      threads lifts that cap, and only helps a workload which keeps many
+      requests in flight per queue; at low queue depth it adds latency
+      instead.
+    </para>
+    <para>
+      Not every device type supports it, and it cannot be combined with
+      batch io. This requires Linux kernel 6.16 or later, for
+      UBLK_F_PER_IO_DAEMON. The count does not have to be repeated when
+      recovering the device.
+    </para>
+  </listitem>
+  </varlistentry>
+  <varlistentry><term><option>-S, --seq_tags</option></term>
+  <listitem>
+    <para>
+      Give each io thread one contiguous block of the queue's tags
+      rather than the default interleaved set. Has no effect without
+      <option>-T</option>.
+    </para>
+    <para>
+      Interleaved is the default because blk-mq allocates tags
+      sequentially: when the submitter keeps fewer requests in flight
+      than the queue holds, the live tags form a window rotating through
+      the tag space, and contiguous blocks would leave most of the io
+      threads idle. Contiguous blocks stop the threads sharing io
+      descriptor cache lines, which is worth measuring on a workload
+      with several submitters per queue.
     </para>
   </listitem>
   </varlistentry>
