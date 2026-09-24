@@ -1,0 +1,34 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+echo -e "\trun ublk-null with several io threads per queue"
+
+QUEUES=2
+THREADS=4
+DEPTH=65
+
+# an odd depth so the partitions are uneven: 4 threads take 17/16/16/16
+export T_TYPE_PARAMS="-t null -q $QUEUES -d $DEPTH -T $THREADS"
+
+DEV=`__create_ublk_dev`
+if [ "$DEV" == "/dev/ublkb-unknown" ]; then
+	echo -e "\tcan't create ublk-null with -T $THREADS"
+	exit 1
+fi
+
+RES=`__ublk_check_io_threads $DEV $QUEUES $THREADS`
+if [ $? -ne 0 ]; then
+	echo -e "\t$RES"
+else
+	echo -e "\t$QUEUES queues served by $THREADS io threads each"
+fi
+
+# every tag has to be fetched for the device to have started at all, so
+# reaching here already proves the partitions cover the queue; check the
+# threads actually carry io
+__run_fio_libaio $DEV 4k randrw 4 10
+[ $? -ne 0 ] && echo -e "\tfio failed on $DEV"
+
+__remove_ublk_dev $DEV

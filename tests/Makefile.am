@@ -25,6 +25,8 @@ EXTRA_DIST = \
 	generic/006 \
 	generic/007 \
 	generic/008 \
+	generic/009 \
+	generic/010 \
 	loop/001 \
 	loop/002 \
 	loop/003 \
@@ -37,6 +39,7 @@ EXTRA_DIST = \
 	loop/010 \
 	loop/012 \
 	loop/013 \
+	loop/014 \
 	nbd/001 \
 	nbd/002 \
 	nbd/003 \
@@ -57,4 +60,6 @@ EXTRA_DIST = \
 	null/006 \
 	null/007 \
 	null/012 \
+	null/013 \
+	null/014 \
 	run_test.sh

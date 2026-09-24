@@ -198,6 +198,22 @@ struct _ublksrv_queue {
 
 	unsigned  tid;
 
+	/*
+	 * The tags of q_id which this queue object serves.
+	 *
+	 * A queue may be served by several io threads, each fetching a
+	 * disjoint subset of the queue's tags; ->tag_start, ->tag_step and
+	 * ->tag_end describe this thread's subset and ->nr_tags counts it.
+	 * With one io thread per queue the subset is the whole queue, i.e.
+	 * tag_start 0, tag_step 1, tag_end q_depth.
+	 */
+	unsigned short io_thread_idx;
+	unsigned short nr_io_threads;
+	unsigned short tag_start;
+	unsigned short tag_end;
+	unsigned short tag_step;
+	unsigned short nr_tags;
+
 #define UBLKSRV_NR_CTX_BATCH 4
 	int nr_ctxs;
 	struct ublksrv_aio_ctx *ctxs[UBLKSRV_NR_CTX_BATCH];
@@ -205,7 +221,14 @@ struct _ublksrv_queue {
 	/* Batch IO support - only used when UBLK_F_BATCH_IO is set */
 	struct ublksrv_queue_batch batch;
 
-	unsigned long reserved[4];
+	/*
+	 * Set once the target's ->init_queue() has succeeded, so that
+	 * ublksrv_queue_deinit() only calls ->deinit_queue() for a queue the
+	 * target actually initialized.
+	 */
+	unsigned tgt_queue_inited;
+	unsigned pad;
+	unsigned long reserved[1];
 
 	struct ublk_io ios[0];
 };
@@ -216,7 +239,8 @@ struct _ublksrv_dev {
 	struct ublksrv_tgt_info tgt;
 	/************************************************/
 
-	struct _ublksrv_queue *__queues[MAX_NR_HW_QUEUES];
+	/* one entry per (queue, io thread) pair */
+	struct _ublksrv_queue *__queues[MAX_NR_HW_QUEUES][MAX_IO_THREADS_PER_QUEUE];
 	char	*io_buf_start;
 	pthread_t *thread;
 	int cdev_fd;
@@ -233,6 +257,77 @@ struct _ublksrv_dev {
 
 #define local_to_tq(q)	((struct ublksrv_queue *)(q))
 #define tq_to_local(q)	((struct _ublksrv_queue *)(q))
+
+/*
+ * Split a queue's tags across its io threads.
+ *
+ * The driver's UBLK_F_PER_IO_DAEMON lets each tag's fetch command come
+ * from a different task, so one queue can be served by several io
+ * threads as long as they agree on who owns which tag.  Thread 'idx' of
+ * 'nr' owns tags idx, idx + nr, idx + 2 * nr, ...
+ *
+ * The partition is interleaved rather than contiguous on purpose:
+ * blk-mq's sbitmap hands out tags sequentially from a per-CPU hint, so
+ * with fewer tags in flight than the queue holds the live tags form a
+ * contiguous window rotating through the tag space.  A contiguous split
+ * would leave all but a couple of threads idle at any instant, while an
+ * interleaved one spreads every such window over all of them.
+ *
+ * With 'seq' (UBLKSRV_F_SEQ_TAG_PARTITION) thread 'idx' instead owns one
+ * contiguous block of depth / nr tags, the first depth % nr threads
+ * taking one more.
+ *
+ * 'nr' must be at least 1; ublksrv_flags_io_threads() guarantees that
+ * for the value read from the device.
+ */
+static inline void ublksrv_queue_set_partition(struct _ublksrv_queue *q,
+		unsigned short idx, unsigned short nr, bool seq)
+{
+	unsigned short depth = q->q_depth;
+
+	q->io_thread_idx = idx;
+	q->nr_io_threads = nr;
+
+	if (seq) {
+		unsigned short base = depth / nr;
+		unsigned short rem = depth % nr;
+
+		q->tag_start = idx * base + (idx < rem ? idx : rem);
+		q->tag_step = 1;
+		q->nr_tags = base + (idx < rem ? 1 : 0);
+	} else {
+		q->tag_start = idx;
+		q->tag_step = nr;
+		q->nr_tags = idx < depth ? (depth - idx + nr - 1) / nr : 0;
+	}
+
+	/*
+	 * One past the last owned tag.  Computed from ->nr_tags rather than
+	 * taken as q_depth so that it stays correct for any layout.
+	 *
+	 * An empty partition (more io threads than tags) is normalised to
+	 * an empty range at 0: the expression underflows for nr_tags == 0,
+	 * and leaving ->tag_start past ->q_depth would put out of range
+	 * values in the queue even though nothing iterates them.
+	 */
+	if (q->nr_tags) {
+		q->tag_end = q->tag_start + (q->nr_tags - 1) * q->tag_step + 1;
+	} else {
+		q->tag_start = 0;
+		q->tag_end = 0;
+	}
+}
+
+static inline bool ublksrv_queue_owns_tag(const struct _ublksrv_queue *q,
+		unsigned int tag)
+{
+	return tag >= q->tag_start && tag < q->tag_end &&
+		!((tag - q->tag_start) % q->tag_step);
+}
+
+/* iterate the tags owned by this queue object, in increasing order */
+#define ublksrv_for_each_tag(q, tag) \
+	for ((tag) = (q)->tag_start; (tag) < (q)->tag_end; (tag) += (q)->tag_step)
 
 #define local_to_tdev(d)	((struct ublksrv_dev *)(d))
 #define tdev_to_local(d)	((struct _ublksrv_dev *)(d))

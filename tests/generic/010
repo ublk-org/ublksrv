@@ -1,0 +1,65 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+. common/loop_common
+
+echo -e "\trecover a device served by several io threads per queue"
+
+QUEUES=2
+THREADS=4
+DEPTH=65
+
+FILE=`_create_loop_image "data" $LO_IMG_SZ`
+
+# -T is not repeated on recover: the count lives in dev_info.ublksrv_flags,
+# which comes back from the driver with the rest of the device info
+export T_TYPE_PARAMS="-t loop -q $QUEUES -d $DEPTH -T $THREADS -r 1 -f $FILE"
+
+DEV=`__create_ublk_dev`
+if [ "$DEV" == "/dev/ublkb-unknown" ]; then
+	echo -e "\tcan't create ublk-loop with -T $THREADS -r 1"
+	_remove_loop_image $FILE
+	exit 1
+fi
+
+RES=`__ublk_check_io_threads $DEV $QUEUES $THREADS`
+if [ $? -ne 0 ]; then
+	echo -e "\tbefore recovery: $RES"
+	__remove_ublk_dev $DEV
+	_remove_loop_image $FILE
+	exit 1
+fi
+
+STATE=`__ublk_kill_daemon $DEV "QUIESCED"`
+if [ "$STATE" != "QUIESCED" ]; then
+	echo -e "\tdevice isn't quiesced after killing the daemon($STATE)"
+	__remove_ublk_dev $DEV
+	_remove_loop_image $FILE
+	exit 1
+fi
+
+STATE=`recover_ublk_dev_and_wait $DEV`
+if [ "$STATE" != "LIVE" ]; then
+	echo -e "\trecovery failed($STATE)"
+	__remove_ublk_dev $DEV
+	_remove_loop_image $FILE
+	exit 1
+fi
+
+RES=`__ublk_check_io_threads $DEV $QUEUES $THREADS`
+if [ $? -ne 0 ]; then
+	echo -e "\tafter recovery: $RES"
+else
+	echo -e "\trecovered with $QUEUES queues x $THREADS io threads"
+fi
+
+__run_fio_verify $DEV 4 64M
+if [ $? -ne 0 ]; then
+	echo -e "\tfio verify failed after recovery"
+else
+	echo -e "\tfio verify passed after recovery"
+fi
+
+__remove_ublk_dev $DEV
+_remove_loop_image $FILE

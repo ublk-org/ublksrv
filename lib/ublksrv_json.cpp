@@ -485,8 +485,9 @@ int ublksrv_json_read_target_info(const char *jbuf, char *tgt_buf, int len)
 	return 0;
 }
 
-int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
-		char *jbuf, int len, int qid, int ubq_daemon_tid)
+static int __ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
+		char *jbuf, int len, int qid, int io_thread_idx,
+		int ubq_daemon_tid)
 {
 	json j;
 	std::string s;
@@ -501,14 +502,30 @@ int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
 	ublksrv_build_cpu_str(cpus, 512, cpuset);
 
 	j["queues"][std::string(name)]["qid"] = qid;
-	j["queues"][std::string(name)]["tid"] = ubq_daemon_tid;
 	j["queues"][std::string(name)]["affinity"] = cpus;
+
+	/*
+	 * One entry per io thread, plus "tid" kept as the first thread's so
+	 * that anything reading the old key -- an older ublk binary against
+	 * a device this one created, or an out of tree user of
+	 * ublksrv_json_read_queue_info() -- still finds what it expects.
+	 */
+	j["queues"][std::string(name)]["tids"][io_thread_idx] = ubq_daemon_tid;
+	if (!io_thread_idx)
+		j["queues"][std::string(name)]["tid"] = ubq_daemon_tid;
 
 	return dump_json_to_buf(j, jbuf, len);
 }
 
-int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
-		unsigned int qid, int tid)
+int ublksrv_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
+		char *jbuf, int len, int qid, int ubq_daemon_tid)
+{
+	return __ublksrv_json_write_queue_info(cdev, jbuf, len, qid, 0,
+			ubq_daemon_tid);
+}
+
+int ublk_json_write_queue_thread_info(const struct ublksrv_ctrl_dev *cdev,
+		unsigned int qid, unsigned int io_thread_idx, int tid)
 {
 	struct ublksrv_tgt_jbuf *j = ublksrv_tgt_get_jbuf(cdev);
 	int ret = 0;
@@ -518,12 +535,56 @@ int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
 
 	pthread_mutex_lock(&j->lock);
 	do {
-		ret = ublksrv_json_write_queue_info(cdev, j->jbuf, j->jbuf_size,
-				qid, tid);
+		ret = __ublksrv_json_write_queue_info(cdev, j->jbuf,
+				j->jbuf_size, qid, io_thread_idx, tid);
 	} while (ret < 0 && tgt_realloc_jbuf(j));
 	pthread_mutex_unlock(&j->lock);
 
 	return ret;
+}
+
+int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *cdev,
+		unsigned int qid, int tid)
+{
+	return ublk_json_write_queue_thread_info(cdev, qid, 0, tid);
+}
+
+int ublksrv_json_read_queue_tids(const char *jbuf, int qid, unsigned *tids,
+		int max_tids)
+{
+	json j;
+	char name[16];
+	int nr = 0;
+
+	if (max_tids <= 0)
+		return -EINVAL;
+
+	parse_json(j, jbuf);
+
+	snprintf(name, 16, "%d", qid);
+
+	auto qj = j["queues"][name];
+
+	/*
+	 * A device created before per thread tids were recorded only has
+	 * the single "tid" key.
+	 */
+	if (!qj.contains("tids")) {
+		if (!qj.contains("tid"))
+			return -EINVAL;
+		tids[0] = qj["tid"];
+		return 1;
+	}
+
+	for (auto &t : qj["tids"]) {
+		if (nr >= max_tids)
+			break;
+		if (t.is_null())
+			continue;
+		tids[nr++] = t;
+	}
+
+	return nr ? nr : -EINVAL;
 }
 
 int ublksrv_json_read_queue_info(const char *jbuf, int qid, unsigned *tid,

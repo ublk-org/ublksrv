@@ -559,12 +559,24 @@ void ublksrv_ctrl_dump(struct ublksrv_ctrl_dev *dev, const char *jbuf)
 
 		for(i = 0; i < info->nr_hw_queues; i++) {
 			unsigned tid;
+			unsigned tids[MAX_IO_THREADS_PER_QUEUE];
+			int nr_tids, j;
 
 			ublksrv_json_read_queue_info(jbuf, i, &tid, buf, sizeof(buf));
 			/* try to retrieve queue pthread's affinity directly */
 			ublksrv_fill_q_thread_affinity(tid, buf, sizeof(buf));
-			printf("\tqueue %u: tid %d affinity(%s)\n",
-					i, tid, buf);
+
+			/*
+			 * The first tid stays in its old position so that
+			 * anything parsing this line by field keeps working;
+			 * further io threads of the queue follow it.
+			 */
+			nr_tids = ublksrv_json_read_queue_tids(jbuf, i, tids,
+					MAX_IO_THREADS_PER_QUEUE);
+			printf("\tqueue %u: tid %d", i, tid);
+			for (j = 1; j < nr_tids; j++)
+				printf(" %u", tids[j]);
+			printf(" affinity(%s)\n", buf);
 		}
 
 		ublksrv_json_read_target_info(jbuf, buf, 512);
@@ -754,6 +766,8 @@ int ublk_queue_set_affinity(int number, int qid, cpu_set_t *cpuset)
 	int ret = -EINVAL;
 	const char *jbuf;
 	unsigned tid;
+	unsigned tids[MAX_IO_THREADS_PER_QUEUE];
+	int nr_tids, i;
 	char buf[4096];
 	struct ublksrv_dev_data data = {
 		.dev_id = number,
@@ -791,8 +805,19 @@ int ublk_queue_set_affinity(int number, int qid, cpu_set_t *cpuset)
 		goto fail;
 	}
 
-	ublksrv_json_read_queue_info(jbuf, qid, &tid, buf, sizeof(buf));
-	sched_setaffinity(tid, sizeof(*cpuset), cpuset);
+	/*
+	 * Every io thread of the queue has to move, not just the first one,
+	 * or the queue ends up split across the old and new cpu sets.
+	 */
+	nr_tids = ublksrv_json_read_queue_tids(jbuf, qid, tids,
+			MAX_IO_THREADS_PER_QUEUE);
+	if (nr_tids <= 0) {
+		ublksrv_json_read_queue_info(jbuf, qid, &tid, buf, sizeof(buf));
+		tids[0] = tid;
+		nr_tids = 1;
+	}
+	for (i = 0; i < nr_tids; i++)
+		sched_setaffinity(tids[i], sizeof(*cpuset), cpuset);
 
 	ret = 0;
 fail:

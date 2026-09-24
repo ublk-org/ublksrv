@@ -2,12 +2,12 @@
 .\"     Title: ublk
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 07/16/2025
+.\"      Date: 09/02/2026
 .\"    Manual: ublk: manage ublk devices
 .\"    Source: ublk
 .\"  Language: English
 .\"
-.TH "UBLK" "1" "07/16/2025" "ublk" "ublk: manage ublk devices"
+.TH "UBLK" "1" "09/02/2026" "ublk" "ublk: manage ublk devices"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -43,7 +43,7 @@ The following commands are supported:
 .PP
 Command to add a ublk device\&.
 .PP
-\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} {0|1}] [{\-i, \-\-user_recovery_reissue} {0|1}] [{\-e, \-\-user_recovery_fail_io} {0|1}] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [\-\-max_io_buf_bytes={BYTES}] [{\-z, \-\-zerocopy}] [<type specific options>] \fR
+\fB add {\-t, \-\-type} TYPE [{\-n, \-\-number} DEV_ID] [{\-q, \-\-queues} NR_HW_QUEUES] [{\-d, \-\-depth} QUEUE_DEPTH] [{\-u, \-\-uring_comp} URING_COMP] [{\-g, \-\-need\-get\-data} NEED_GET_DATA] [{\-r, \-\-user_recovery} {0|1}] [{\-i, \-\-user_recovery_reissue} {0|1}] [{\-e, \-\-user_recovery_fail_io} {0|1}] [\-\-debug_mask=0x{DBG_MASK}] [\-\-unprivileged] [\-\-usercopy] [\-\-max_io_buf_bytes={BYTES}] [{\-z, \-\-zerocopy}] [{\-T, \-\-threads_per_queue} {NR_THREADS}] [{\-S, \-\-seq_tags}] [<type specific options>] \fR
 .PP
 \fB\-t, \-\-type\fR
 .RS 4
@@ -125,6 +125,23 @@ Copy between request and user buffer by pread()/pwrite()
 Zero\-copy is based on io\-uring uring_cmd of REGISTER_IO_BUF & UNREGISTER_IO_BUF, which avoids data copy between ublk frontend request buffer and ublk server buffer, so memory bandwidth is saved, and throughput & latency improvement can be often observed on large I/O size
 .sp
 This requires Linux kernel 6\&.15 or later\&.
+.RE
+.PP
+\fB\-T, \-\-threads_per_queue\fR
+.RS 4
+Serve each queue from this many io threads instead of one, the default\&. The queue\*(Aqs tags are split between them, and all of them run within the queue\*(Aqs cpu affinity\&.
+.sp
+blk\-mq sends a request to the hardware queue of the cpu which issued it, so a single submitter whose queue depth fits in the ublk queue is served by exactly one ublk io thread and is capped by that thread\*(Aqs per\-io cpu cost\&. Spreading the queue over several threads lifts that cap, and only helps a workload which keeps many requests in flight per queue; at low queue depth it adds latency instead\&.
+.sp
+Not every device type supports it, and it cannot be combined with batch io\&. This requires Linux kernel 6\&.16 or later, for UBLK_F_PER_IO_DAEMON\&. The count does not have to be repeated when recovering the device\&.
+.RE
+.PP
+\fB\-S, \-\-seq_tags\fR
+.RS 4
+Give each io thread one contiguous block of the queue\*(Aqs tags rather than the default interleaved set\&. Has no effect without
+\fB\-T\fR\&.
+.sp
+Interleaved is the default because blk\-mq allocates tags sequentially: when the submitter keeps fewer requests in flight than the queue holds, the live tags form a window rotating through the tag space, and contiguous blocks would leave most of the io threads idle\&. Contiguous blocks stop the threads sharing io descriptor cache lines, which is worth measuring on a workload with several submitters per queue\&.
 .RE
 .SS "NULL"
 .PP

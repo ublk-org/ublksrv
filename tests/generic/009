@@ -1,0 +1,61 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT or GPL-2.0-only
+
+. common/fio_common
+
+echo -e "\tcheck unusable io thread counts are rejected"
+
+# Each of these would otherwise leave the driver's START_DEV waiting
+# forever for tags that no thread may fetch, so they have to fail at
+# "ublk add" rather than hang.
+#
+# The target binary is run directly rather than through "ublk add": that
+# detaches the daemon and closes its stderr, so the reason for a refusal
+# never reaches the caller and the test could not tell a deliberate
+# rejection from a target which simply failed to start. Run this way an
+# unexpected acceptance would leave the daemon in the foreground, hence
+# the timeout.
+__check_add_fails()
+{
+	local desc="$1"
+	local reason="$2"
+	local tgt="$3"
+	shift 3
+	local id=`__find_free_ublk_id`
+	local err rc
+
+	err=`timeout 10 ${UBLK}.${tgt} add -t $tgt "$@" -n $id 2>&1 >/dev/null`
+	rc=$?
+	if [ $rc -eq 0 ] || [ $rc -eq 124 ]; then
+		echo -e "\t$desc: accepted, should have been rejected"
+		__remove_ublk_dev "/dev/ublkb${id}"
+	elif ! echo "$err" | grep -q -- "$reason"; then
+		echo -e "\t$desc: rejected, but not for that reason:"
+		echo -e "\t\t$err"
+	else
+		echo -e "\t$desc: rejected"
+	fi
+}
+
+__check_add_works()
+{
+	local desc="$1"
+	shift
+	local id=`__find_free_ublk_id`
+
+	if eval $UBLK add "$@" -n $id > /dev/null 2>&1; then
+		echo -e "\t$desc: accepted"
+		__remove_ublk_dev "/dev/ublkb${id}"
+	else
+		echo -e "\t$desc: rejected, should have been accepted"
+	fi
+}
+
+__check_add_fails "zero io threads"		"out of range"		null -T 0
+__check_add_fails "more threads than the max"	"out of range"		null -T 99
+__check_add_fails "more threads than tags"	"exceeds queue depth"	null -d 2 -T 4
+__check_add_fails "io threads with batch io"	"BATCH_IO"		null -T 4 -b
+__check_add_fails "io threads on nbd"		"supports at most"	nbd -T 4 --host 127.0.0.1
+
+__check_add_works "one io thread"		-t null -T 1
+__check_add_works "io threads within depth"	-t null -d 64 -T 4

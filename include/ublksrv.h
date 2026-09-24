@@ -24,6 +24,7 @@ extern "C" {
 #include "ublk_cmd.h"
 
 #define	MAX_NR_HW_QUEUES 32
+#define	MAX_IO_THREADS_PER_QUEUE 32
 #define	MAX_QD		UBLK_MAX_QUEUE_DEPTH
 #define	MAX_BUF_SIZE    (32U << 20)
 
@@ -58,6 +59,53 @@ extern "C" {
  * the copy path if the support is missing.
  */
 #define UBLKSRV_F_ZC_NEEDS_NET_FIXED_BUF	(1UL << 3)
+
+/*
+ * Give each io thread of a queue one contiguous block of the queue's
+ * tags instead of the default interleaved set.
+ *
+ * Interleaved is the better default: blk-mq allocates tags sequentially,
+ * so with the submitter's queue depth below the device's the live tags
+ * form a window rotating through the tag space, and a contiguous split
+ * leaves most threads idle.  Contiguous blocks are offered because they
+ * stop threads sharing io descriptor cache lines and give each one a
+ * contiguous range of the io buffer, which is worth measuring on a
+ * workload with several submitters per queue.
+ *
+ * A no-op unless more than one io thread per queue is asked for.
+ */
+#define UBLKSRV_F_SEQ_TAG_PARTITION	(1UL << 4)
+
+/*
+ * Number of io threads serving each queue, held in ublksrv_flags rather
+ * than in a field of its own because the driver stores ublksrv_flags
+ * verbatim and returns it from GET_DEV_INFO: a recovered device then
+ * rebuilds the same threads without the count being passed again.
+ *
+ * Six bits, which covers MAX_IO_THREADS_PER_QUEUE.  Zero means unset and
+ * reads back as the default of one thread per queue.  Keep this below
+ * bit 32: ublksrv_tgt_type.ublksrv_flags is only an unsigned.
+ */
+#define UBLKSRV_F_IO_THREADS_SHIFT	8
+#define UBLKSRV_F_IO_THREADS_BITS	6
+#define UBLKSRV_F_IO_THREADS_MASK	\
+	(((1UL << UBLKSRV_F_IO_THREADS_BITS) - 1) << UBLKSRV_F_IO_THREADS_SHIFT)
+
+static inline unsigned ublksrv_flags_io_threads(unsigned long long flags)
+{
+	unsigned n = (flags & UBLKSRV_F_IO_THREADS_MASK) >>
+		UBLKSRV_F_IO_THREADS_SHIFT;
+
+	return n ? n : 1;
+}
+
+static inline void ublksrv_flags_set_io_threads(unsigned long *flags,
+		unsigned n)
+{
+	*flags &= ~UBLKSRV_F_IO_THREADS_MASK;
+	*flags |= ((unsigned long)n << UBLKSRV_F_IO_THREADS_SHIFT) &
+		UBLKSRV_F_IO_THREADS_MASK;
+}
 
 struct io_uring;
 struct io_uring_cqe;
@@ -326,7 +374,24 @@ struct ublksrv_tgt_type {
 
 	/** flags required for ublksrv */
 	unsigned ublksrv_flags;
-	unsigned pad;
+
+	/**
+	 * Highest number of io threads per queue this target can serve,
+	 * 0 or 1 meaning it wants exactly one.
+	 *
+	 * Serving a queue from several threads needs the target to be free
+	 * of per queue state keyed by q_id alone: anything holding one
+	 * context, connection or eventfd per queue -- the aio helpers, or a
+	 * hardware submission queue -- would be driven concurrently by all
+	 * of them. Targets which have not been checked for that get their
+	 * request for more than one thread rejected instead.
+	 *
+	 * Occupies what used to be an explicit pad, so the struct layout is
+	 * unchanged and a target built against an older header keeps
+	 * reading as 0.
+	 */
+	unsigned short max_io_threads_per_queue;
+	unsigned short pad;
 
 	/** target name */
 	const char *name;
@@ -825,6 +890,21 @@ extern int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
 		unsigned int qid, int tid);
 
 /**
+ * Store one io thread's tid in the queue's json.
+ *
+ * Safe to call concurrently from every io thread of the device: the
+ * device's json buffer lock is held across the read-modify-write.
+ * ublk_json_write_queue_info() is this with io_thread_idx 0.
+ *
+ * @param dev the ublksrv control device
+ * @param qid queue id
+ * @param io_thread_idx index of the io thread within the queue
+ * @param tid the io thread's tid
+ */
+extern int ublk_json_write_queue_thread_info(const struct ublksrv_ctrl_dev *dev,
+		unsigned int qid, unsigned int io_thread_idx, int tid);
+
+/**
  * Deserialize json buffer to ublksrv queue
  *
  * @param jbuf json buffer
@@ -835,6 +915,21 @@ extern int ublk_json_write_queue_info(const struct ublksrv_ctrl_dev *dev,
  */
 extern int ublksrv_json_read_queue_info(const char *jbuf, int qid,
 		unsigned *tid, char *affinity_buf, int len);
+
+/**
+ * Read the tids of every io thread serving one queue.
+ *
+ * Falls back to the single "tid" key for a device whose json predates
+ * per thread tids.
+ *
+ * @param jbuf json buffer
+ * @param qid queue id
+ * @param tids filled with up to max_tids tids
+ * @param max_tids size of the tids array
+ * @return number of tids stored, or negative on error
+ */
+extern int ublksrv_json_read_queue_tids(const char *jbuf, int qid,
+		unsigned *tids, int max_tids);
 
 /**
  * Deserialize json buffer to target data
@@ -1141,6 +1236,29 @@ extern const struct ublksrv_queue *ublksrv_queue_init_flags(const struct ublksrv
 		unsigned short q_id, void *queue_data, int flags);
 
 /**
+ * Initialize one io thread's share of a queue.
+ *
+ * A queue may be served by several io threads, each fetching a disjoint
+ * partition of the queue's tags; io_thread_idx picks which one, and the
+ * thread count comes from the device's ublksrv_flags.  Each partition
+ * may only be served once: a second call for a partition which is
+ * already live fails, since the driver would reject its fetch commands
+ * and the device could never become ready.
+ *
+ * ublksrv_queue_init() and ublksrv_queue_init_flags() are this with
+ * io_thread_idx 0.
+ *
+ * @param dev the ublksrv device
+ * @param q_id queue id
+ * @param queue_data queue private data
+ * @param flags io_uring setup flags
+ * @param io_thread_idx index of this io thread within the queue
+ */
+extern const struct ublksrv_queue *ublksrv_queue_init_thread(
+		const struct ublksrv_dev *dev, unsigned short q_id,
+		void *queue_data, int flags, unsigned short io_thread_idx);
+
+/**
  * Deinit & free ublksrv queue instance
  *
  * @param q the ublksrv queue instance
@@ -1169,6 +1287,20 @@ extern int ublksrv_queue_send_event(const struct ublksrv_queue *q);
  */
 extern const struct ublksrv_queue *ublksrv_get_queue(const struct ublksrv_dev *dev,
 		int q_id);
+
+/**
+ * Retrieve one io thread's queue object.
+ *
+ * ublksrv_get_queue() is this with io_thread_idx 0, which is the only
+ * thread unless the device was created with more.
+ *
+ * @param dev the ublksrv device
+ * @param q_id queue id
+ * @param io_thread_idx index of the io thread within the queue
+ */
+extern const struct ublksrv_queue *ublksrv_get_queue_thread(
+		const struct ublksrv_dev *dev, int q_id,
+		unsigned short io_thread_idx);
 
 /**
  * Process target IO & IO command from this queue's io_uring

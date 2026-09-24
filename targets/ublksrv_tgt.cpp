@@ -273,8 +273,15 @@ size_t ublk_shmem_get_size(unsigned idx)
 struct ublksrv_queue_info {
 	const struct ublksrv_dev *dev;
 	int qid;
+	unsigned short io_thread_idx;
 	pthread_t thread;
 	sem_t *queue_sem;
+
+	/*
+	 * Set by the io thread before it posts ->queue_sem, so the value is
+	 * visible to the device handler once its sem_wait() returns.
+	 */
+	bool init_done;
 };
 
 static void ublk_set_queue_pthread_affinity(const struct ublksrv_ctrl_dev *cdev,
@@ -312,31 +319,76 @@ static void *ublksrv_queue_handler(void *data)
 		ublksrv_ctrl_get_dev_info(cdev);
 	unsigned dev_id = dinfo->dev_id;
 	unsigned short q_id = info->qid;
+	unsigned short idx = info->io_thread_idx;
+	unsigned nr_io_threads = ublksrv_flags_io_threads(dinfo->ublksrv_flags);
 	const struct ublksrv_queue *q;
+	unsigned to_submit;
+	int ret;
 
-	ublk_json_write_queue_info(cdev, q_id, ublksrv_gettid());
+	ret = ublk_json_write_queue_thread_info(cdev, q_id, idx,
+			ublksrv_gettid());
+	if (ret < 0)
+		ublk_err("ublk dev %d queue %d io thread %u: tid not recorded in json, ret %d",
+				dev_id, q_id, idx, ret);
 
-	q = ublksrv_queue_init_flags(dev, q_id, NULL, IORING_SETUP_COOP_TASKRUN |
-		IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_DEFER_TASKRUN);
+	q = ublksrv_queue_init_thread(dev, q_id, NULL, IORING_SETUP_COOP_TASKRUN |
+		IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_DEFER_TASKRUN, idx);
 	if (!q) {
-		ublk_err("ublk dev %d queue %d init queue failed",
-				dev_id, q_id);
+		ublk_err("ublk dev %d queue %d io thread %u init queue failed",
+				dev_id, q_id, idx);
 		sem_post(info->queue_sem);
 		return NULL;
 	}
 
-	/* override the queue affinity by just selecting one cpu */
-	ublk_set_queue_pthread_affinity(cdev, q_id);
+	/*
+	 * ublksrv_queue_init_thread() only prepares the fetch commands and
+	 * leaves the submit to the first ublksrv_process_io().  Submit them
+	 * before reporting success: the abort path below relies on the
+	 * driver cancelling every fetch of a thread which did start, and the
+	 * driver can only cancel what it has already received.  A fetch
+	 * submitted after that cancel pass would be accepted and never
+	 * complete, leaving this thread in ublksrv_process_io() for good.
+	 * This must be done by this thread since the ring is single issuer,
+	 * and a short submit is as bad as a failed one: whatever it left in
+	 * the SQ would go in after the cancel pass all the same.
+	 */
+	to_submit = io_uring_sq_ready(q->ring_ptr);
+	ret = io_uring_submit(q->ring_ptr);
+	if (ret < 0)
+		ublk_err("ublk dev %d queue %d io thread %u submit fetch commands failed: %s",
+				dev_id, q_id, idx, strerror(-ret));
+	else if ((unsigned)ret != to_submit)
+		ublk_err("ublk dev %d queue %d io thread %u submitted %d of %u fetch commands",
+				dev_id, q_id, idx, ret, to_submit);
+	if (ret < 0 || (unsigned)ret != to_submit) {
+		ublksrv_queue_deinit(q);
+		sem_post(info->queue_sem);
+		return NULL;
+	}
+
+	/*
+	 * Narrowing the thread to a single cpu of the queue's affinity mask
+	 * only makes sense while the queue has one io thread. With several,
+	 * each would draw its own cpu independently -- and from a
+	 * process-global rand() at that -- so threads of one queue would
+	 * routinely land on the same cpu and serialise against each other.
+	 * Leave them spread over the queue's mask instead, which is what
+	 * makes serving a queue from several threads worth anything.
+	 */
+	if (nr_io_threads == 1)
+		ublk_set_queue_pthread_affinity(cdev, q_id);
+	info->init_done = true;
 	sem_post(info->queue_sem);
 
-	ublk_log("tid %d: ublk dev %d queue %d started", ublksrv_gettid(),
-			dev_id, q->q_id);
+	ublk_log("tid %d: ublk dev %d queue %d io thread %u started",
+			ublksrv_gettid(), dev_id, q->q_id, idx);
 	do {
 		if (ublksrv_process_io(q) < 0)
 			break;
 	} while (1);
 
-	ublk_log("ublk dev %d queue %d exited", dev_id, q->q_id);
+	ublk_log("ublk dev %d queue %d io thread %u exited", dev_id, q->q_id,
+			idx);
 	ublksrv_queue_deinit(q);
 	return NULL;
 }
@@ -365,20 +417,28 @@ static void setup_pthread_sigmask(bool fg)
 	pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
 }
 
+static bool ublksrv_queues_started(const struct ublksrv_queue_info *info,
+		unsigned nr_threads)
+{
+	unsigned i;
+
+	for (i = 0; i < nr_threads; i++)
+		if (!info[i].init_done)
+			return false;
+	return true;
+}
+
 /*
  * Now STOP DEV ctrl command has been sent to /dev/ublk-control,
  * and wait until all pending fetch commands are canceled
  */
-static void ublksrv_drain_fetch_commands(const struct ublksrv_dev *dev,
-		struct ublksrv_queue_info *info)
+static void ublksrv_drain_fetch_commands(struct ublksrv_queue_info *info,
+		unsigned nr_threads)
 {
-	const struct ublksrv_ctrl_dev_info *dinfo =
-		ublksrv_ctrl_get_dev_info(ublksrv_get_ctrl_dev(dev));
-	unsigned nr_queues = dinfo->nr_hw_queues;
 	unsigned i;
 	void *ret;
 
-	for (i = 0; i < nr_queues; i++)
+	for (i = 0; i < nr_threads; i++)
 		pthread_join(info[i].thread, &ret);
 }
 
@@ -467,11 +527,14 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	int dev_id = dinfo->dev_id;
 	char buf[32];
 	const struct ublksrv_dev *dev;
-	struct ublksrv_queue_info *info_array;
+	struct ublksrv_queue_info *info_array = NULL;
 	struct shmem_listener_info linfo = {};
 	linfo.sock_fd = -1;
 	pthread_t listener;
 	int i, ret = -EINVAL;
+	int nr_wanted;
+	unsigned nr_io_threads;
+	unsigned nr_threads = 0;
 	sem_t queue_sem;
 	bool has_shmem_zc = dinfo->flags & UBLK_F_SHMEM_ZC;
 
@@ -491,28 +554,67 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	if (!(dinfo->flags & UBLK_F_UNPRIVILEGED_DEV))
 		ublksrv_apply_oom_protection();
 
+	/*
+	 * One thread per (queue, io thread) pair, laid out so that the
+	 * threads of a queue are adjacent.
+	 */
+	nr_io_threads = ublksrv_flags_io_threads(dinfo->ublksrv_flags);
+	if (nr_io_threads > MAX_IO_THREADS_PER_QUEUE) {
+		/* recover trusts the driver's flags, which add did not check */
+		fprintf(stderr, "dev-%d asks for %u io threads per queue, max %d\n",
+				dev_id, nr_io_threads, MAX_IO_THREADS_PER_QUEUE);
+		goto free;
+	}
+	if (dinfo->nr_hw_queues > MAX_NR_HW_QUEUES) {
+		/* likewise for the queue count, which add clamps but recover takes as is */
+		fprintf(stderr, "dev-%d has %u queues, max %d\n",
+				dev_id, dinfo->nr_hw_queues, MAX_NR_HW_QUEUES);
+		goto free;
+	}
+	nr_wanted = dinfo->nr_hw_queues * nr_io_threads;
+
 	info_array = (struct ublksrv_queue_info *)calloc(sizeof(
 				struct ublksrv_queue_info),
-			dinfo->nr_hw_queues);
+			nr_wanted);
 
 	sem_init(&queue_sem, 0, 0);
 
-	for (i = 0; i < dinfo->nr_hw_queues; i++) {
+	for (i = 0; i < nr_wanted; i++) {
 		info_array[i].dev = dev;
-		info_array[i].qid = i;
+		info_array[i].qid = i / nr_io_threads;
+		info_array[i].io_thread_idx = i % nr_io_threads;
 		info_array[i].queue_sem = &queue_sem;
-		pthread_create(&info_array[i].thread, NULL,
-				ublksrv_queue_handler,
-				&info_array[i]);
+		if (pthread_create(&info_array[i].thread, NULL,
+					ublksrv_queue_handler,
+					&info_array[i])) {
+			ublk_err("ublk dev %d queue %d io thread %d create thread failed",
+					dev_id, info_array[i].qid,
+					info_array[i].io_thread_idx);
+			break;
+		}
+		nr_threads++;
 	}
 
-	for (i = 0; i < dinfo->nr_hw_queues; i++)
+	for (i = 0; i < nr_threads; i++)
 		sem_wait(&queue_sem);
+
+	/*
+	 * The device only becomes ready once every tag of every queue has
+	 * been fetched, and START_DEV waits for that without a timeout. So
+	 * a queue thread which failed to start would hang us here forever;
+	 * fail the device instead.
+	 */
+	if (nr_threads < nr_wanted ||
+			!ublksrv_queues_started(info_array, nr_threads)) {
+		fprintf(stderr, "dev-%d not all queue threads started\n", dev_id);
+		ret = -EIO;
+		goto abort;
+	}
 
 	ret = ublksrv_tgt_start_dev(ctrl_dev, dev, evtfd);
 	if (ret) {
 		fprintf(stderr, "dev-%d start dev failed, ret %d\n", dev_id, ret);
-		goto free;
+		goto abort;
 	}
 
 	/* Register hugetlbfs buffer after device is started */
@@ -522,6 +624,8 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 		if (ret < 0) {
 			fprintf(stderr, "htlb setup failed: %d\n", ret);
 			ublksrv_ctrl_stop_dev(ctrl_dev);
+			/* the io threads must exit before the device is freed */
+			ublksrv_drain_fetch_commands(info_array, nr_threads);
 			goto free;
 		}
 	}
@@ -537,7 +641,7 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	}
 
 	/* wait until we are terminated */
-	ublksrv_drain_fetch_commands(dev, info_array);
+	ublksrv_drain_fetch_commands(info_array, nr_threads);
 
 	/* Stop shmem listener thread */
 	if (has_shmem_zc && linfo.stop_efd >= 0) {
@@ -549,7 +653,30 @@ static int ublksrv_device_handler(struct ublksrv_ctrl_dev *ctrl_dev, int evtfd)
 	}
 	if (has_shmem_zc)
 		ublk_shmem_unregister_all();
-free:
+	goto free;
+ abort:
+	/*
+	 * Delete the device so the driver cancels the fetch commands of the
+	 * threads which did start, letting them leave ublksrv_process_io();
+	 * they must be joined before ublksrv_dev_deinit() frees the device
+	 * out from under them.  Should the async delete itself fail, stop
+	 * the device instead: on one which never started that goes straight
+	 * to cancelling the commands, and it exists on every kernel.
+	 */
+	if (ublksrv_ctrl_del_dev_async(ctrl_dev) < 0) {
+		int err = ublksrv_ctrl_stop_dev(ctrl_dev);
+
+		/*
+		 * With neither, the fetch commands stay pending and the join
+		 * below never returns; say so, since that is the very hang
+		 * this path is meant to turn into an error.
+		 */
+		if (err < 0)
+			ublk_err("dev-%d: can't delete or stop the device (%d), io threads may not exit",
+					dev_id, err);
+	}
+	ublksrv_drain_fetch_commands(info_array, nr_threads);
+ free:
 	free(info_array);
 
 	ublksrv_dev_deinit(dev);
@@ -675,6 +802,8 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 	int zero_copy = 0;
 	int batch_io = 0;
 	int shmem_zc = 0;
+	int io_threads = 1;
+	int seq_tags = 0;
 	int option_index = 0;
 	unsigned int debug_mask = 0;
 	static const struct option longopts[] = {
@@ -692,6 +821,8 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		{ "usercopy",	0,	NULL, 0},
 		{ "eventfd",	1,	NULL, 0},
 		{ "max_io_buf_bytes",	1,	NULL, 0},
+		{ "threads_per_queue",	1,	NULL, 'T'},
+		{ "seq_tags",	0,	NULL, 'S'},
 		{ "zerocopy",	0,	NULL, 'z'},
 		{ "batch-io",	0,	NULL, 'b'},
 		{ "shmem_zc",	0,	NULL, 0},
@@ -708,7 +839,7 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 
 	mkpath(data->run_dir);
 
-	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:zb",
+	while ((opt = getopt_long(argc, argv, "-:t:n:d:q:u:g:r:e:i:T:zbS",
 				  longopts, &option_index)) != -1) {
 		switch (opt) {
 		case 'n':
@@ -719,6 +850,12 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 			break;
 		case 'z':
 			zero_copy = 1;
+			break;
+		case 'T':
+			io_threads = strtol(optarg, NULL, 10);
+			break;
+		case 'S':
+			seq_tags = 1;
 			break;
 		case 'b':
 			batch_io = 1;
@@ -787,6 +924,26 @@ static int ublksrv_parse_add_opts(struct ublksrv_dev_data *data, int *efd, int a
 		data->flags |= UBLK_F_BATCH_IO;
 	if (shmem_zc)
 		data->flags |= UBLK_F_SHMEM_ZC;
+	if (seq_tags)
+		data->ublksrv_flags |= UBLKSRV_F_SEQ_TAG_PARTITION;
+
+	/*
+	 * Range-check before encoding: the field is six bits wide, so an
+	 * out of range count would otherwise be silently truncated into a
+	 * legal-looking one. What needs the target's own flags or the
+	 * driver's features is checked in ublksrv_cmd_dev_add().
+	 */
+	if (io_threads < 1 || io_threads > MAX_IO_THREADS_PER_QUEUE) {
+		fprintf(stderr, "io threads per queue %d out of range [1, %d]\n",
+				io_threads, MAX_IO_THREADS_PER_QUEUE);
+		return -EINVAL;
+	}
+	if (io_threads > data->queue_depth) {
+		fprintf(stderr, "io threads per queue %d exceeds queue depth %u\n",
+				io_threads, data->queue_depth);
+		return -EINVAL;
+	}
+	ublksrv_flags_set_io_threads(&data->ublksrv_flags, io_threads);
 
 	ublk_set_debug_mask(debug_mask);
 
@@ -798,6 +955,10 @@ static void ublksrv_print_std_opts(void)
 	printf("\t-n DEV_ID -q NR_HW_QUEUES -d QUEUE_DEPTH\n");
 	printf("\t-u URING_COMP -g NEED_GET_DATA -r USER_RECOVERY\n");
 	printf("\t-i USER_RECOVERY_REISSUE -e USER_RECOVERY_FAIL_IO\n");
+	printf("\t-T THREADS_PER_QUEUE [-S]\n");
+	printf("\t\tserve each queue from several io threads; -S gives each\n");
+	printf("\t\tthread one contiguous block of tags instead of an\n");
+	printf("\t\tinterleaved set\n");
 	printf("\t--debug_mask=0x{DBG_MASK} --unprivileged\n");
 }
 
@@ -878,8 +1039,11 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	struct ublksrv_dev_data data = {0};
 	struct ublksrv_ctrl_dev *dev;
 	int ret, evtfd = -1;
+	unsigned nr_io_threads;
 
-	ublksrv_parse_add_opts(&data, &evtfd, argc, argv);
+	ret = ublksrv_parse_add_opts(&data, &evtfd, argc, argv);
+	if (ret)
+		goto fail_send_event;
 
 	if (data.tgt_type && strcmp(data.tgt_type, tgt_type->name)) {
 		fprintf(stderr, "Wrong tgt_type specified\n");
@@ -890,6 +1054,30 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 	data.tgt_ops = tgt_type;
 	data.flags |= tgt_type->ublk_flags;
 	data.ublksrv_flags |= tgt_type->ublksrv_flags;
+
+	nr_io_threads = ublksrv_flags_io_threads(data.ublksrv_flags);
+	if (nr_io_threads > 1) {
+		unsigned max = tgt_type->max_io_threads_per_queue;
+
+		/*
+		 * The driver hands out one io daemon per io, but not for a
+		 * batch io device: it clears UBLK_F_PER_IO_DAEMON for those,
+		 * and ublksrv's batch code arms every tag of a queue from a
+		 * single thread anyway.
+		 */
+		if (data.flags & UBLK_F_BATCH_IO) {
+			fprintf(stderr, "io threads per queue is not supported with BATCH_IO\n");
+			ret = -EINVAL;
+			goto fail_send_event;
+		}
+
+		if (nr_io_threads > (max ? max : 1)) {
+			fprintf(stderr, "target %s supports at most %u io thread(s) per queue\n",
+					tgt_type->name, max ? max : 1);
+			ret = -EINVAL;
+			goto fail_send_event;
+		}
+	}
 
 	//optind = 0;	/* so that tgt code can parse their arguments */
 	data.tgt_argc = argc;
@@ -906,13 +1094,26 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 		goto fail_send_event;
 	}
 
-	if (data.flags & (UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_BATCH_IO |
+	if (nr_io_threads > 1 ||
+	    data.flags & (UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_BATCH_IO |
 			  UBLK_F_SHMEM_ZC)) {
 		__u64 features = 0;
 
 		ret = ublksrv_ctrl_get_features(dev, &features);
 		if (ret)
 			goto fail;
+
+		/*
+		 * Serving a queue from several threads needs each tag's fetch
+		 * to be allowed from its own task. Check before creating the
+		 * device so an old driver fails here rather than leaving
+		 * START_DEV waiting for tags nobody may fetch.
+		 */
+		if (nr_io_threads > 1 && !(features & UBLK_F_PER_IO_DAEMON)) {
+			fprintf(stderr, "UBLK_F_PER_IO_DAEMON not supported by kernel\n");
+			ret = -ENOTSUP;
+			goto fail;
+		}
 
 		if ((data.flags & UBLK_F_SUPPORT_ZERO_COPY) &&
 		    !(features & UBLK_F_SUPPORT_ZERO_COPY)) {
@@ -979,6 +1180,20 @@ static int ublksrv_cmd_dev_add(const struct ublksrv_tgt_type *tgt_type, int argc
 		const struct ublksrv_ctrl_dev_info *info =
 			ublksrv_ctrl_get_dev_info(dev);
 		data.dev_id = info->dev_id;
+
+		/*
+		 * ADD_DEV fills in the flags the driver actually gave this
+		 * device, which is the only place the per-io daemon promise
+		 * can be confirmed rather than inferred from GET_FEATURES:
+		 * the driver withholds it per device, not per kernel.
+		 */
+		if (nr_io_threads > 1 &&
+				!(info->flags & UBLK_F_PER_IO_DAEMON)) {
+			fprintf(stderr, "dev %d has no UBLK_F_PER_IO_DAEMON, can't use %u io threads per queue\n",
+					data.dev_id, nr_io_threads);
+			ret = -ENOTSUP;
+			goto fail_del_dev;
+		}
 	}
 	ret = ublksrv_start_daemon(dev, evtfd);
 	if (ret < 0) {
