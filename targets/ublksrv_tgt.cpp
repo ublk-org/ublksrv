@@ -617,7 +617,7 @@ static int __mkpath(char *dir, mode_t mode)
 	if (!stat(dir, &sb))
 		return 0;
 
-	__mkpath(dirname(strdupa(dir)), mode);
+	__mkpath(dirname(strdupa(dir)), 0755);
 
 	mask = umask(0);
 	ret = mkdir(dir, mode);
@@ -626,9 +626,36 @@ static int __mkpath(char *dir, mode_t mode)
 	return ret;
 }
 
+/*
+ * The run dir is shared with unprivileged users, who create their own
+ * pid files in it, so make it sticky like /tmp: nobody can remove or
+ * replace another user's pid file, and the kernel's protected_symlinks
+ * and protected_regular checks apply.
+ */
 static int mkpath(const char *dir)
 {
-	return __mkpath(strdupa(dir), S_IRWXU | S_IRWXG | S_IRWXO);
+	const mode_t mode = S_IRWXU | S_IRWXG | S_IRWXO | S_ISVTX;
+	struct stat sb;
+	int ret, fd;
+
+	ret = __mkpath(strdupa(dir), mode);
+	if (ret)
+		return ret;
+
+	/*
+	 * Older versions created it 0777 without the sticky bit. Check and
+	 * fix the dir through one fd, so it can't be swapped for a symlink
+	 * in between. A symlink isn't ours to repair.
+	 */
+	fd = open(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	if (fd < 0)
+		return 0;
+	if (!fstat(fd, &sb) && sb.st_uid == geteuid() &&
+			(sb.st_mode & S_IWOTH) && !(sb.st_mode & S_ISVTX))
+		ret = fchmod(fd, (sb.st_mode & 07777) | S_ISVTX);
+	close(fd);
+
+	return ret;
 }
 #pragma GCC diagnostic pop
 
