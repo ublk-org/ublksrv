@@ -621,7 +621,7 @@ char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev)
 		ublksrv_ctrl_get_dev_info(cdev);
 	int dev_id = info->dev_id;
 	struct stat st;
-	char pid_file[256];
+	char pid_file[PATH_MAX];
 	char *buf;
 	int size, fd, ret;
 	const char *run_dir = ublksrv_ctrl_get_run_dir(cdev);
@@ -629,7 +629,7 @@ char *ublksrv_tgt_get_dev_data(struct ublksrv_ctrl_dev *cdev)
 	if (!run_dir)
 		return 0;
 
-	snprintf(pid_file, 256, "%s/%d.pid", run_dir, dev_id);
+	snprintf(pid_file, sizeof(pid_file), "%s/%d.pid", run_dir, dev_id);
 	fd = open(pid_file, O_RDONLY);
 
 	if (fd <= 0)
@@ -669,7 +669,7 @@ int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
 	const struct ublksrv_ctrl_dev_info *info =
 		ublksrv_ctrl_get_dev_info(ctrl_dev);
 	int ret = -1, pid_fd;
-	char path[256];
+	char path[PATH_MAX];
 	char *buf = NULL;
 	int size = JSON_OFFSET;
 	int daemon_pid;
@@ -678,7 +678,7 @@ int ublksrv_get_io_daemon_pid(const struct ublksrv_ctrl_dev *ctrl_dev,
 	if (!run_dir)
 		return -EINVAL;
 
-	snprintf(path, 256, "%s/%d.pid", run_dir, info->dev_id);
+	snprintf(path, sizeof(path), "%s/%d.pid", run_dir, info->dev_id);
 
 	pid_fd = open(path, O_RDONLY);
 	if (pid_fd < 0)
@@ -719,5 +719,13 @@ out:
 
 const char *ublksrv_get_pid_dir(void)
 {
+	const char *dir = secure_getenv("UBLKSRV_RUN_DIR");
+
+	/*
+	 * A relative path would change with the cwd of each command, and
+	 * "/DEV_ID.pid" has to fit in PATH_MAX after the dir.
+	 */
+	if (dir && dir[0] == '/' && strlen(dir) < PATH_MAX - 16)
+		return dir;
 	return UBLKSRV_PID_DIR;
 }

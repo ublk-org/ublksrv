@@ -108,7 +108,7 @@ struct ublksrv_ctrl_dev {
 	const struct ublksrv_tgt_type *tgt_ops;
 
 	/*
-	 * default is UBLKSRV_RUN_DIR but can be specified via command line,
+	 * default is /run/ublksrvd, overridden by $UBLKSRV_RUN_DIR,
 	 * pid file will be saved there
 	 */
 	const char *run_dir;
