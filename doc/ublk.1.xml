@@ -561,6 +561,30 @@ dev id 0: nr_hw_queues 1 queue_depth 128 block size 4096 dev_capacity 20480
 </refsect2>
 </refsect1>
 
+<refsect1><title>ENVIRONMENT</title>
+<para>
+  <envar>UBLKSRV_RUN_DIR</envar>
+</para>
+<para>
+  Directory holding DEV_ID.pid, which records the daemon pid and the
+  device parameters used by <command>list</command> and
+  <command>recover</command>. Must be an absolute path, and must be the
+  same for every ublk command run against a device. Defaults to
+  /run/ublksrvd.
+</para>
+<para>
+  Whoever can write to the directory's parent, or owns the directory, can
+  remove or replace the pid files in it, so point it at a directory only
+  trusted users control.
+</para>
+<para>
+  If the directory doesn't exist, <command>add</command> creates it
+  world-writable, so unprivileged users can share it. To keep it
+  private, create it beforehand with a mode such as 0700 or 0755: a
+  directory that isn't world-writable is left alone.
+</para>
+</refsect1>
+
 <refsect1><title>SEE ALSO</title>
 <para>
   <ulink url="http://github.com/ublk-org/ublksrv"/>
