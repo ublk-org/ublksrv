@@ -18,11 +18,20 @@ int create_pid_file(const char *pid_file, int *pid_fd)
 	char buf[PID_PATH_LEN];
 	int fd, ret;
 
-	fd = open(pid_file, O_RDWR | O_CREAT | O_CLOEXEC,
+	/*
+	 * The run dir may be writable by other users, so never reuse or
+	 * follow what is already there: a planted symlink would have us
+	 * truncate and write its target, a planted file would let its
+	 * owner rewrite our pid and device data.
+	 */
+	unlink(pid_file);
+	fd = open(pid_file, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
 			S_IRUSR | S_IWUSR);
 	if (fd < 0) {
-		ublk_err( "Fail to open file %s", pid_file);
-		return fd;
+		ret = -errno;
+		ublk_err( "Fail to open file %s, err %s", pid_file,
+				strerror(errno));
+		return ret;
 	}
 
 	ret = ftruncate(fd, 0);

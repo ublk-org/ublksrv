@@ -909,18 +909,12 @@ static int ublksrv_create_pid_file(struct _ublksrv_dev *dev)
 	if (!dev->ctrl_dev->run_dir)
 		return 0;
 
-	/* create pid file and lock it, so that others can't */
 	snprintf(pid_file, sizeof(pid_file), "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
 
+	/* on failure, create_pid_file() has already cleaned up */
 	ret = create_pid_file(pid_file, &pid_fd);
-	if (ret < 0) {
-		/* -1 means the file is locked, and we need to remove it */
-		if (ret == -1) {
-			close(pid_fd);
-			unlink(pid_file);
-		}
+	if (ret < 0)
 		return ret;
-	}
 	dev->pid_file_fd = pid_fd;
 	return 0;
 }
@@ -930,7 +924,8 @@ static void ublksrv_remove_pid_file(const struct _ublksrv_dev *dev)
 	int dev_id = dev->ctrl_dev->dev_info.dev_id;
 	char pid_file[PATH_MAX];
 
-	if (!dev->ctrl_dev->run_dir)
+	/* only remove the pid file we created */
+	if (!dev->ctrl_dev->run_dir || dev->pid_file_fd < 0)
 		return;
 
 	close(dev->pid_file_fd);
@@ -969,6 +964,7 @@ const struct ublksrv_dev *ublksrv_dev_init(const struct ublksrv_ctrl_dev *ctrl_d
 	tgt = &dev->tgt;
 	dev->ctrl_dev = ctrl_dev;
 	dev->cdev_fd = -1;
+	dev->pid_file_fd = -1;
 
 	snprintf(buf, 64, "%s%d", UBLKC_DEV, dev_id);
 
