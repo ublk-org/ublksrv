@@ -490,17 +490,25 @@ int main(int argc, char *argv[])
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 
-	if (!ublk_module_loaded()) {
-		printf("ublk module not loaded. please run \"modprobe ublk_drv\" first\n");
-		return EXIT_FAILURE;
-	}
-
 	if (argc < 2) {
 		printf("%s: missing command\n", argv[0]);
 		cmd_dev_help(argc, argv);
 		return EXIT_FAILURE;
 	}
 	cmd = argv[1];
+
+	/* help and version don't talk to ublk_drv */
+	if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help"))
+		return cmd_dev_help(argc, argv);
+	if (!strcmp(cmd, "-v") || !strcmp(cmd, "--version")) {
+		fprintf(stdout, "%s\n", PACKAGE_STRING);
+		return EXIT_SUCCESS;
+	}
+
+	if (!ublk_module_loaded()) {
+		printf("ublk module not loaded. please run \"modprobe ublk_drv\" first\n");
+		return EXIT_FAILURE;
+	}
 
 	if (!strcmp(cmd, "add"))
 		ret = cmd_dev_add(argc, argv);
@@ -514,12 +522,7 @@ int main(int argc, char *argv[])
 		ret = cmd_dev_recover(argc, argv);
 	else if (!strcmp(cmd, "features"))
 		ret = cmd_dev_get_features(argc, argv);
-	else if (!strcmp(cmd, "help") || !strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
-		ret = cmd_dev_help(argc, argv);
-	} else if (!strcmp(cmd, "-v") || !strcmp(cmd, "--version")) {
-		fprintf(stdout, "%s\n", PACKAGE_STRING);
-		ret = EXIT_SUCCESS;
-	} else {
+	else {
 		fprintf(stderr, "unknown command: %s\n", cmd);
 		cmd_dev_help(argc, argv);
 		ret = EXIT_FAILURE;
