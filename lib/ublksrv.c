@@ -903,14 +903,14 @@ const struct ublksrv_queue *ublksrv_queue_init(const struct ublksrv_dev *tdev,
 static int ublksrv_create_pid_file(struct _ublksrv_dev *dev)
 {
 	int dev_id = dev->ctrl_dev->dev_info.dev_id;
-	char pid_file[64];
+	char pid_file[PATH_MAX];
 	int ret, pid_fd;
 
 	if (!dev->ctrl_dev->run_dir)
 		return 0;
 
 	/* create pid file and lock it, so that others can't */
-	snprintf(pid_file, 64, "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
+	snprintf(pid_file, sizeof(pid_file), "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
 
 	ret = create_pid_file(pid_file, &pid_fd);
 	if (ret < 0) {
@@ -928,13 +928,13 @@ static int ublksrv_create_pid_file(struct _ublksrv_dev *dev)
 static void ublksrv_remove_pid_file(const struct _ublksrv_dev *dev)
 {
 	int dev_id = dev->ctrl_dev->dev_info.dev_id;
-	char pid_file[64];
+	char pid_file[PATH_MAX];
 
 	if (!dev->ctrl_dev->run_dir)
 		return;
 
 	close(dev->pid_file_fd);
-	snprintf(pid_file, 64, "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
+	snprintf(pid_file, sizeof(pid_file), "%s/%d.pid", dev->ctrl_dev->run_dir, dev_id);
 	unlink(pid_file);
 }
 

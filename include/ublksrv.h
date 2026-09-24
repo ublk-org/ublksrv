@@ -679,6 +679,9 @@ extern int ublksrv_check_dev_data(const char *buf, int size);
 /**
  *
  * Get the pid dir
+ *
+ * /run/ublksrvd by default, or $UBLKSRV_RUN_DIR if it holds an absolute
+ * path. Every process working on one device has to see the same value.
  */
 extern const char *ublksrv_get_pid_dir(void);
 
