@@ -147,3 +147,9 @@ maintainer-check-extra-dist:
 	@[ ! -s comm-out ]
 	@rm tarfiles gitfiles comm-out
 	@echo PASS: EXTRA_DIST tests
+
+# Record the version this tarball was made from, so a rebuild after
+# autoreconf (no git repository) reports it instead of a stale VERSION.
+dist-hook:
+	rm -f $(distdir)/VERSION
+	echo $(VERSION) > $(distdir)/VERSION
