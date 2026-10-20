@@ -21,8 +21,9 @@ jobs:
 
     - name: "acquire: liburing"
       run: |
-        wget https://brick.kernel.dk/snaps/liburing-$URING_VER.tar.gz
+        wget https://github.com/axboe/liburing/archive/refs/tags/liburing-$URING_VER.tar.gz
         tar xzvf liburing-$URING_VER.tar.gz
+        mv liburing-liburing-$URING_VER liburing-$URING_VER
 
     - name: "build: liburing"
       working-directory: liburing-${{ env.URING_VER }}
